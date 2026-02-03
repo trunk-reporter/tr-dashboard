@@ -22,6 +22,13 @@ export interface QueuedCall {
   audioUrl: string
 }
 
+// Audio retry configuration
+const AUDIO_RETRY = {
+  MAX_ATTEMPTS: 3,
+  INITIAL_DELAY_MS: 500,
+  BACKOFF_MULTIPLIER: 2,
+} as const
+
 interface AudioState {
   // Playback state machine
   playbackState: PlaybackState
@@ -47,6 +54,10 @@ interface AudioState {
 
   // History for "previous" functionality
   history: QueuedCall[]
+
+  // Retry tracking for audio load failures
+  retryCount: number
+  retryTimeoutId: ReturnType<typeof setTimeout> | null
 
   // Actions - called by UI
   loadCall: (call: RecentCallInfo | QueuedCall) => void
@@ -109,10 +120,17 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   queue: [],
   autoPlay: true,
   history: [],
+  retryCount: 0,
+  retryTimeoutId: null,
 
   loadCall: (call) => {
     const state = get()
     const queued = toQueuedCall(call)
+
+    // Clear any pending retry timeout
+    if (state.retryTimeoutId) {
+      clearTimeout(state.retryTimeoutId)
+    }
 
     // Extract unit tags if available
     const unitTags = new Map<number, string>()
@@ -139,6 +157,8 @@ export const useAudioStore = create<AudioState>((set, get) => ({
       currentTime: 0,
       duration: queued.duration,
       history,
+      retryCount: 0,
+      retryTimeoutId: null,
     })
 
     get().loadTransmissions(queued.callId)
@@ -265,13 +285,36 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   },
 
   onError: () => {
-    const { queue } = get()
-    console.error('Audio playback error, skipping to next')
-    // Skip to next on error
+    const { queue, retryCount, currentCall } = get()
+
+    // Check if we should retry
+    if (retryCount < AUDIO_RETRY.MAX_ATTEMPTS && currentCall) {
+      const delay = AUDIO_RETRY.INITIAL_DELAY_MS * Math.pow(AUDIO_RETRY.BACKOFF_MULTIPLIER, retryCount)
+      console.warn(`Audio load failed, retrying in ${delay}ms (attempt ${retryCount + 1}/${AUDIO_RETRY.MAX_ATTEMPTS})`)
+
+      const timeoutId = setTimeout(() => {
+        // Trigger a reload by resetting playback state
+        // The AudioPlayer component will detect this and reload
+        set({
+          playbackState: 'loading',
+          retryTimeoutId: null,
+        })
+      }, delay)
+
+      set({
+        retryCount: retryCount + 1,
+        retryTimeoutId: timeoutId,
+        playbackState: 'loading', // Keep in loading state during retry
+      })
+      return
+    }
+
+    // Max retries exceeded or no current call - skip to next
+    console.error('Audio playback error after retries, skipping to next')
     if (queue.length > 0) {
       get().skipNext()
     } else {
-      set({ playbackState: 'error' })
+      set({ playbackState: 'error', retryCount: 0, retryTimeoutId: null })
     }
   },
 
@@ -304,3 +347,4 @@ export const selectIsPlaying = (state: AudioState) => state.playbackState === 'p
 export const selectIsBlocked = (state: AudioState) => state.playbackState === 'blocked'
 export const selectIsLoading = (state: AudioState) => state.playbackState === 'loading'
 export const selectHasCall = (state: AudioState) => state.currentCall !== null
+export const selectRetryCount = (state: AudioState) => state.retryCount

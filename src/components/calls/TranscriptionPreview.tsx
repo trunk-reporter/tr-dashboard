@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 import { useTranscriptionCache } from '@/stores/useTranscriptionCache'
 import { getUnitColorByRid } from '@/lib/utils'
 import type { Transmission, TranscriptionWord } from '@/api/types'
@@ -7,6 +7,12 @@ interface TranscriptionPreviewProps {
   callId: number | string
   compact?: boolean
 }
+
+// Note: This component does NOT auto-fetch transcriptions.
+// Transcriptions are fetched:
+// 1. On call detail page (explicit)
+// 2. After audio_available WebSocket events (delayed, in useRealtimeStore)
+// 3. When backend includes transcription data in call list responses (future)
 
 // Find which unit spoke a word based on transmission time ranges
 function findSpeaker(
@@ -77,11 +83,6 @@ function buildColoredWords(
 
 export function TranscriptionPreview({ callId, compact = false }: TranscriptionPreviewProps) {
   const entry = useTranscriptionCache((s) => s.getEntry(callId))
-  const fetchTranscription = useTranscriptionCache((s) => s.fetchTranscription)
-
-  useEffect(() => {
-    fetchTranscription(callId)
-  }, [callId, fetchTranscription])
 
   // Get unique unit RIDs in order of appearance
   const uniqueUnits = useMemo(() => {

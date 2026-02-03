@@ -4,7 +4,7 @@ import { useHotkeys } from 'react-hotkeys-hook'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { TransmissionTimeline, TransmissionLegend } from './TransmissionTimeline'
-import { useAudioStore, selectIsPlaying, selectIsBlocked } from '@/stores/useAudioStore'
+import { useAudioStore, selectIsPlaying, selectIsBlocked, selectRetryCount } from '@/stores/useAudioStore'
 import { formatDuration, getTalkgroupDisplayName } from '@/lib/utils'
 import { KEYBOARD_SHORTCUTS, AUDIO } from '@/lib/constants'
 
@@ -42,6 +42,7 @@ export function AudioPlayer() {
 
   const isPlaying = useAudioStore(selectIsPlaying)
   const isBlocked = useAudioStore(selectIsBlocked)
+  const retryCount = useAudioStore(selectRetryCount)
 
   // Attempt to play audio, handling autoplay restrictions
   const attemptPlay = useCallback(async () => {
@@ -103,6 +104,16 @@ export function AudioPlayer() {
       audio.src = ''
     }
   }, [currentCall])
+
+  // Handle retry attempts - force reload when retryCount changes
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio || !currentCall || retryCount === 0) return
+
+    // Force reload the audio element for retry
+    playAttemptedRef.current = false
+    audio.load()
+  }, [retryCount, currentCall])
 
   // Handle playback state changes
   useEffect(() => {

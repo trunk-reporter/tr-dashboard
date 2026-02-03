@@ -13,6 +13,15 @@ import { getWebSocketManager, type ConnectionStatus } from '@/api/websocket'
 import { useMonitorStore } from './useMonitorStore'
 import { useAudioStore } from './useAudioStore'
 import { useTalkgroupCache } from './useTalkgroupCache'
+import { useTranscriptionCache } from './useTranscriptionCache'
+
+// Delay before queuing audio after audio_available event (ms)
+// Gives backend time to finish writing the file to disk
+const AUDIO_QUEUE_DELAY_MS = 500
+
+// Delay before fetching transcription after audio_available event (ms)
+// Transcription processing takes longer than audio file creation
+const TRANSCRIPTION_FETCH_DELAY_MS = 5000
 
 export interface ActiveCall {
   system: string
@@ -308,6 +317,11 @@ export function initializeRealtimeConnection(): () => void {
       useTalkgroupCache.getState().addFromCall(data.sysid, data.talkgroup, data.talkgroup_alpha_tag)
     }
 
+    // Schedule transcription fetch after delay (gives backend time to process)
+    setTimeout(() => {
+      useTranscriptionCache.getState().fetchTranscription(data.call_id)
+    }, TRANSCRIPTION_FETCH_DELAY_MS)
+
     // Check if this talkgroup is being monitored
     const monitorState = useMonitorStore.getState()
     const isMonitored = data.sysid
@@ -315,8 +329,6 @@ export function initializeRealtimeConnection(): () => void {
       : monitorState.isMonitoredByTgid(data.talkgroup)
 
     if (monitorState.isMonitoring && isMonitored) {
-      const audioState = useAudioStore.getState()
-
       // Create a call object for playback
       const callForPlayback: RecentCallInfo = {
         call_id: data.call_id,
@@ -337,8 +349,10 @@ export function initializeRealtimeConnection(): () => void {
         units: [],
       }
 
-      // addToQueue handles the logic: plays immediately if idle, queues otherwise
-      audioState.addToQueue(callForPlayback)
+      // Delay audio queue to give backend time to finish writing the file
+      setTimeout(() => {
+        useAudioStore.getState().addToQueue(callForPlayback)
+      }, AUDIO_QUEUE_DELAY_MS)
     }
   })
   const unsubUnit = ws.on('unit_event', (data, ts) => store.handleUnitEvent(data, ts))
