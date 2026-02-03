@@ -533,3 +533,9 @@ export interface TranscriptionQueueStats {
   completed: number
   failed: number
 }
+
+// Health check response
+export interface HealthResponse {
+  status: string
+  version: string
+}

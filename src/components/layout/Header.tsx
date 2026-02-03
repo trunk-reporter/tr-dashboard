@@ -1,9 +1,11 @@
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useRealtimeStore } from '@/stores/useRealtimeStore'
 import { useMonitorStore } from '@/stores/useMonitorStore'
 import { useAudioStore } from '@/stores/useAudioStore'
+import { getHealth } from '@/api/client'
 import { formatDecodeRate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { APP_VERSION } from '@/version'
@@ -24,6 +26,15 @@ export function Header({ onToggleSidebar, onOpenCommand }: HeaderProps) {
   const toggleMonitoring = useMonitorStore((s) => s.toggleMonitoring)
 
   const queue = useAudioStore((s) => s.queue)
+
+  const [apiVersion, setApiVersion] = useState<string | null>(null)
+
+  // Fetch API version on mount
+  useEffect(() => {
+    getHealth()
+      .then((health) => setApiVersion(health.version))
+      .catch(() => setApiVersion(null))
+  }, [])
 
   const activeCallCount = activeCalls.size
   const monitoredCount = monitoredTalkgroups.size
@@ -66,7 +77,10 @@ export function Header({ onToggleSidebar, onOpenCommand }: HeaderProps) {
         >
           <span className="text-primary">◉</span>
           <span>tr-dashboard</span>
-          <span className="text-xs font-normal text-muted-foreground">v{APP_VERSION}</span>
+          <span className="text-xs font-normal text-muted-foreground">
+            v{APP_VERSION}
+            {apiVersion && ` / api ${apiVersion}`}
+          </span>
         </button>
       </div>
 

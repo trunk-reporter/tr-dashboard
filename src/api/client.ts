@@ -22,6 +22,7 @@ import type {
   Transcription,
   TranscriptionSearchResponse,
   TranscriptionQueueStats,
+  HealthResponse,
 } from './types'
 
 const API_BASE = '/api/v1'
@@ -332,6 +333,15 @@ export async function getDecodeRates(params?: {
 
 export async function getActivity(): Promise<ActivityResponse> {
   return request('/stats/activity')
+}
+
+// Health check (root level endpoint, not under /api/v1)
+export async function getHealth(): Promise<HealthResponse> {
+  const response = await fetch('/health')
+  if (!response.ok) {
+    throw new ApiError(response.status, `Health check failed: ${response.statusText}`)
+  }
+  return response.json()
 }
 
 export { ApiError }
