@@ -33,10 +33,10 @@ export interface ActiveCall {
   freq: number
   encrypted: boolean
   emergency: boolean
-  startTime: number
-  elapsed: number
-  isActive: boolean  // false when call has ended but slot is preserved
-  endedAt?: number   // timestamp when call ended
+  elapsed: number              // Server-provided elapsed time in seconds
+  elapsedReceivedAt: number    // Client timestamp (Date.now()) when elapsed was received
+  isActive: boolean            // false when call has ended but slot is preserved
+  endedAt?: number             // Client timestamp when call ended
 }
 
 export interface UnitActivity {
@@ -122,13 +122,13 @@ export const useRealtimeStore = create<RealtimeState>((set) => ({
 
   setConnectionStatus: (status) => set({ connectionStatus: status }),
 
-  handleCallStart: (data, timestamp) =>
+  handleCallStart: (data, _timestamp) =>
     set((state) => {
       const key = getCallKey(data.system, data.talkgroup)
       // Clean up old ended calls periodically
       const newCalls = cleanupOldEndedCalls(state.activeCalls)
-      // timestamp from WebSocket is in Unix seconds, convert to milliseconds
-      const startTimeMs = timestamp * 1000
+      // Use client time to track when we received this event
+      const now = Date.now()
       newCalls.set(key, {
         system: data.system,
         sysid: data.sysid,
@@ -139,8 +139,8 @@ export const useRealtimeStore = create<RealtimeState>((set) => ({
         freq: data.freq,
         encrypted: data.encrypted,
         emergency: data.emergency,
-        startTime: startTimeMs,
         elapsed: 0,
+        elapsedReceivedAt: now,
         isActive: true,
       })
       return { activeCalls: newCalls }
@@ -166,13 +166,13 @@ export const useRealtimeStore = create<RealtimeState>((set) => ({
       return { activeCalls: newCalls }
     }),
 
-  handleCallActive: (data, timestamp) =>
+  handleCallActive: (data, _timestamp) =>
     set((state) => {
       const key = getCallKey(data.system, data.talkgroup)
       const existing = state.activeCalls.get(key)
       const newCalls = new Map(state.activeCalls)
-      // timestamp from WebSocket is in Unix seconds, convert to milliseconds
-      const timestampMs = timestamp * 1000
+      // Use client time to track when we received this elapsed value
+      const now = Date.now()
 
       if (existing && existing.isActive) {
         // Preserve unitAlphaTag if unit hasn't changed, otherwise clear it
@@ -183,6 +183,7 @@ export const useRealtimeStore = create<RealtimeState>((set) => ({
           unit: data.unit,
           unitAlphaTag,
           elapsed: data.elapsed,
+          elapsedReceivedAt: now,
         })
       } else {
         // New call or replacing an ended call
@@ -197,8 +198,8 @@ export const useRealtimeStore = create<RealtimeState>((set) => ({
           freq: data.freq,
           encrypted: data.encrypted,
           emergency: data.emergency,
-          startTime: timestampMs - data.elapsed * 1000,
           elapsed: data.elapsed,
+          elapsedReceivedAt: now,
           isActive: true,
         })
       }

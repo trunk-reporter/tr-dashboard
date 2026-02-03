@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import type { ActiveCall } from '@/stores/useRealtimeStore'
 import { Badge } from '@/components/ui/badge'
@@ -16,13 +17,34 @@ interface ActiveCallBadgeProps {
   compact?: boolean
 }
 
+// Calculate current elapsed time based on server value + local time delta
+function calculateElapsed(call: ActiveCall): number {
+  if (!call.isActive) {
+    // Ended calls use final elapsed value
+    return call.elapsed
+  }
+  // Active calls: server elapsed + time since we received it
+  const localDelta = Math.floor((Date.now() - call.elapsedReceivedAt) / 1000)
+  return Math.max(0, call.elapsed + localDelta)
+}
+
 export function ActiveCallBadge({ call, onClick, compact = false }: ActiveCallBadgeProps) {
   const isActive = call.isActive !== false
-  // Use nullish coalescing (??) so that elapsed: 0 is preserved
-  // Only fall back to calculation if elapsed is undefined/null
-  const elapsed = isActive
-    ? (call.elapsed ?? Math.max(0, Math.floor((Date.now() - call.startTime) / 1000)))
-    : call.elapsed
+  const [elapsed, setElapsed] = useState(() => calculateElapsed(call))
+
+  // Update elapsed time every second for active calls
+  useEffect(() => {
+    // Immediately sync with latest call data
+    setElapsed(calculateElapsed(call))
+
+    if (!isActive) return
+
+    const interval = setInterval(() => {
+      setElapsed(calculateElapsed(call))
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [call, isActive])
 
   if (compact) {
     return (

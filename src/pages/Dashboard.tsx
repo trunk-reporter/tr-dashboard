@@ -146,9 +146,9 @@ export default function Dashboard() {
           <div className="flex flex-wrap gap-3">
             {activeCallsArray
               .sort((a, b) => {
-                // Active calls first, then by start time (most recent first)
+                // Active calls first, then by most recently updated
                 if (a.isActive !== b.isActive) return a.isActive ? -1 : 1
-                return b.startTime - a.startTime
+                return b.elapsedReceivedAt - a.elapsedReceivedAt
               })
               .map((call) => (
                 <ActiveCallBadge
