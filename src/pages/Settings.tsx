@@ -362,7 +362,8 @@ export default function Settings() {
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Drag rules to reorder. First matching rule wins. Keywords are case-insensitive and match against alpha_tag, description, group, and tag fields.
+            Drag rules to reorder. First matching rule wins. Keywords match whole words by default (case-insensitive).
+            Use wildcards for partial matching: <code className="bg-muted px-1 rounded">fire*</code> (starts with), <code className="bg-muted px-1 rounded">*osp</code> (ends with), <code className="bg-muted px-1 rounded">*med*</code> (contains).
             <br />
             <strong>Color:</strong> Border color indicator. <strong>Highlight:</strong> Prominent ring effect. <strong>Hide:</strong> Filter out from talkgroup list.
           </p>
