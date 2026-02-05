@@ -1,3 +1,3 @@
-// App version - increment on each release
-// Format: major.minor.patch
-export const APP_VERSION = '0.1.7'
+// App version - injected from package.json at build time
+declare const __APP_VERSION__: string
+export const APP_VERSION = __APP_VERSION__
