@@ -1,11 +1,17 @@
+import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { Input } from '@/components/ui/input'
 import { useRealtimeStore } from '@/stores/useRealtimeStore'
 import { useFilterStore } from '@/stores/useFilterStore'
 import { useAudioStore } from '@/stores/useAudioStore'
+import { useTalkgroupColors, ColorRule, RuleMode } from '@/stores/useTalkgroupColors'
+import { useTalkgroupCache } from '@/stores/useTalkgroupCache'
 import { getWebSocketManager } from '@/api/websocket'
+import { Plus, Trash2, RotateCcw } from 'lucide-react'
+import { ColorPicker, getHexFromTailwind } from '@/components/ui/color-picker'
 
 export default function Settings() {
   const connectionStatus = useRealtimeStore((s) => s.connectionStatus)
@@ -17,6 +23,38 @@ export default function Settings() {
   const setAutoPlay = useAudioStore((s) => s.setAutoPlay)
   const volume = useAudioStore((s) => s.volume)
   const setVolume = useAudioStore((s) => s.setVolume)
+
+  // Talkgroup color rules
+  const colorRules = useTalkgroupColors((s) => s.rules)
+  const addRule = useTalkgroupColors((s) => s.addRule)
+  const updateRule = useTalkgroupColors((s) => s.updateRule)
+  const deleteRule = useTalkgroupColors((s) => s.deleteRule)
+  const moveRule = useTalkgroupColors((s) => s.moveRule)
+  const resetToDefaults = useTalkgroupColors((s) => s.resetToDefaults)
+  const overrides = useTalkgroupColors((s) => s.overrides)
+  const setOverride = useTalkgroupColors((s) => s.setOverride)
+  const clearAllOverrides = useTalkgroupColors((s) => s.clearAllOverrides)
+  const overrideCount = Object.keys(overrides).length
+  const overrideEntries = Object.entries(overrides)
+  const talkgroupCache = useTalkgroupCache((s) => s.cache)
+
+  // Drag and drop state for rule reordering
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+
+  const [newRule, setNewRule] = useState<ColorRule>({
+    label: '',
+    keywords: [],
+    color: 'blue-500',
+    mode: 'color',
+  })
+  const [newKeywords, setNewKeywords] = useState('')
+
+  const RULE_MODES: { value: RuleMode; label: string; description: string }[] = [
+    { value: 'color', label: 'Color', description: 'Color border' },
+    { value: 'highlight', label: 'Highlight', description: 'Prominent display' },
+    { value: 'hide', label: 'Hide', description: 'Filter out' },
+  ]
 
   const handleReconnect = () => {
     const ws = getWebSocketManager()
@@ -128,6 +166,280 @@ export default function Settings() {
         </CardContent>
       </Card>
 
+      {/* Talkgroup Colors */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Talkgroup Colors</CardTitle>
+              <CardDescription>
+                Color-code talkgroups based on keywords in their tag or group name
+              </CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={resetToDefaults}
+              className="gap-1"
+            >
+              <RotateCcw className="h-3 w-3" />
+              Reset
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Existing rules - drag to reorder */}
+          <div className="space-y-1">
+            {colorRules.map((rule, index) => (
+              <div
+                key={index}
+                draggable
+                onDragStart={() => setDragIndex(index)}
+                onDragEnd={() => {
+                  if (dragIndex !== null && dragOverIndex !== null && dragIndex !== dragOverIndex) {
+                    moveRule(dragIndex, dragOverIndex)
+                  }
+                  setDragIndex(null)
+                  setDragOverIndex(null)
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  setDragOverIndex(index)
+                }}
+                onDragLeave={() => setDragOverIndex(null)}
+                className={`flex items-center gap-2 rounded-lg border p-2 transition-all ${
+                  dragIndex === index ? 'opacity-50 scale-95' : ''
+                } ${
+                  dragOverIndex === index && dragIndex !== index
+                    ? 'border-primary border-2 bg-primary/5'
+                    : ''
+                }`}
+              >
+                {/* Drag handle */}
+                <div className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground p-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="9" cy="5" r="1" fill="currentColor" />
+                    <circle cx="9" cy="12" r="1" fill="currentColor" />
+                    <circle cx="9" cy="19" r="1" fill="currentColor" />
+                    <circle cx="15" cy="5" r="1" fill="currentColor" />
+                    <circle cx="15" cy="12" r="1" fill="currentColor" />
+                    <circle cx="15" cy="19" r="1" fill="currentColor" />
+                  </svg>
+                </div>
+                {rule.mode !== 'hide' ? (
+                  <div
+                    className={`h-4 w-4 rounded shrink-0 ${rule.mode === 'highlight' ? 'ring-2 ring-offset-1' : ''}`}
+                    style={{
+                      backgroundColor: resolveColor(rule.color),
+                      ...(rule.mode === 'highlight' ? { '--tw-ring-color': resolveColor(rule.color) } as React.CSSProperties : {}),
+                    }}
+                  />
+                ) : (
+                  <div className="h-4 w-4 rounded bg-muted flex items-center justify-center text-[10px] text-muted-foreground shrink-0">
+                    ✕
+                  </div>
+                )}
+                <Input
+                  value={rule.label}
+                  onChange={(e) =>
+                    updateRule(index, { ...rule, label: e.target.value })
+                  }
+                  className="w-24 h-8"
+                  placeholder="Label"
+                />
+                <Input
+                  value={rule.keywords.join(', ')}
+                  onChange={(e) =>
+                    updateRule(index, {
+                      ...rule,
+                      keywords: e.target.value.split(',').map((k) => k.trim()).filter(Boolean),
+                    })
+                  }
+                  className="flex-1 h-8"
+                  placeholder="Keywords (comma-separated)"
+                />
+                <select
+                  value={rule.mode}
+                  onChange={(e) =>
+                    updateRule(index, { ...rule, mode: e.target.value as RuleMode })
+                  }
+                  className="h-8 w-24 rounded-md border bg-background px-2 text-sm"
+                >
+                  {RULE_MODES.map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+                {rule.mode !== 'hide' && (
+                  <ColorPicker
+                    value={rule.color}
+                    onChange={(color) => updateRule(index, { ...rule, color })}
+                  />
+                )}
+                {rule.mode === 'hide' && <div className="w-10" />}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => deleteRule(index)}
+                  className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+
+          <Separator />
+
+          {/* Add new rule */}
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Add New Rule</p>
+            <div className="flex items-center gap-3">
+              {newRule.mode !== 'hide' ? (
+                <div
+                  className={`h-4 w-4 rounded ${newRule.mode === 'highlight' ? 'ring-2 ring-offset-1' : ''}`}
+                  style={{
+                    backgroundColor: resolveColor(newRule.color),
+                    ...(newRule.mode === 'highlight' ? { '--tw-ring-color': resolveColor(newRule.color) } as React.CSSProperties : {}),
+                  }}
+                />
+              ) : (
+                <div className="h-4 w-4 rounded bg-muted flex items-center justify-center text-[10px] text-muted-foreground">
+                  ✕
+                </div>
+              )}
+              <Input
+                value={newRule.label}
+                onChange={(e) => setNewRule({ ...newRule, label: e.target.value })}
+                className="w-24 h-8"
+                placeholder="Label"
+              />
+              <Input
+                value={newKeywords}
+                onChange={(e) => setNewKeywords(e.target.value)}
+                className="flex-1 h-8"
+                placeholder="Keywords (comma-separated)"
+              />
+              <select
+                value={newRule.mode}
+                onChange={(e) => setNewRule({ ...newRule, mode: e.target.value as RuleMode })}
+                className="h-8 w-24 rounded-md border bg-background px-2 text-sm"
+              >
+                {RULE_MODES.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+              {newRule.mode !== 'hide' && (
+                <ColorPicker
+                  value={newRule.color}
+                  onChange={(color) => setNewRule({ ...newRule, color })}
+                />
+              )}
+              {newRule.mode === 'hide' && <div className="w-10" />}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  if (newRule.label && newKeywords) {
+                    addRule({
+                      ...newRule,
+                      keywords: newKeywords.split(',').map((k) => k.trim()).filter(Boolean),
+                    })
+                    setNewRule({ label: '', keywords: [], color: 'blue-500', mode: 'color' })
+                    setNewKeywords('')
+                  }
+                }}
+                className="h-8 gap-1"
+                disabled={!newRule.label || !newKeywords}
+              >
+                <Plus className="h-3 w-3" />
+                Add
+              </Button>
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Drag rules to reorder. First matching rule wins. Keywords are case-insensitive and match against alpha_tag, description, group, and tag fields.
+            <br />
+            <strong>Color:</strong> Border color indicator. <strong>Highlight:</strong> Prominent ring effect. <strong>Hide:</strong> Filter out from talkgroup list.
+          </p>
+
+          {overrideCount > 0 && (
+            <>
+              <Separator />
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Per-Talkgroup Overrides</p>
+                    <p className="text-xs text-muted-foreground">
+                      {overrideCount} talkgroup{overrideCount !== 1 ? 's' : ''} with custom visibility settings
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={clearAllOverrides}
+                    className="gap-1"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Clear All
+                  </Button>
+                </div>
+                <div className="space-y-1 max-h-48 overflow-y-auto">
+                  {overrideEntries.map(([key, override]) => {
+                    const [sysid, tgidStr] = key.split(':')
+                    const tgid = parseInt(tgidStr, 10)
+                    const cachedInfo = talkgroupCache.get(key)
+                    const cachedName = cachedInfo?.alphaTag
+                    return (
+                      <div
+                        key={key}
+                        className="flex items-center justify-between rounded border p-2 text-sm"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          {override.mode === 'hide' ? (
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0">Hidden</span>
+                          ) : override.mode === 'highlight' ? (
+                            <span
+                              className="text-xs px-1.5 py-0.5 rounded text-white shrink-0"
+                              style={{ backgroundColor: resolveColor(override.color || 'amber-500') }}
+                            >
+                              Highlight
+                            </span>
+                          ) : (
+                            <span
+                              className="text-xs px-1.5 py-0.5 rounded text-white shrink-0"
+                              style={{ backgroundColor: resolveColor(override.color || 'slate-500') }}
+                            >
+                              Color
+                            </span>
+                          )}
+                          <span className="truncate">
+                            {cachedName || <span className="font-mono text-xs">{sysid}:{tgid}</span>}
+                          </span>
+                          {cachedName && <span className="font-mono text-xs text-muted-foreground shrink-0">{tgid}</span>}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setOverride(sysid, tgid, null)}
+                          className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive shrink-0"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Favorites */}
       <Card>
         <CardHeader>
@@ -229,3 +541,6 @@ function ShortcutItem({ label, keys }: { label: string; keys: string[] }) {
     </div>
   )
 }
+
+// Alias for getHexFromTailwind for local use
+const resolveColor = getHexFromTailwind

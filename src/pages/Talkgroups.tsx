@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -9,46 +9,11 @@ import { useFilterStore } from '@/stores/useFilterStore'
 import { useMonitorStore } from '@/stores/useMonitorStore'
 import { useRealtimeStore } from '@/stores/useRealtimeStore'
 import { useTalkgroupCache, talkgroupKey } from '@/stores/useTalkgroupCache'
+import { useTalkgroupColors } from '@/stores/useTalkgroupColors'
+import { getHexFromTailwind } from '@/components/ui/color-picker'
 import { formatRelativeTime } from '@/lib/utils'
 
 const DEFAULT_PAGE_SIZE = 30
-
-// Color mapping for talkgroup tags/categories
-function getTagColor(tag: string | undefined, group: string | undefined): string {
-  const t = (tag || '').toLowerCase()
-  const g = (group || '').toLowerCase()
-
-  // Law enforcement - blue
-  if (t.includes('law') || t.includes('police') || g.includes('law') || g.includes('police')) {
-    return 'border-l-blue-500'
-  }
-  // Fire - red/orange
-  if (t.includes('fire') || g.includes('fire')) {
-    return 'border-l-red-500'
-  }
-  // EMS - green
-  if (t.includes('ems') || t.includes('medical') || t.includes('hospital') || g.includes('ems') || g.includes('medical')) {
-    return 'border-l-green-500'
-  }
-  // Dispatch (multi-agency) - purple
-  if (t.includes('dispatch') || t.includes('interop') || t.includes('multi')) {
-    return 'border-l-purple-500'
-  }
-  // Public works, transportation - amber
-  if (t.includes('public') || t.includes('works') || t.includes('transport') || t.includes('highway') || g.includes('public') || g.includes('transport')) {
-    return 'border-l-amber-500'
-  }
-  // Schools, security - cyan
-  if (t.includes('school') || t.includes('security') || t.includes('campus') || g.includes('school')) {
-    return 'border-l-cyan-500'
-  }
-  // Corrections - slate
-  if (t.includes('corrections') || t.includes('jail') || t.includes('prison')) {
-    return 'border-l-slate-500'
-  }
-  // Default - muted
-  return 'border-l-muted-foreground/30'
-}
 
 export default function Talkgroups() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -57,6 +22,21 @@ export default function Talkgroups() {
   const [availableGroups, setAvailableGroups] = useState<string[]>([])
   const [availableTags, setAvailableTags] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
+  const [openOverrideMenu, setOpenOverrideMenu] = useState<string | null>(null)
+  const overrideMenuRef = useRef<HTMLDivElement>(null)
+
+  // Close override menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (overrideMenuRef.current && !overrideMenuRef.current.contains(e.target as Node)) {
+        setOpenOverrideMenu(null)
+      }
+    }
+    if (openOverrideMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [openOverrideMenu])
 
   // Subscribe to state to trigger re-renders, then get actions separately
   const favoriteTalkgroups = useFilterStore((s) => s.favoriteTalkgroups)
@@ -69,6 +49,17 @@ export default function Talkgroups() {
   void favoriteTalkgroups
   void monitoredTalkgroups
   const addTalkgroupsToCache = useTalkgroupCache((s) => s.addTalkgroups)
+
+  // Talkgroup color rules and overrides
+  const colorRules = useTalkgroupColors((s) => s.rules)
+  const overrides = useTalkgroupColors((s) => s.overrides)
+  const getColorForTalkgroup = useTalkgroupColors((s) => s.getColorForTalkgroup)
+  const shouldHideTalkgroup = useTalkgroupColors((s) => s.shouldHideTalkgroup)
+  const shouldHighlightTalkgroup = useTalkgroupColors((s) => s.shouldHighlightTalkgroup)
+  const setOverride = useTalkgroupColors((s) => s.setOverride)
+  const getOverride = useTalkgroupColors((s) => s.getOverride)
+  // Force re-render when overrides change
+  void overrides
 
   // Subscribe to active calls for real-time highlighting
   const activeCalls = useRealtimeStore((s) => s.activeCalls)
@@ -149,6 +140,16 @@ export default function Talkgroups() {
   // Client-side filtering, sorting, and pagination
   const filteredAndSorted = (() => {
     let result = [...allTalkgroups]
+
+    // Apply hide rules first (check both keyword rules and per-talkgroup overrides)
+    result = result.filter((tg) => !shouldHideTalkgroup({
+      alpha_tag: tg.alpha_tag,
+      description: tg.description,
+      group: tg.group,
+      tag: tg.tag,
+      sysid: tg.sysid,
+      tgid: tg.tgid,
+    }))
 
     // Filter by system
     if (sysidFilter) {
@@ -358,7 +359,17 @@ export default function Talkgroups() {
               const monitored = isMonitored(tg.sysid, tg.tgid)
               const favorite = isFavorite(tg.sysid, tg.tgid)
 
-              const tagColor = getTagColor(tg.tag, tg.group)
+              const tgFields = {
+                alpha_tag: tg.alpha_tag,
+                description: tg.description,
+                group: tg.group,
+                tag: tg.tag,
+                sysid: tg.sysid,
+                tgid: tg.tgid,
+              }
+              const colorMatch = getColorForTalkgroup(tgFields)
+              const isHighlighted = shouldHighlightTalkgroup(tgFields)
+              const override = getOverride(tg.sysid, tg.tgid)
 
               // Check if this talkgroup has an active or recently ended call
               const activeCall = Array.from(activeCalls.values()).find(
@@ -373,16 +384,25 @@ export default function Talkgroups() {
                 ? 'bg-live/15 ring-1 ring-live/50'
                 : isRecentlyActive
                   ? 'bg-amber-500/10 ring-1 ring-amber-500/30'
-                  : monitored
-                    ? 'bg-live/5'
-                    : favorite
-                      ? 'bg-primary/5'
-                      : 'bg-card'
+                  : isHighlighted
+                    ? 'ring-2 ring-offset-1 ring-offset-background'
+                    : monitored
+                      ? 'bg-live/5'
+                      : favorite
+                        ? 'bg-primary/5'
+                        : 'bg-card'
+
+              // Build inline styles for colors
+              const cardStyle: React.CSSProperties = {
+                borderLeftColor: colorMatch ? resolveColor(colorMatch) : 'var(--color-muted-foreground)',
+                ...(isHighlighted && colorMatch ? { '--tw-ring-color': resolveColor(colorMatch) } as React.CSSProperties : {}),
+              }
 
               return (
                 <div
                   key={tgKey}
-                  className={`flex gap-2 rounded-md border border-l-4 ${tagColor} ${bgClass} p-2 hover:bg-accent/50 transition-colors ${hasActiveCall ? 'animate-pulse' : ''}`}
+                  className={`flex gap-2 rounded-md border border-l-4 ${bgClass} p-2 hover:bg-accent/50 transition-colors ${hasActiveCall ? 'animate-pulse' : ''}`}
+                  style={cardStyle}
                 >
                   {/* Action buttons - vertical on left */}
                   <div className="flex flex-col gap-0.5 shrink-0">
@@ -414,6 +434,45 @@ export default function Talkgroups() {
                         <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                       </svg>
                     </button>
+                    {/* Override dropdown */}
+                    <div className="relative" ref={openOverrideMenu === tgKey ? overrideMenuRef : undefined}>
+                      <button
+                        onClick={() => setOpenOverrideMenu(openOverrideMenu === tgKey ? null : tgKey)}
+                        className={`p-0.5 rounded ${
+                          override
+                            ? 'text-amber-500 bg-amber-500/10'
+                            : 'text-muted-foreground hover:text-amber-500'
+                        }`}
+                        title="Color/visibility override"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="12" cy="12" r="3" />
+                          <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+                        </svg>
+                      </button>
+                      {openOverrideMenu === tgKey && (
+                        <div className="absolute left-0 top-full mt-1 z-50 bg-popover border rounded-md shadow-md p-1 min-w-[100px]">
+                          <button
+                            onClick={() => { setOverride(tg.sysid, tg.tgid, null); setOpenOverrideMenu(null) }}
+                            className={`w-full text-left text-xs px-2 py-1 rounded hover:bg-accent ${!override ? 'bg-accent' : ''}`}
+                          >
+                            Default
+                          </button>
+                          <button
+                            onClick={() => { setOverride(tg.sysid, tg.tgid, { mode: 'highlight', color: colorMatch || 'amber-500' }); setOpenOverrideMenu(null) }}
+                            className={`w-full text-left text-xs px-2 py-1 rounded hover:bg-accent ${override?.mode === 'highlight' ? 'bg-accent' : ''}`}
+                          >
+                            Highlight
+                          </button>
+                          <button
+                            onClick={() => { setOverride(tg.sysid, tg.tgid, { mode: 'hide' }); setOpenOverrideMenu(null) }}
+                            className={`w-full text-left text-xs px-2 py-1 rounded hover:bg-accent ${override?.mode === 'hide' ? 'bg-accent' : ''}`}
+                          >
+                            Hide
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Content */}
@@ -470,16 +529,37 @@ export default function Talkgroups() {
         pageSizeOptions={[30, 60, 90]}
       />
 
-      {/* Color Key */}
+      {/* Color Key - only show non-hidden rules */}
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-blue-500" />Law</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-red-500" />Fire</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-green-500" />EMS</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-purple-500" />Dispatch</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-amber-500" />Public Works</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-cyan-500" />Schools</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-slate-500" />Corrections</span>
+        {colorRules
+          .filter((rule) => rule.mode !== 'hide')
+          .map((rule) => (
+            <span key={rule.label} className="flex items-center gap-1.5">
+              <span
+                className={`w-3 h-3 rounded-sm ${rule.mode === 'highlight' ? 'ring-2 ring-offset-1' : ''}`}
+                style={{
+                  backgroundColor: resolveColor(rule.color),
+                  ...(rule.mode === 'highlight' ? { '--tw-ring-color': resolveColor(rule.color) } as React.CSSProperties : {}),
+                }}
+              />
+              {rule.label}
+              {rule.mode === 'highlight' && ' ✦'}
+            </span>
+          ))}
+        {colorRules.some((rule) => rule.mode === 'hide') && (
+          <span className="text-muted-foreground/70">
+            ({colorRules.filter((r) => r.mode === 'hide').length} hidden by rule)
+          </span>
+        )}
+        {Object.keys(overrides).length > 0 && (
+          <span className="text-muted-foreground/70">
+            ({Object.keys(overrides).length} custom)
+          </span>
+        )}
       </div>
     </div>
   )
 }
+
+// Alias for cleaner code
+const resolveColor = getHexFromTailwind

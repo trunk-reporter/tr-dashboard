@@ -217,11 +217,6 @@ export default function TalkgroupDetail() {
   // Play from this call and queue all subsequent calls
   const playFromCall = useCallback(
     (startCall: Call) => {
-      const callId =
-        startCall.tg_sysid && startCall.tgid && startCall.start_time
-          ? `${startCall.tg_sysid}:${startCall.tgid}:${Math.floor(new Date(startCall.start_time).getTime() / 1000)}`
-          : String(startCall.id)
-
       // Sort calls chronologically (oldest first)
       const sorted = [...calls].sort(
         (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
