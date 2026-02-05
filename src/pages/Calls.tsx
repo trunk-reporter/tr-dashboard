@@ -6,6 +6,7 @@ import { Pagination } from '@/components/ui/pagination'
 import { CallList } from '@/components/calls/CallList'
 import { getCalls, getTalkgroups, getSystems } from '@/api/client'
 import type { Call, Talkgroup, System } from '@/api/types'
+import { useTranscriptionCache } from '@/stores/useTranscriptionCache'
 
 const DEFAULT_PAGE_SIZE = 25
 
@@ -34,6 +35,8 @@ export default function Calls() {
       .catch(console.error)
   }, [])
 
+  const fetchTranscription = useTranscriptionCache((s) => s.fetchTranscription)
+
   // Fetch calls
   useEffect(() => {
     setLoading(true)
@@ -44,12 +47,23 @@ export default function Calls() {
       offset,
     })
       .then((res) => {
-        setCalls(res.calls || [])
+        const loadedCalls = res.calls || []
+        setCalls(loadedCalls)
         setTotalCount(res.count)
+
+        // Fetch transcriptions for loaded calls
+        // Call type uses tg_sysid:tgid:timestamp format
+        for (const call of loadedCalls) {
+          if (call.tg_sysid && call.tgid && call.start_time) {
+            const timestamp = Math.floor(new Date(call.start_time).getTime() / 1000)
+            const callId = `${call.tg_sysid}:${call.tgid}:${timestamp}`
+            fetchTranscription(callId)
+          }
+        }
       })
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [page, pageSize, systemFilter, talkgroupFilter, offset])
+  }, [page, pageSize, systemFilter, talkgroupFilter, offset, fetchTranscription])
 
   const updateFilter = useCallback(
     (key: string, value: string) => {

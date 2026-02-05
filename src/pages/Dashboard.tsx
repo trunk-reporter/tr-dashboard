@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { CallList } from '@/components/calls/CallList'
 import { ActiveCallBadge } from '@/components/calls/ActiveCallBadge'
 import { useRealtimeStore } from '@/stores/useRealtimeStore'
+import { useTranscriptionCache } from '@/stores/useTranscriptionCache'
 import { getStats, getRecentCalls } from '@/api/client'
 import type { StatsResponse, RecentCallInfo } from '@/api/types'
 import { formatBytes, formatDecodeRate } from '@/lib/utils'
@@ -18,15 +19,29 @@ export default function Dashboard() {
   const [recentCalls, setRecentCalls] = useState<RecentCallInfo[]>([])
   const [loading, setLoading] = useState(true)
 
+  const fetchTranscription = useTranscriptionCache((s) => s.fetchTranscription)
+
+  // Helper to fetch transcriptions for a list of calls
+  const fetchTranscriptionsForCalls = (calls: RecentCallInfo[]) => {
+    for (const call of calls) {
+      const callId = call.call_id ?? (call.id != null ? String(call.id) : '')
+      if (callId) {
+        fetchTranscription(callId)
+      }
+    }
+  }
+
   // Fetch initial data
   useEffect(() => {
     Promise.all([getStats(), getRecentCalls(20)])
       .then(([statsRes, recentRes]) => {
         setStats(statsRes)
         setRecentCalls(recentRes.calls)
+        fetchTranscriptionsForCalls(recentRes.calls)
       })
       .catch(console.error)
       .finally(() => setLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Refresh stats periodically
@@ -40,9 +55,13 @@ export default function Dashboard() {
   // Refresh recent calls periodically
   useEffect(() => {
     const interval = setInterval(() => {
-      getRecentCalls(20).then((res) => setRecentCalls(res.calls)).catch(console.error)
+      getRecentCalls(20).then((res) => {
+        setRecentCalls(res.calls)
+        fetchTranscriptionsForCalls(res.calls)
+      }).catch(console.error)
     }, REFRESH_INTERVALS.RECENT_CALLS)
     return () => clearInterval(interval)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const activeCallsArray = Array.from(activeCalls.values())

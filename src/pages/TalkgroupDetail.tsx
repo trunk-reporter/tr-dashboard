@@ -8,6 +8,7 @@ import { getTalkgroup, getTalkgroupCalls } from '@/api/client'
 import type { Talkgroup, Call } from '@/api/types'
 import { useFilterStore } from '@/stores/useFilterStore'
 import { useMonitorStore } from '@/stores/useMonitorStore'
+import { useTranscriptionCache } from '@/stores/useTranscriptionCache'
 import { formatDateTime, formatRelativeTime } from '@/lib/utils'
 
 export default function TalkgroupDetail() {
@@ -28,6 +29,8 @@ export default function TalkgroupDetail() {
   void favoriteTalkgroups
   void monitoredTalkgroups
 
+  const fetchTranscription = useTranscriptionCache((s) => s.fetchTranscription)
+
   useEffect(() => {
     if (!id) return
 
@@ -38,7 +41,18 @@ export default function TalkgroupDetail() {
     Promise.all([getTalkgroup(id), getTalkgroupCalls(id, { limit: 50 })])
       .then(([tgRes, callsRes]) => {
         setTalkgroup(tgRes)
-        setCalls(callsRes.calls || [])
+        const loadedCalls = callsRes.calls || []
+        setCalls(loadedCalls)
+
+        // Fetch transcriptions for loaded calls
+        // Call type uses tg_sysid:tgid:timestamp format
+        for (const call of loadedCalls) {
+          if (call.tg_sysid && call.tgid && call.start_time) {
+            const timestamp = Math.floor(new Date(call.start_time).getTime() / 1000)
+            const callId = `${call.tg_sysid}:${call.tgid}:${timestamp}`
+            fetchTranscription(callId)
+          }
+        }
       })
       .catch((err) => {
         console.error(err)
@@ -49,7 +63,7 @@ export default function TalkgroupDetail() {
         }
       })
       .finally(() => setLoading(false))
-  }, [id])
+  }, [id, fetchTranscription])
 
   if (loading) {
     return (
