@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { getHexFromTailwind } from '@/components/ui/color-picker'
 
 export type RuleMode = 'color' | 'hide' | 'highlight'
 export type OverrideMode = RuleMode | 'default' // 'default' means use keyword rules
@@ -75,6 +76,7 @@ function matchKeyword(keyword: string, text: string): boolean {
 export interface TalkgroupColorsState {
   rules: ColorRule[]
   overrides: Record<string, TalkgroupOverride> // key is "sysid:tgid"
+  colorCache: Map<string, string | null> // key is "sysid:tgid", value is hex color (e.g., "#3b82f6") or null
 
   // Actions for rules
   setRules: (rules: ColorRule[]) => void
@@ -91,6 +93,7 @@ export interface TalkgroupColorsState {
 
   // Utility - these check overrides first, then fall back to keyword rules
   getColorForTalkgroup: (fields: TalkgroupFields) => string | null
+  getCachedColor: (sysid: string, tgid: number, fields: TalkgroupFields) => string | null
   shouldHideTalkgroup: (fields: TalkgroupFields) => boolean
   shouldHighlightTalkgroup: (fields: TalkgroupFields) => boolean
   getRuleForTalkgroup: (fields: TalkgroupFields) => ColorRule | null
@@ -112,20 +115,23 @@ export const useTalkgroupColors = create<TalkgroupColorsState>()(
     (set, get) => ({
       rules: DEFAULT_RULES,
       overrides: {},
+      colorCache: new Map(),
 
-      // Rule actions
-      setRules: (rules) => set({ rules }),
+      // Rule actions - all clear the color cache
+      setRules: (rules) => set({ rules, colorCache: new Map() }),
 
-      addRule: (rule) => set((state) => ({ rules: [...state.rules, rule] })),
+      addRule: (rule) => set((state) => ({ rules: [...state.rules, rule], colorCache: new Map() })),
 
       updateRule: (index, rule) =>
         set((state) => ({
           rules: state.rules.map((r, i) => (i === index ? rule : r)),
+          colorCache: new Map(),
         })),
 
       deleteRule: (index) =>
         set((state) => ({
           rules: state.rules.filter((_, i) => i !== index),
+          colorCache: new Map(),
         })),
 
       moveRule: (fromIndex, toIndex) =>
@@ -133,22 +139,24 @@ export const useTalkgroupColors = create<TalkgroupColorsState>()(
           const rules = [...state.rules]
           const [removed] = rules.splice(fromIndex, 1)
           rules.splice(toIndex, 0, removed)
-          return { rules }
+          return { rules, colorCache: new Map() }
         }),
 
-      resetToDefaults: () => set({ rules: DEFAULT_RULES, overrides: {} }),
+      resetToDefaults: () => set({ rules: DEFAULT_RULES, overrides: {}, colorCache: new Map() }),
 
-      // Override actions
+      // Override actions - clear cache for affected talkgroup
       setOverride: (sysid, tgid, override) => {
         const key = `${sysid}:${tgid}`
         set((state) => {
           const newOverrides = { ...state.overrides }
+          const newColorCache = new Map(state.colorCache)
+          newColorCache.delete(key) // Clear cached color for this talkgroup
           if (override === null || override.mode === 'default') {
             delete newOverrides[key]
           } else {
             newOverrides[key] = override
           }
-          return { overrides: newOverrides }
+          return { overrides: newOverrides, colorCache: newColorCache }
         })
       },
 
@@ -157,7 +165,7 @@ export const useTalkgroupColors = create<TalkgroupColorsState>()(
         return get().overrides[key] || null
       },
 
-      clearAllOverrides: () => set({ overrides: {} }),
+      clearAllOverrides: () => set({ overrides: {}, colorCache: new Map() }),
 
       // Utility functions
       getRuleForTalkgroup: (fields) => {
@@ -216,6 +224,30 @@ export const useTalkgroupColors = create<TalkgroupColorsState>()(
         return null
       },
 
+      // Get color with caching - returns hex color or null
+      getCachedColor: (sysid, tgid, fields) => {
+        const key = `${sysid}:${tgid}`
+        const { colorCache } = get()
+
+        // Check cache first
+        if (colorCache.has(key)) {
+          return colorCache.get(key) ?? null
+        }
+
+        // Compute color and convert to hex
+        const colorName = get().getColorForTalkgroup(fields)
+        const hexColor = colorName ? getHexFromTailwind(colorName) : null
+
+        // Cache the hex result (even if null)
+        set((state) => {
+          const newCache = new Map(state.colorCache)
+          newCache.set(key, hexColor)
+          return { colorCache: newCache }
+        })
+
+        return hexColor
+      },
+
       shouldHideTalkgroup: (fields) => {
         const style = get().getEffectiveStyle(fields)
         return style.mode === 'hide'
@@ -229,6 +261,8 @@ export const useTalkgroupColors = create<TalkgroupColorsState>()(
     {
       name: 'tr-dashboard-talkgroup-colors',
       version: 2,
+      // Don't persist colorCache - it's a runtime cache
+      partialize: (state) => ({ rules: state.rules, overrides: state.overrides }),
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as { rules?: ColorRule[]; overrides?: Record<string, TalkgroupOverride> }
 

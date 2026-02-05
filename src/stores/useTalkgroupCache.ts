@@ -5,7 +5,9 @@ interface TalkgroupInfo {
   sysid: string       // P25 system ID
   tgid: number        // radio talkgroup ID
   alphaTag?: string
+  description?: string
   group?: string
+  tag?: string
 }
 
 // Helper to create composite key
@@ -48,7 +50,9 @@ export const useTalkgroupCache = create<TalkgroupCacheState>((set, get) => ({
         sysid: tg.sysid,
         tgid: tg.tgid,
         alphaTag: tg.alpha_tag,
+        description: tg.description,
         group: tg.group,
+        tag: tg.tag,
       })
       return { cache: newCache }
     }),
@@ -62,7 +66,9 @@ export const useTalkgroupCache = create<TalkgroupCacheState>((set, get) => ({
           sysid: tg.sysid,
           tgid: tg.tgid,
           alphaTag: tg.alpha_tag,
+          description: tg.description,
           group: tg.group,
+          tag: tg.tag,
         })
       }
       return { cache: newCache }
