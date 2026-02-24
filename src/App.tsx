@@ -8,6 +8,9 @@ import TalkgroupDetail from '@/pages/TalkgroupDetail'
 import Units from '@/pages/Units'
 import UnitDetail from '@/pages/UnitDetail'
 import Settings from '@/pages/Settings'
+import Affiliations from '@/pages/Affiliations'
+import TalkgroupDirectory from '@/pages/TalkgroupDirectory'
+import Admin from '@/pages/Admin'
 
 export default function App() {
   return (
@@ -20,7 +23,10 @@ export default function App() {
         <Route path="/talkgroups/:id" element={<TalkgroupDetail />} />
         <Route path="/units" element={<Units />} />
         <Route path="/units/:id" element={<UnitDetail />} />
+        <Route path="/affiliations" element={<Affiliations />} />
+        <Route path="/directory" element={<TalkgroupDirectory />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/admin" element={<Admin />} />
       </Route>
     </Routes>
   )
