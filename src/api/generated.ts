@@ -4,7 +4,7 @@
  */
 
 export interface paths {
-    "/call-groups": {
+    "/health": {
         parameters: {
             query?: never;
             header?: never;
@@ -12,47 +12,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List call groups
-         * @description Returns deduplicated call groups (calls from multiple recorders grouped together)
+         * Health check
+         * @description Returns service health status. No authentication required.
          */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description Start time filter (RFC3339) */
-                    start_time?: string;
-                    /** @description End time filter (RFC3339) */
-                    end_time?: string;
-                    /** @description Results per page */
-                    limit?: number;
-                    /** @description Page offset */
-                    offset?: number;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.CallGroupListResponse"];
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
+        get: operations["getHealth"];
         put?: never;
         post?: never;
         delete?: never;
@@ -61,7 +24,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/call-groups/{id}": {
+    "/systems": {
         parameters: {
             query?: never;
             header?: never;
@@ -69,59 +32,383 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get a call group
-         * @description Returns a call group with all its individual call recordings
+         * List systems
+         * @description Returns all logical radio systems. Each system contains its
+         *     recording sites. For P25, a system represents the WACN-level
+         *     network (which may span multiple sites like "butco" and "warco").
+         *     For conventional, each system has exactly one site.
          */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    /** @description Call group ID */
-                    id: number;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.CallGroupDetailResponse"];
-                    };
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
+        get: operations["listSystems"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/systems/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
+        /**
+         * Get a system
+         * @description Returns a single system by its database ID, with embedded sites.
+         */
+        get: operations["getSystem"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update system metadata
+         * @description Updates system-level fields. For P25, this includes the network
+         *     identity (sysid, wacn). Use PATCH /sites/{id} to update
+         *     site-level fields (short_name, nac, etc.).
+         */
+        patch: operations["updateSystem"];
+        trace?: never;
+    };
+    "/sites/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a recording site
+         * @description Returns a single recording site by its database ID.
+         */
+        get: operations["getSite"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update site metadata
+         * @description Updates site-level fields. Changing `short_name` or `instance_id`
+         *     updates the ingest lookup key — future MQTT messages with the new
+         *     name will map to this site. Update the trunk-recorder config to
+         *     match, or messages with the old name will create a new site
+         *     (fragmentation).
+         */
+        patch: operations["updateSite"];
+        trace?: never;
+    };
+    "/p25-systems": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List P25 systems (grouped by network)
+         * @description Returns P25 systems grouped by sysid + wacn. Each P25 system may have
+         *     multiple recording sites (trunk-recorder instances monitoring different
+         *     NACs on the same network). Use this when you need a logical network view
+         *     rather than a per-site view.
+         */
+        get: operations["listP25Systems"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/talkgroups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List talkgroups
+         * @description Returns talkgroups with embedded stats (call_count, calls_1h, calls_24h,
+         *     unit_count). Supports filtering by system (database ID or P25 SYSID),
+         *     group category, and free-text search. Search results include a
+         *     relevance_score (100=exact, 50=prefix, 10=contains).
+         */
+        get: operations["listTalkgroups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/talkgroups/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a talkgroup
+         * @description Returns a single talkgroup with stats. Accepts composite `system_id:tgid`
+         *     format (e.g., "1:9178") or plain `tgid`. Returns 409 if a plain tgid
+         *     is ambiguous across systems.
+         */
+        get: operations["getTalkgroup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update talkgroup metadata
+         * @description Updates mutable talkgroup fields (alpha_tag, description, group, tag, priority). Only provided fields are changed. When CSV_WRITEBACK is enabled and TR_DIR is configured with a talkgroupsFile, alpha_tag changes are also written back to trunk-recorder's talkgroup CSV file on disk.
+         */
+        patch: operations["updateTalkgroup"];
+        trace?: never;
+    };
+    "/talkgroups/{id}/calls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List calls for a talkgroup
+         * @description Returns calls for a specific talkgroup. Accepts composite `system_id:tgid`
+         *     or plain `tgid`.
+         */
+        get: operations["listTalkgroupCalls"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/talkgroups/{id}/units": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List units affiliated with a talkgroup
+         * @description Returns units that have recent activity on this talkgroup, based on
+         *     call participation and affiliation events.
+         */
+        get: operations["listTalkgroupUnits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/talkgroups/encryption-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get encryption stats per talkgroup
+         * @description Returns counts of encrypted vs clear calls per talkgroup from recent
+         *     activity. Includes talkgroup display names.
+         */
+        get: operations["getTalkgroupEncryptionStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/talkgroup-directory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search talkgroup reference directory
+         * @description Searches the talkgroup directory — a reference table imported from
+         *     trunk-recorder's talkgroup CSV files via TR_DIR auto-discovery or
+         *     CSV upload. Separate from the main talkgroups endpoint, which only
+         *     contains talkgroups actually heard on the air.
+         */
+        get: operations["listTalkgroupDirectory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/talkgroup-directory/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload talkgroup CSV
+         * @description Imports a trunk-recorder talkgroup CSV file into the talkgroup directory.
+         *     Accepts either `system_id` (must exist) or `system_name` (creates the
+         *     system if it doesn't exist). CSV format: Decimal, Hex, Alpha Tag, Mode,
+         *     Description, Tag, Category (header-aware, column order doesn't matter).
+         */
+        post: operations["importTalkgroupDirectory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/units": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List radio units
+         * @description Returns radio units with optional filters. When searching, results
+         *     include relevance_score (100=exact, 50=prefix, 10=contains).
+         */
+        get: operations["listUnits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/units/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a unit
+         * @description Returns a single unit. Accepts composite `system_id:unit_id` (e.g.,
+         *     "1:1234567") or plain `unit_id`. Returns 409 if ambiguous.
+         */
+        get: operations["getUnit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update unit metadata
+         * @description Updates mutable unit fields (alpha_tag, alpha_tag_source). When CSV_WRITEBACK is enabled and TR_DIR is configured with a unitTagsFile, alpha_tag changes are also written back to trunk-recorder's unit CSV file on disk.
+         */
+        patch: operations["updateUnit"];
+        trace?: never;
+    };
+    "/units/{id}/calls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List calls for a unit
+         * @description Returns calls that include transmissions from a specific unit.
+         *     Accepts composite `system_id:unit_id` or plain `unit_id`.
+         */
+        get: operations["listUnitCalls"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/units/{id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List unit events
+         * @description Returns events (affiliations, registrations, calls, etc.) for a
+         *     specific unit. Includes embedded talkgroup and unit display names.
+         */
+        get: operations["listUnitEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/unit-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List unit events (system-wide)
+         * @description Returns unit events across an entire system with JOINs for display
+         *     names. Supports multi-type filtering and optional emergency filter.
+         *     Default lookback is 1 hour; max time range is 24 hours.
+         */
+        get: operations["listUnitEventsGlobal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/unit-affiliations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List live talkgroup affiliations
+         * @description Returns current talkgroup affiliation state for units, derived from
+         *     live MQTT `join` and `off` events. The map starts empty on boot and
+         *     populates from live traffic.
+         *
+         *     Each entry shows which talkgroup a unit is currently affiliated with,
+         *     when the affiliation started, and the unit's status (`affiliated` or `off`).
+         */
+        get: operations["listUnitAffiliations"];
         put?: never;
         post?: never;
         delete?: never;
@@ -138,53 +425,17 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List all calls
-         * @description Returns call recordings with optional filters
+         * List calls
+         * @description Returns call recordings with comprehensive filters. This is the
+         *     primary endpoint for querying call history.
+         *
+         *     **Common patterns:**
+         *     - Live feed: `?sort=-stop_time&deduplicate=true&limit=50`
+         *     - Talkgroup history: `?tgid=9178&sysid=348&start_time=...&end_time=...`
+         *     - Unit activity: `?unit_id=924003`
+         *     - Emergency calls: `?emergency=true&sort=-start_time`
          */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description Filter by system ID (database ID) */
-                    system?: number;
-                    /** @description Filter by P25 SYSID (e.g., '348') */
-                    sysid?: string;
-                    /** @description Filter by talkgroup ID */
-                    talkgroup?: number;
-                    /** @description Start time filter (RFC3339) */
-                    start_time?: string;
-                    /** @description End time filter (RFC3339) */
-                    end_time?: string;
-                    /** @description Results per page */
-                    limit?: number;
-                    /** @description Page offset */
-                    offset?: number;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.CallListResponse"];
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
+        get: operations["listCalls"];
         put?: never;
         post?: never;
         delete?: never;
@@ -201,140 +452,15 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List active calls
-         * @description Returns currently active calls (calls without a stop_time)
+         * List active calls (real-time)
+         * @description Returns currently active calls from the in-memory MQTT tracker.
+         *     This is the real-time data source — use it for live dashboards.
+         *
+         *     Active calls may have incomplete fields (no stop_time, no audio_url,
+         *     duration is elapsed-so-far). The response uses the same Call schema
+         *     with nullable fields where data is not yet available.
          */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description System ID or short_name */
-                    system?: string;
-                    /** @description System short name */
-                    sys_name?: string;
-                    /** @description Filter by talkgroup ID */
-                    talkgroup?: number;
-                    /** @description Filter by emergency status */
-                    emergency?: boolean;
-                    /** @description Filter by encryption status */
-                    encrypted?: boolean;
-                    /** @description Results per page */
-                    limit?: number;
-                    /** @description Page offset */
-                    offset?: number;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.CallListResponse"];
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/calls/active/realtime": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get real-time active calls
-         * @description Returns currently active calls from in-memory tracker (real-time from MQTT)
-         */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/calls/recent": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get recently ended calls
-         * @description Returns recently completed calls from database with full unit list and audio status. Deduplication is enabled by default (one call per call group). Use deduplicate=false to show all recordings including simulcast duplicates.
-         */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description Number of calls to return */
-                    limit?: number;
-                    /** @description Deduplicate by call_group (show one per group) */
-                    deduplicate?: boolean;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-        };
+        get: operations["listActiveCalls"];
         put?: never;
         post?: never;
         delete?: never;
@@ -352,58 +478,9 @@ export interface paths {
         };
         /**
          * Get a call
-         * @description Returns a single call by its trunk-recorder call ID
+         * @description Returns a single call recording by its database ID.
          */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    /** @description Trunk-recorder call ID */
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["models.Call"];
-                    };
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
+        get: operations["getCall"];
         put?: never;
         post?: never;
         delete?: never;
@@ -420,71 +497,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get call audio
-         * @description Streams the audio file for a call
+         * Stream call audio
+         * @description Streams the audio file for a call. Content-Type varies by source format.
          */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    /** @description Trunk-recorder call ID */
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "audio/mp4": string;
-                        "audio/mpeg": string;
-                        "audio/ogg": string;
-                        "audio/wav": string;
-                    };
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "audio/mp4": components["schemas"]["rest.ErrorResponse"];
-                        "audio/mpeg": components["schemas"]["rest.ErrorResponse"];
-                        "audio/ogg": components["schemas"]["rest.ErrorResponse"];
-                        "audio/wav": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "audio/mp4": components["schemas"]["rest.ErrorResponse"];
-                        "audio/mpeg": components["schemas"]["rest.ErrorResponse"];
-                        "audio/ogg": components["schemas"]["rest.ErrorResponse"];
-                        "audio/wav": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "audio/mp4": components["schemas"]["rest.ErrorResponse"];
-                        "audio/mpeg": components["schemas"]["rest.ErrorResponse"];
-                        "audio/ogg": components["schemas"]["rest.ErrorResponse"];
-                        "audio/wav": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
+        get: operations["getCallAudio"];
         put?: never;
         post?: never;
         delete?: never;
@@ -501,61 +517,81 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get call frequencies
-         * @description Returns the list of frequency entries (freqList) within a call, ordered by position in the audio
+         * Get call frequency list
+         * @description Returns the frequency entries (freqList) within a call, ordered by
+         *     position in the audio.
          */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    /** @description Trunk-recorder call ID */
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Response with frequencies array and count */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
+        get: operations["getCallFrequencies"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calls/{id}/transmissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
+        /**
+         * Get call transmission list
+         * @description Returns the unit transmissions (srcList) within a call, ordered by
+         *     position in the audio. Each entry represents a unit keying up.
+         *     Includes unit alpha_tags.
+         */
+        get: operations["getCallTransmissions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calls/{id}/transcription": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get primary transcription for a call
+         * @description Returns the current primary transcription with unit-attributed word timestamps and segments.
+         */
+        get: operations["getCallTranscription"];
+        /**
+         * Submit transcription
+         * @description Creates a new primary transcription variant for a call. Defaults to
+         *     source "human" for backward compatibility, but callers can supply
+         *     source, provider, language, and pre-built word/segment data for
+         *     source-side or programmatic transcriptions.
+         */
+        put: operations["submitTranscriptionCorrection"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calls/{id}/transcriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List all transcription variants for a call
+         * @description Returns all transcription variants (auto, human, LLM) for a call.
+         *     The primary variant is marked with `is_primary: true`.
+         */
+        get: operations["listCallTranscriptions"];
         put?: never;
         post?: never;
         delete?: never;
@@ -575,72 +611,76 @@ export interface paths {
         put?: never;
         /**
          * Queue call for transcription
-         * @description Queues a call for transcription (or re-transcription)
+         * @description Queues a call for transcription (or re-transcription). Returns 202 if accepted.
          */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    /** @description Call ID (tr_call_id or numeric ID) */
-                    id: string;
-                };
-                cookie?: never;
-            };
-            /** @description Request body */
-            requestBody?: {
-                content: {
-                    "application/json": components["schemas"]["rest.TranscribeCallRequest"];
-                };
-            };
-            responses: {
-                /** @description Accepted */
-                202: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
+        post: operations["transcribeCall"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/calls/{id}/transcription": {
+    "/calls/{id}/transcription/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify a transcription
+         * @description Marks the call's current transcription as human-verified.
+         */
+        post: operations["verifyTranscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calls/{id}/transcription/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject a transcription
+         * @description Resets the call's transcription_status to "reviewed" (unverified).
+         */
+        post: operations["rejectTranscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calls/{id}/transcription/exclude": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exclude call from training dataset
+         * @description Marks a call as permanently excluded from the training dataset.
+         */
+        post: operations["excludeFromDataset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/transcriptions/search": {
         parameters: {
             query?: never;
             header?: never;
@@ -648,50 +688,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get call transcription
-         * @description Returns the transcription for a specific call
+         * Full-text search across transcriptions
+         * @description Searches transcription text using PostgreSQL full-text search.
+         *     Results include call context (talkgroup, system, timing) so no
+         *     follow-up lookups are needed.
          */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    /** @description Call ID (tr_call_id or numeric ID) */
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["models.Transcription"];
-                    };
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
+        get: operations["searchTranscriptions"];
         put?: never;
         post?: never;
         delete?: never;
@@ -700,7 +702,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/calls/{id}/transmissions": {
+    "/transcriptions/queue": {
         parameters: {
             query?: never;
             header?: never;
@@ -708,61 +710,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get call transmissions
-         * @description Returns the list of unit transmissions (srcList) within a call, ordered by position in the audio
+         * Get transcription queue status
+         * @description Returns statistics about the transcription processing queue.
          */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    /** @description Trunk-recorder call ID */
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Response with transmissions array and count */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
+        get: operations["getTranscriptionQueueStatus"];
         put?: never;
         post?: never;
         delete?: never;
@@ -771,7 +722,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/p25-systems": {
+    "/call-groups": {
         parameters: {
             query?: never;
             header?: never;
@@ -779,40 +730,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List P25 systems
-         * @description Returns P25 systems grouped by sysid+wacn. Each P25 system may have multiple sites (trunk-recorder instances monitoring different NACs on the same network).
+         * List call groups
+         * @description Returns deduplicated call groups (calls from multiple recorders
+         *     grouped together). Each group represents one logical transmission
+         *     captured by one or more recording sites.
          */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
+        get: operations["listCallGroups"];
         put?: never;
         post?: never;
         delete?: never;
@@ -821,7 +744,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/recorders": {
+    "/call-groups/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -829,29 +752,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List recorder states
-         * @description Returns all known recorder states from in-memory cache (populated by MQTT recorder messages)
+         * Get a call group
+         * @description Returns a call group with all its individual call recordings.
          */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.RecorderListResponse"];
-                    };
-                };
-            };
-        };
+        get: operations["getCallGroup"];
         put?: never;
         post?: never;
         delete?: never;
@@ -869,87 +773,10 @@ export interface paths {
         };
         /**
          * Get system statistics
-         * @description Returns overall system statistics including counts and call metrics
+         * @description Returns overall system statistics including entity counts, call
+         *     metrics, and per-system activity summaries.
          */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/stats/activity": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get activity summary
-         * @description Returns summary statistics and recent activity across all systems
-         */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ActivityResponse"];
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
+        get: operations["getStats"];
         put?: never;
         post?: never;
         delete?: never;
@@ -967,42 +794,9 @@ export interface paths {
         };
         /**
          * Get decode rates
-         * @description Returns system decode rate measurements over time
+         * @description Returns system decode rate measurements over time.
          */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description Start time filter (RFC3339) */
-                    start_time?: string;
-                    /** @description End time filter (RFC3339) */
-                    end_time?: string;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.RatesResponse"];
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
+        get: operations["getDecodeRates"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1011,7 +805,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/systems": {
+    "/stats/talkgroup-activity": {
         parameters: {
             query?: never;
             header?: never;
@@ -1019,38 +813,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List recording sites
-         * @description Returns all trunk-recorder recording sites. Each site monitors one radio system/site combination. For P25 networks with multiple sites, use /p25-systems to see them grouped by sysid+wacn.
+         * Talkgroup activity summary
+         * @description Returns call counts grouped by talkgroup for a time range.
+         *     Useful for quickly identifying the busiest talkgroups without
+         *     fetching individual call records.
          */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.SiteListResponse"];
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
+        get: operations["getTalkgroupActivity"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1059,7 +827,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/systems/{id}": {
+    "/recorders": {
         parameters: {
             query?: never;
             header?: never;
@@ -1067,59 +835,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get a recording site
-         * @description Returns a single recording site by system_id
+         * List recorder states
+         * @description Returns all known recorder states from in-memory cache (populated
+         *     by MQTT recorder messages). Includes embedded system and talkgroup
+         *     display names.
          */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    /** @description System ID */
-                    id: number;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.Site"];
-                    };
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
+        get: operations["listRecorders"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1128,7 +849,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/systems/{id}/talkgroups": {
+    "/trunking-messages": {
         parameters: {
             query?: never;
             header?: never;
@@ -1136,55 +857,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List system talkgroups
-         * @description Returns all talkgroups for a specific system
+         * List trunking messages
+         * @description Returns P25 control channel trunking messages. These are high-volume;
+         *     use time range filters and pagination. Defaults to the last hour if
+         *     no start_time is provided.
          */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description Results per page */
-                    limit?: number;
-                    /** @description Page offset */
-                    offset?: number;
-                };
-                header?: never;
-                path: {
-                    /** @description System ID */
-                    id: number;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.TalkgroupListResponse"];
-                    };
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
+        get: operations["listTrunkingMessages"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1193,7 +871,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/talkgroups": {
+    "/console-messages": {
         parameters: {
             query?: never;
             header?: never;
@@ -1201,51 +879,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List all talkgroups
-         * @description Returns all talkgroups with stats (call_count, calls_1h, calls_24h, unit_count). Optionally filtered by SYSID. When searching, results include relevance_score (100=exact, 50=prefix, 10=contains).
+         * List console messages
+         * @description Returns trunk-recorder console log messages. Defaults to the last
+         *     hour if no start_time is provided.
          */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description Filter by SYSID (P25 system identifier) */
-                    sysid?: string;
-                    /** @description Search by alpha_tag, tgid, group, tag, or description */
-                    search?: string;
-                    /** @description Sort field: alpha_tag, tgid, last_seen, first_seen, group, call_count, calls_1h, calls_24h, unit_count, relevance */
-                    sort?: string;
-                    /** @description Sort direction: asc, desc */
-                    sort_dir?: string;
-                    /** @description Results per page */
-                    limit?: number;
-                    /** @description Page offset */
-                    offset?: number;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.TalkgroupListResponse"];
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
+        get: operations["listConsoleMessages"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1254,7 +892,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/talkgroups/encryption-stats": {
+    "/events/stream": {
         parameters: {
             query?: never;
             header?: never;
@@ -1262,43 +900,52 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get encryption stats per talkgroup
-         * @description Returns counts of encrypted and clear calls per talkgroup from recent activity
+         * Real-time event stream (SSE)
+         * @description Opens a Server-Sent Events (SSE) connection that pushes real-time
+         *     events as they are ingested from MQTT. The server filters events
+         *     based on the query parameters — only matching events are sent.
+         *
+         *     > **Note:** This is a streaming endpoint. Swagger UI's "Try it out"
+         *     > will hang indefinitely waiting for the response to complete.
+         *     > Use the [Live Events](/events.html) page or connect with
+         *     > `curl` / `EventSource` instead.
+         *
+         *     **Connection behavior:**
+         *     - Response uses `Content-Type: text/event-stream`
+         *     - The server sends `X-Accel-Buffering: no` for nginx compatibility
+         *     - A keepalive comment (`: keepalive`) is sent every 15 seconds
+         *     - Each event includes a unique `id` field for gap recovery
+         *     - On reconnect, pass the last received ID via the `Last-Event-ID`
+         *       header to resume without missing events (buffered for 60 seconds)
+         *
+         *     **Event format:**
+         *     ```
+         *     id: 1707912345000-42
+         *     event: call_start
+         *     data: {"call_id": 48531, "system_id": 1, "tgid": 9178, ...}
+         *     ```
+         *
+         *     **Filtering:**
+         *     All filter parameters are optional. With no filters, all events for
+         *     all systems are streamed. Filters are AND-ed: specifying both
+         *     `systems` and `tgids` means "events matching these systems AND
+         *     these talkgroups." To change filters, disconnect and reconnect
+         *     with new parameters — SSE `Last-Event-ID` provides gapless recovery.
+         *
+         *     **Event types:**
+         *
+         *     | Event | Description | Payload |
+         *     |-------|-------------|---------|
+         *     | `call_start` | New call recording started | Call object (partial — no audio/transcription yet) |
+         *     | `call_update` | Call updated (new transmission, freq change) | Call object (partial delta) |
+         *     | `call_end` | Call recording completed | Full Call object with audio_url |
+         *     | `unit_event` | Unit lifecycle event | UnitEvent object |
+         *     | `recorder_update` | Recorder state changed | Recorder object |
+         *     | `rate_update` | Decode rate update | DecodeRate object |
+         *     | `trunking_message` | P25 control channel message | TrunkingMessage object |
+         *     | `console` | TR console log message | ConsoleMessage object |
          */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description Hours of history to include (default 24) */
-                    hours?: number;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
+        get: operations["streamEvents"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1307,7 +954,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/talkgroups/{id}": {
+    "/pages": {
         parameters: {
             query?: never;
             header?: never;
@@ -1315,59 +962,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get a talkgroup
-         * @description Returns a single talkgroup with stats (call_count, calls_1h, calls_24h, unit_count). Accepts sysid:tgid format (e.g., "348:9178") or plain tgid (returns 409 if ambiguous)
+         * List web UI pages
+         * @description Scans the web directory for HTML pages with `card-title` meta tags
+         *     and returns metadata for building navigation. Pages without
+         *     `card-title` are excluded.
          */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    /** @description Talkgroup ID (sysid:tgid or plain tgid) */
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["models.Talkgroup"];
-                    };
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-                /** @description Ambiguous tgid exists in multiple systems */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
+        get: operations["listPages"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1376,582 +976,77 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/talkgroups/{id}/calls": {
+    "/query": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /**
-         * List talkgroup calls
-         * @description Returns calls for a specific talkgroup. Accepts sysid:tgid format (e.g., "348:9178") or plain tgid.
-         */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description Start time filter (RFC3339) */
-                    start_time?: string;
-                    /** @description End time filter (RFC3339) */
-                    end_time?: string;
-                    /** @description Results per page */
-                    limit?: number;
-                    /** @description Page offset */
-                    offset?: number;
-                };
-                header?: never;
-                path: {
-                    /** @description Talkgroup ID (sysid:tgid or plain tgid) */
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.CallListResponse"];
-                    };
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
+        get?: never;
         put?: never;
-        post?: never;
+        /**
+         * Execute a read-only SQL query
+         * @description Executes an ad-hoc read-only SQL query against the database and
+         *     returns the results. Useful for analytical queries that don't map
+         *     to predefined endpoints.
+         *
+         *     **Safety measures:**
+         *     - Query runs inside a `READ ONLY` transaction — INSERT, UPDATE,
+         *       DELETE, DROP, and all other write operations are rejected by
+         *       PostgreSQL.
+         *     - A 30-second statement timeout prevents runaway queries.
+         *     - Results are capped at `limit` rows (default 1000, max 10000).
+         *     - Semicolons are rejected to prevent multi-statement injection.
+         *
+         *     Use `$1`, `$2`, etc. as parameter placeholders with the `params`
+         *     array for safe value interpolation.
+         */
+        post: operations["executeQuery"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/transcription/status": {
+    "/admin/systems/merge": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /**
-         * Get transcription queue status
-         * @description Returns statistics about the transcription queue
-         */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["database.TranscriptionQueueStats"];
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
+        get?: never;
         put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/transcriptions/recent": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
         /**
-         * Get recent transcriptions
-         * @description Returns recently created transcriptions with call context
+         * Merge two systems
+         * @description Merges all data from `source_id` into `target_id`, then deletes
+         *     the source system. Use this to fix fragmentation caused by
+         *     instance_id or sys_name changes, or to consolidate an unknown
+         *     system after identification.
+         *
+         *     **What happens:**
+         *     - All calls under source are repointed to target system_id
+         *       (call_ids are database PKs and do not change)
+         *     - Talkgroups: source talkgroups are merged into target. If both
+         *       have the same tgid, target metadata is kept and call counts are
+         *       combined. Source-only talkgroups are moved to target.
+         *     - Units: same merge logic as talkgroups
+         *     - Unit events: repointed to target system_id
+         *     - Call groups may be consolidated (recordings that now share
+         *       system_id + tgid + start_time get grouped)
+         *     - Source system is deleted
+         *
+         *     **Implications:**
+         *     - Call IDs (database PKs) are stable — bookmarks don't break
+         *     - Talkgroup and unit composite IDs change (old system_id prefix
+         *       becomes invalid, new system_id prefix is correct)
+         *     - This operation is **not reversible**
+         *
+         *     After merging, update the trunk-recorder config so future MQTT
+         *     messages use the target system's `(instance_id, short_name)`.
          */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description Max results */
-                    limit?: number;
-                    /** @description Page offset */
-                    offset?: number;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/transcriptions/search": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Search transcriptions
-         * @description Full-text search across all transcriptions
-         */
-        get: {
-            parameters: {
-                query: {
-                    /** @description Search query */
-                    q: string;
-                    /** @description Results per page */
-                    limit?: number;
-                    /** @description Page offset */
-                    offset?: number;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/units": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List all units
-         * @description Returns all radio units, optionally filtered by SYSID. When searching, results include relevance_score (100=exact, 50=prefix, 10=contains).
-         */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description Filter by SYSID (P25 system identifier) */
-                    sysid?: string;
-                    /** @description Search by alpha_tag or unit_id */
-                    search?: string;
-                    /** @description Sort field: alpha_tag, unit_id, last_seen, first_seen, relevance */
-                    sort?: string;
-                    /** @description Sort direction: asc, desc */
-                    sort_dir?: string;
-                    /** @description Results per page */
-                    limit?: number;
-                    /** @description Page offset */
-                    offset?: number;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.UnitListResponse"];
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/units/active": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List active units
-         * @description Returns units that have had recent activity within the specified time window
-         */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description Activity window in minutes (1-60) */
-                    window?: number;
-                    /** @description Filter by SYSID (P25 system identifier) */
-                    sysid?: string;
-                    /** @description System ID or short_name (deprecated, use sysid) */
-                    system?: string;
-                    /** @description System short name */
-                    sys_name?: string;
-                    /** @description Filter by talkgroup ID */
-                    talkgroup?: number;
-                    /** @description Results per page */
-                    limit?: number;
-                    /** @description Page offset */
-                    offset?: number;
-                };
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ActiveUnitListResponse"];
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/units/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get a unit
-         * @description Returns a single unit. Accepts sysid:unit_id format (e.g., "348:1234567") or plain unit_id (returns 409 if ambiguous across systems)
-         */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    /** @description Unit ID (sysid:unit_id or plain unit_id) */
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["models.Unit"];
-                    };
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-                /** @description Not Found */
-                404: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-                /** @description Ambiguous unit_id exists in multiple systems */
-                409: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/units/{id}/calls": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List unit calls
-         * @description Returns calls that include transmissions from a specific unit. Accepts sysid:unit_id format (e.g., "348:902001") or plain unit_id.
-         */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description Start time filter (RFC3339) */
-                    start_time?: string;
-                    /** @description End time filter (RFC3339) */
-                    end_time?: string;
-                    /** @description Results per page */
-                    limit?: number;
-                    /** @description Page offset */
-                    offset?: number;
-                };
-                header?: never;
-                path: {
-                    /** @description Unit ID (sysid:unit_id or plain unit_id) */
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.CallListResponse"];
-                    };
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/units/{id}/events": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List unit events
-         * @description Returns events (affiliations, registrations, etc.) for a specific unit by radio ID
-         */
-        get: {
-            parameters: {
-                query?: {
-                    /** @description Filter by event type (on, off, join, call, etc.) */
-                    type?: string;
-                    /** @description Filter by talkgroup ID (TGID) */
-                    talkgroup?: number;
-                    /** @description Start time filter (RFC3339) */
-                    start_time?: string;
-                    /** @description End time filter (RFC3339) */
-                    end_time?: string;
-                    /** @description Results per page */
-                    limit?: number;
-                    /** @description Page offset */
-                    offset?: number;
-                };
-                header?: never;
-                path: {
-                    /** @description Unit radio ID (RID) */
-                    id: number;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.UnitEventListResponse"];
-                    };
-                };
-                /** @description Bad Request */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-                /** @description Internal Server Error */
-                500: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["rest.ErrorResponse"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
+        post: operations["mergeSystems"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1962,318 +1057,149 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        "database.TranscriptionQueueStats": {
-            completed?: number;
-            failed?: number;
-            pending?: number;
-            processing?: number;
-        };
-        "ingest.RecorderInfo": {
-            count?: number;
-            duration?: number;
-            freq?: number;
-            rec_num?: number;
-            rec_state_type?: string;
-            rec_type?: string;
-            recorder_id?: number;
-            squelched?: boolean;
-            src_num?: number;
-            state?: number;
-            tg_alpha_tag?: string;
-            tgid?: number;
-            unit_alpha_tag?: string;
-            unit_id?: number;
-        };
-        /** @description A recorded radio call/transmission */
-        "models.Call": {
-            /** @example false */
-            analog?: boolean;
-            /**
-             * @description Audio
-             * @example butco/2024/01/15/1001-1705319400.m4a
-             */
-            audio_path?: string;
-            /** @example 45000 */
-            audio_size?: number;
-            /** @example digital */
-            audio_type?: string;
-            /** @example /api/v1/calls/123/audio */
-            audio_url?: string;
-            /** @example 1 */
-            call_group_id?: number;
-            /**
-             * @description Identifiers
-             * @example 348:9173:1769997011
-             */
-            call_id?: string;
-            /**
-             * @description Status
-             * @example 3
-             */
-            call_state?: number;
-            /** @example false */
-            conventional?: boolean;
-            /** @example 45.5 */
-            duration?: number;
-            /** @example false */
-            emergency?: boolean;
-            /** @example false */
-            encrypted?: boolean;
-            /** @example 2 */
-            error_count?: number;
-            /**
-             * @description Quality
-             * @example 851012500
-             */
-            freq?: number;
-            /** @example 0 */
-            freq_error?: number;
-            /**
-             * @description Transcription fields (populated by queries)
-             * @example true
-             */
-            has_transcription?: boolean;
-            /** @description Metadata */
-            metadata_json?: Record<string, never>;
-            /** @example 0 */
-            mon_state?: number;
-            /** @example -80 */
-            noise_db?: number;
-            /** @description Patches */
-            patched_tgids?: number[];
-            /** @example false */
-            phase2_tdma?: boolean;
-            /** @example -45.5 */
-            signal_db?: number;
-            /** @example 0 */
-            spike_count?: number;
-            /**
-             * @description Timing
-             * @example 2024-01-15T10:30:00Z
-             */
-            start_time?: string;
-            /** @example 2024-01-15T10:30:45Z */
-            stop_time?: string;
-            /** @example 0 */
-            tdma_slot?: number;
-            /** @example 09-8L Main */
-            tg_alpha_tag?: string;
-            /** @example 348 */
-            tg_sysid?: string;
-            /**
-             * @description Joined fields (not stored in calls table)
-             * @example 9178
-             */
-            tgid?: number;
-            /** @example Engine 5 responding to the scene */
-            transcription_text?: string;
-            /** @example 6 */
-            transcription_word_count?: number;
-            units?: components["schemas"]["models.CallUnit"][];
-        };
-        "models.CallUnit": {
-            /** @example 09 7COM3 */
-            alpha_tag?: string;
-            /** @example 924003 */
-            unit_rid?: number;
-        };
-        /** @description A talkgroup on a radio system, unique within a SYSID */
-        "models.Talkgroup": {
-            /** @example Fire Dispatch */
-            alpha_tag?: string;
-            /**
-             * @description Stats (populated by list/detail queries)
-             * @example 1547
-             */
-            call_count?: number;
-            /** @example 12 */
-            calls_1h?: number;
-            /** @example 234 */
-            calls_24h?: number;
-            /** @example County Fire Dispatch Channel */
-            description?: string;
-            /** @example 2024-01-01T00:00:00Z */
-            first_seen?: string;
-            /** @example Fire */
-            group?: string;
-            /** @example 2024-01-15T12:30:00Z */
-            last_seen?: string;
-            /** @example D */
-            mode?: string;
-            /** @example 1 */
-            priority?: number;
-            /** @example 348 */
-            sysid?: string;
-            /** @example Fire Dispatch */
-            tag?: string;
-            /** @example 1001 */
-            tgid?: number;
-            /** @example 45 */
-            unit_count?: number;
-        };
-        /** @description A transcription of a radio call's audio content */
-        "models.Transcription": {
-            /**
-             * @description seconds, for word timeline rendering
-             * @example 15.5
-             */
-            call_duration?: number;
-            /** @example 123 */
-            call_id?: number;
-            /** @example 0.95 */
-            confidence?: number;
-            /** @example 2024-01-15T12:30:00Z */
-            created_at?: string;
-            /** @example 1500 */
-            duration_ms?: number;
-            /** @example 1 */
-            id?: number;
-            /** @example en */
-            language?: string;
-            /** @example whisper-1 */
-            model?: string;
-            /** @example openai */
-            provider?: string;
-            /** @example Engine 5 responding to the scene */
-            text?: string;
-            /** @example 6 */
-            word_count?: number;
-            words?: components["schemas"]["models.TranscriptionWord"][];
-        };
-        /** @description A word from the transcription with start and end times */
-        "models.TranscriptionWord": {
-            /**
-             * @description seconds from start of audio
-             * @example 0.85
-             */
-            end?: number;
-            /**
-             * @description seconds from start of audio
-             * @example 0.5
-             */
-            start?: number;
-            /** @example Engine */
-            word?: string;
-        };
-        /** @description A radio unit (mobile or portable radio), unique within a SYSID */
-        "models.Unit": {
-            /** @example Engine 1 */
-            alpha_tag?: string;
-            /** @example radioreference */
-            alpha_tag_source?: string;
-            /** @example 2024-01-01T00:00:00Z */
-            first_seen?: string;
-            /** @example 09-8L Main */
-            last_event_tg_tag?: string;
-            /** @example 9178 */
-            last_event_tgid?: number;
-            last_event_time?: string;
-            /**
-             * @description Joined fields (not stored in units table)
-             * @example call
-             */
-            last_event_type?: string;
-            /** @example 2024-01-15T12:30:00Z */
-            last_seen?: string;
-            /** @example 348 */
-            sysid?: string;
-            /** @example 1234567 */
-            unit_id?: number;
-        };
-        /** @description A unit event such as registration, affiliation, or call activity */
-        "models.UnitEvent": {
-            /** @example join */
-            event_type?: string;
-            /** @example 1 */
-            id?: number;
-            /** @example 1 */
-            instance_id?: number;
-            metadata_json?: Record<string, never>;
-            /** @example 1 */
-            system_id?: number;
-            /** @example 348 */
-            tg_sysid?: string;
-            /** @example 1001 */
-            tgid?: number;
-            /** @example 2024-01-15T10:30:00Z */
-            time?: string;
-            /** @example 1234567 */
-            unit_rid?: number;
-            /** @example 348 */
-            unit_sysid?: string;
-        };
-        "rest.ActiveUnitListResponse": {
-            /** @example 10 */
-            count?: number;
-            /** @example 50 */
-            limit?: number;
-            /** @example 0 */
-            offset?: number;
-            units?: unknown;
-            /** @example 5 */
-            window?: number;
-        };
-        "rest.ActivityResponse": {
-            /** @example 5000 */
-            calls_24h?: number;
-            system_activity?: unknown;
-            /** @example 3 */
-            systems?: number;
-            /** @example 500 */
-            talkgroups?: number;
-            /** @example 1000 */
-            units?: number;
-        };
-        "rest.CallGroupDetailResponse": {
-            call_group?: unknown;
-            calls?: unknown;
-        };
-        "rest.CallGroupListResponse": {
-            call_groups?: unknown;
-            /** @example 50 */
-            count?: number;
-            /** @example 50 */
-            limit?: number;
-            /** @example 0 */
-            offset?: number;
-        };
-        "rest.CallListResponse": {
-            calls?: unknown;
-            /** @example 25 */
-            count?: number;
-            /** @example 50 */
-            limit?: number;
-            /** @example 0 */
-            offset?: number;
-        };
-        "rest.ErrorResponse": {
+        /**
+         * @description Radio system protocol type
+         * @enum {string}
+         */
+        SystemType: "p25" | "smartnet" | "conventional";
+        /**
+         * @description Talkgroup mode: D=Digital, A=Analog, E=Encrypted,
+         *     M=Mixed (digital+analog), T=TDMA
+         * @enum {string}
+         */
+        TalkgroupMode: "D" | "A" | "E" | "M" | "T";
+        /**
+         * @description Unit event types from trunk-recorder MQTT:
+         *     - **on**: unit registration (radio powered on / entering system)
+         *     - **off**: unit deregistration (radio powered off / leaving system)
+         *     - **join**: talkgroup affiliation (unit joins a talkgroup)
+         *     - **call**: channel grant (voice call participation)
+         *     - **end**: transmission end (per-unit end-of-transmission report)
+         *     - **data**: data grant
+         *     - **ans_req**: answer request
+         *     - **location**: unit location update
+         *     - **ackresp**: acknowledge response
+         * @enum {string}
+         */
+        EventType: "on" | "off" | "join" | "call" | "end" | "data" | "ans_req" | "location" | "ackresp";
+        /**
+         * @description Call recording state (mapped from trunk-recorder integer values):
+         *     - **monitoring**: control channel activity seen, no audio capture yet
+         *     - **recording**: actively capturing audio
+         *     - **stopped**: recording ended, finalizing
+         *     - **completed**: audio file written, ready for access
+         * @enum {string}
+         */
+        CallState: "monitoring" | "recording" | "stopped" | "completed";
+        /**
+         * @description Call monitor state (from trunk-recorder):
+         *     - **unspecified**: default / not specifically monitored
+         *     - **active**: actively monitored
+         *     - **duplicate**: duplicate call on another recorder
+         * @enum {string}
+         */
+        MonState: "unspecified" | "active" | "duplicate";
+        /**
+         * @description Recorder hardware state:
+         *     - **available**: ready to record
+         *     - **recording**: actively recording a call
+         *     - **idle**: inactive / not assigned
+         *     - **stopped**: finished recording, finalizing
+         * @enum {string}
+         */
+        RecState: "available" | "recording" | "idle" | "stopped";
+        Error: {
             /** @example Resource not found */
-            error?: string;
+            error: string;
+            /** @description Additional context when available */
+            detail?: string;
         };
-        "rest.RatesResponse": {
-            /** @example 100 */
-            count?: number;
-            rates?: unknown;
-        };
-        "rest.RecorderListResponse": {
-            /** @example 12 */
-            count?: number;
-            recorders?: components["schemas"]["ingest.RecorderInfo"][];
-        };
-        /** @description A trunk-recorder recording site. Note: "system_id" is the database ID used in API calls. */
-        "rest.Site": {
+        AmbiguousError: {
+            /** @example Ambiguous ID 9178: exists in multiple systems */
+            error: string;
             /**
-             * @description Deprecated: use system_id
+             * @description Systems where this ID was found. Includes system_id so the
+             *     client can construct the composite ID to disambiguate.
+             */
+            matches: {
+                /**
+                 * @description Database system ID — use this to form the composite ID
+                 * @example 1
+                 */
+                system_id?: number;
+                /**
+                 * @description System display name
+                 * @example Butler/Warren P25
+                 */
+                system_name?: string;
+                /**
+                 * @description P25 SYSID (for display context)
+                 * @example 348
+                 */
+                sysid?: string;
+            }[];
+        };
+        /**
+         * @description A logical radio network. For P25, identified by (sysid, wacn).
+         *     For conventional, identified by (instance_id, sys_name).
+         *     Talkgroups and units belong to the system level.
+         */
+        System: {
+            /**
+             * @description Database primary key — use this in API path parameters and composite IDs
              * @example 1
              */
-            id?: number;
+            system_id: number;
+            system_type: components["schemas"]["SystemType"];
             /**
-             * @description Trunk-recorder instance
+             * @description User-configurable display name for this system.
+             *     Auto-populated from the first site's short_name, but can be
+             *     overridden (e.g., "Butler/Warren P25 Network").
+             * @example Butler/Warren P25
+             */
+            name?: string;
+            /**
+             * @description P25 System ID (hex). "0" for conventional.
+             * @example 348
+             */
+            sysid?: string;
+            /**
+             * @description P25 WACN. "0" for conventional.
+             * @example BEE00
+             */
+            wacn?: string;
+            /** @description Recording sites contributing to this system */
+            sites?: components["schemas"]["Site"][];
+        };
+        /**
+         * @description A recording site — one trunk-recorder sys_name entry monitoring
+         *     a system. Multiple sites may monitor the same P25 network from
+         *     different locations (different NAC/RFSS/site). For conventional
+         *     systems, there is exactly one site per system.
+         */
+        Site: {
+            /**
+             * @description Database primary key for this recording site
              * @example 1
              */
-            instance_id?: number;
+            site_id: number;
             /**
-             * @description P25 NAC (site-specific)
+             * @description Parent system this site belongs to
+             * @example 1
+             */
+            system_id?: number;
+            /**
+             * @description Trunk-recorder sys_name (e.g., "butco", "warco")
+             * @example butco
+             */
+            short_name: string;
+            /**
+             * @description Trunk-recorder instance that owns this site
+             * @example trunk-recorder
+             */
+            instance_id?: string;
+            /**
+             * @description P25 NAC (unique per physical site)
              * @example 340
              */
             nac?: string;
@@ -2283,83 +1209,3113 @@ export interface components {
              */
             rfss?: number;
             /**
-             * @description Trunk-recorder short name
-             * @example butco
+             * @description P25 site ID within the RFSS
+             * @example 1
              */
-            short_name?: string;
+            p25_site_id?: number;
             /**
-             * @description P25 Site ID
+             * @description Positional index in TR config. Stored for reference only —
+             *     never used for identity (shifts when config is reordered).
+             * @example 0
+             */
+            sys_num?: number;
+        };
+        /**
+         * @description A logical P25 network with all its recording sites. This is
+         *     the same as a System with system_type=p25, presented with
+         *     sites expanded for the grouped network view.
+         */
+        P25System: {
+            /**
+             * @description Database system ID
+             * @example 1
+             */
+            system_id?: number;
+            /**
+             * @description User-configurable display name for this system
+             * @example Butler/Warren P25
+             */
+            name?: string;
+            /** @example 348 */
+            sysid?: string;
+            /** @example BEE00 */
+            wacn?: string;
+            /** @description Recording sites monitoring this P25 network */
+            sites?: components["schemas"]["Site"][];
+            /** @example 150 */
+            talkgroup_count?: number;
+            /** @example 500 */
+            unit_count?: number;
+            /** @example 5000 */
+            calls_24h?: number;
+        };
+        /** @description A talkgroup on a radio system */
+        Talkgroup: {
+            /**
+             * @description Database system ID this talkgroup belongs to
+             * @example 1
+             */
+            system_id: number;
+            /**
+             * @description System display name (embedded to avoid lookup)
+             * @example Butler/Warren P25
+             */
+            system_name?: string;
+            /**
+             * @description P25 SYSID (for display; "0" for conventional)
+             * @example 348
+             */
+            sysid?: string;
+            /** @example 1001 */
+            tgid: number;
+            /** @example Fire Dispatch */
+            alpha_tag?: string;
+            /**
+             * @description Radio Reference tag category
+             * @example Fire Dispatch
+             */
+            tag?: string;
+            /**
+             * @description Grouping category for UI filtering
+             * @example Fire
+             */
+            group?: string;
+            /** @example County Fire Dispatch Channel */
+            description?: string;
+            mode?: components["schemas"]["TalkgroupMode"];
+            /**
+             * @description Display priority (lower = more important)
+             * @example 1
+             */
+            priority?: number;
+            /** Format: date-time */
+            first_seen?: string;
+            /** Format: date-time */
+            last_seen?: string;
+            /**
+             * @description Total calls recorded on this talkgroup
+             * @example 1547
+             */
+            call_count?: number;
+            /**
+             * @description Calls in the last hour
+             * @example 12
+             */
+            calls_1h?: number;
+            /**
+             * @description Calls in the last 24 hours
+             * @example 234
+             */
+            calls_24h?: number;
+            /**
+             * @description Distinct units seen on this talkgroup
+             * @example 45
+             */
+            unit_count?: number;
+            /**
+             * @description Search relevance: 100=exact, 50=prefix, 10=contains. Only present in search results.
+             * @example 100
+             */
+            relevance_score?: number;
+        };
+        /** @description A radio unit (mobile or portable radio) */
+        Unit: {
+            /**
+             * @description Database system ID this unit belongs to
+             * @example 1
+             */
+            system_id: number;
+            /**
+             * @description System display name (embedded to avoid lookup)
+             * @example Butler/Warren P25
+             */
+            system_name?: string;
+            /**
+             * @description P25 SYSID (for display; "0" for conventional)
+             * @example 348
+             */
+            sysid?: string;
+            /** @example 1234567 */
+            unit_id: number;
+            /** @example Engine 1 */
+            alpha_tag?: string;
+            /**
+             * @description Source of the alpha tag (e.g., radioreference, manual)
+             * @example radioreference
+             */
+            alpha_tag_source?: string;
+            /** Format: date-time */
+            first_seen?: string;
+            /** Format: date-time */
+            last_seen?: string;
+            last_event_type?: components["schemas"]["EventType"];
+            /** Format: date-time */
+            last_event_time?: string;
+            /** @example 9178 */
+            last_event_tgid?: number;
+            /**
+             * @description Alpha tag of the talkgroup from last event
+             * @example 09-8L Main
+             */
+            last_event_tg_tag?: string;
+            /**
+             * @description Search relevance: 100=exact, 50=prefix, 10=contains. Only present in search results.
+             * @example 100
+             */
+            relevance_score?: number;
+        };
+        /** @description A recorded radio call/transmission */
+        Call: {
+            /**
+             * @description Unique database ID for this recording
+             * @example 48531
+             */
+            call_id: number;
+            /**
+             * @description Call group this recording belongs to. Multiple recordings of the
+             *     same transmission (from different sites) share a call_group_id.
+             *     Derived from (system_id, tgid, start_unix).
+             * @example 1
+             */
+            call_group_id?: number;
+            /**
+             * @description Logical radio system this call belongs to
+             * @example 1
+             */
+            system_id: number;
+            /**
+             * @description System display name
+             * @example Butler/Warren P25
+             */
+            system_name?: string;
+            /**
+             * @description P25 SYSID (for display; "0" for conventional)
+             * @example 348
+             */
+            sysid?: string;
+            /**
+             * @description Recording site that captured this call
              * @example 1
              */
             site_id?: number;
             /**
-             * @description System number within TR config
+             * @description TR sys_name of the capturing site (e.g., "butco", "warco")
+             * @example butco
+             */
+            site_short_name?: string;
+            /** @example 9178 */
+            tgid: number;
+            /**
+             * @description Talkgroup short-form display name
+             * @example 09-8L Main
+             */
+            tg_alpha_tag?: string;
+            /**
+             * @description Human-readable talkgroup description
+             * @example Middletown Police Dispatch
+             */
+            tg_description?: string;
+            /**
+             * @description Functional category tag (e.g., Law Dispatch, Fire Tac)
+             * @example Law Dispatch
+             */
+            tg_tag?: string;
+            /**
+             * @description Broad organizational grouping
+             * @example Butler County (09) Law
+             */
+            tg_group?: string;
+            /**
+             * Format: date-time
+             * @example 2024-01-15T10:30:00Z
+             */
+            start_time: string;
+            /**
+             * Format: date-time
+             * @description Null for active (in-progress) calls
+             * @example 2024-01-15T10:30:45Z
+             */
+            stop_time?: string | null;
+            /**
+             * @description Duration in seconds (elapsed so far for active calls)
+             * @example 45.5
+             */
+            duration?: number;
+            /**
+             * @description Relative URL to audio endpoint. Null for active calls.
+             * @example /api/v1/calls/48531/audio
+             */
+            audio_url?: string | null;
+            /**
+             * @description Audio encoding type from trunk-recorder (e.g., `digital`, `digital tdma`, `analog`)
+             * @example digital
+             */
+            audio_type?: string;
+            /**
+             * @description Audio file size in bytes
+             * @example 45000
+             */
+            audio_size?: number;
+            /**
+             * @description Frequency in Hz
+             * @example 851012500
+             */
+            freq?: number;
+            /**
+             * @description Frequency error in Hz
              * @example 0
              */
-            sys_num?: number;
+            freq_error?: number;
+            /**
+             * @description Signal strength in dB (null if unavailable; MQTT sends 999 as sentinel)
+             * @example -23
+             */
+            signal_db?: number | null;
+            /**
+             * @description Noise floor in dB (null if unavailable; MQTT sends 999 as sentinel)
+             * @example -50
+             */
+            noise_db?: number | null;
+            /**
+             * @description Decode error count
+             * @example 2
+             */
+            error_count?: number;
+            /**
+             * @description Audio spike count
+             * @example 0
+             */
+            spike_count?: number;
+            call_state?: components["schemas"]["CallState"];
+            mon_state?: components["schemas"]["MonState"];
+            /** @example false */
+            emergency?: boolean;
+            /** @example false */
+            encrypted?: boolean;
+            /** @example false */
+            analog?: boolean;
+            /** @example false */
+            conventional?: boolean;
+            /** @example false */
+            phase2_tdma?: boolean;
+            /**
+             * @description TDMA slot (0=slot 1 or N/A, 1=slot 2)
+             * @example 0
+             */
+            tdma_slot?: number;
+            /** @description Other talkgroup IDs patched into this call */
+            patched_tgids?: number[];
+            /**
+             * @description Source/transmission list from trunk-recorder's srcList.
+             *     Each entry is a unit transmission segment within the call.
+             *     Also available via GET /calls/{id}/transmissions.
+             */
+            src_list?: components["schemas"]["CallTransmission"][];
+            /**
+             * @description Frequency list from trunk-recorder's freqList.
+             *     Each entry is a frequency segment within the call.
+             *     Also available via GET /calls/{id}/frequencies.
+             */
+            freq_list?: components["schemas"]["CallFrequency"][];
+            /** @description Denormalized array of distinct unit radio IDs (src values) from src_list. GIN-indexed for fast unit filtering. */
+            unit_ids?: number[];
+            units?: components["schemas"]["CallUnit"][];
+            /**
+             * @description Whether this call has been transcribed
+             * @example true
+             */
+            has_transcription?: boolean;
+            transcription_status?: components["schemas"]["TranscriptionStatus"];
+            /**
+             * @description Primary transcription text (null if no transcription)
+             * @example Engine 5 responding to the scene
+             */
+            transcription_text?: string | null;
+            /** @example 6 */
+            transcription_word_count?: number | null;
+            /** @description Arbitrary metadata from trunk-recorder */
+            metadata_json?: {
+                [key: string]: unknown;
+            };
+        };
+        /** @description A unit that transmitted during a call */
+        CallUnit: {
+            /**
+             * @description Database system ID for disambiguation in multi-system deployments
+             * @example 1
+             */
+            system_id: number;
+            /**
+             * @description Unit radio ID (RID)
+             * @example 924003
+             */
+            unit_id: number;
+            /**
+             * @description Unit display name
+             * @example 09 7COM3
+             */
+            alpha_tag?: string;
+        };
+        /** @description A unit event (registration, affiliation, call activity, etc.) */
+        UnitEvent: {
+            /** @example 1 */
+            id: number;
+            event_type: components["schemas"]["EventType"];
+            /**
+             * Format: date-time
+             * @example 2024-01-15T10:30:00Z
+             */
+            time: string;
+            /**
+             * @description Database system ID
+             * @example 1
+             */
+            system_id?: number;
+            /**
+             * @description System display name
+             * @example Butler/Warren P25
+             */
+            system_name?: string;
+            /** @example 1234567 */
+            unit_rid: number;
+            /**
+             * @description Unit display name (embedded to avoid lookup)
+             * @example Engine 1
+             */
+            unit_alpha_tag?: string;
+            /** @example 1001 */
+            tgid?: number;
+            /**
+             * @description Talkgroup short-form display name
+             * @example 09-8L Main
+             */
+            tg_alpha_tag?: string;
+            /**
+             * @description Human-readable talkgroup description
+             * @example Middletown Police Dispatch
+             */
+            tg_description?: string;
+            /**
+             * @description Trunk-recorder instance that reported this event
+             * @example trunk-recorder
+             */
+            instance_id?: string;
+            metadata_json?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * @description A frequency segment from trunk-recorder's freqList. Each entry
+         *     represents a period of time the call spent on a given frequency.
+         */
+        CallFrequency: {
+            /**
+             * @description Frequency in Hz
+             * @example 154875000
+             */
+            freq?: number;
+            /**
+             * @description Unix timestamp of when this frequency segment started
+             * @example 1713207802
+             */
+            time?: number;
+            /**
+             * @description Position in the audio file in seconds
+             * @example 0
+             */
+            pos?: number;
+            /**
+             * @description Duration on this frequency in seconds
+             * @example 3.24
+             */
+            len?: number;
+            /** @example 50 */
+            error_count?: number;
+            /** @example 3 */
+            spike_count?: number;
+        };
+        /**
+         * @description A unit key-up from trunk-recorder's srcList. Each entry represents
+         *     one unit's transmission within the call. The `src` field maps to
+         *     the unit radio ID (RID).
+         */
+        CallTransmission: {
+            /**
+             * @description Unit radio ID (RID) — matches unit_id in other models
+             * @example 104
+             */
+            src?: number;
+            /**
+             * @description Unit alpha tag at time of transmission (from trunk-recorder)
+             * @example 09 7COM3
+             */
+            tag?: string;
+            /**
+             * @description Unix timestamp of when this unit keyed up
+             * @example 1713207802
+             */
+            time?: number;
+            /**
+             * @description Position in audio file in seconds
+             * @example 0
+             */
+            pos?: number;
+            /**
+             * @description Duration of this transmission segment in seconds (computed from gap to next transmission or end of call)
+             * @example 3.5
+             */
+            duration?: number;
+            /**
+             * @description Emergency flag (0=normal, 1=emergency)
+             * @example 0
+             */
+            emergency?: number;
+            /**
+             * @description Signal system identifier (typically empty)
+             * @example
+             */
+            signal_system?: string;
+        };
+        /**
+         * @description A group of duplicate call recordings from multiple recorders.
+         *     Derived from (system_id, tgid, start_unix) — recordings that match
+         *     on all three are grouped.
+         */
+        CallGroup: {
+            /** @example 1 */
+            id?: number;
+            /** @example 1 */
+            system_id?: number;
+            /**
+             * @description System display name
+             * @example Butler/Warren P25
+             */
+            system_name?: string;
+            /**
+             * @description P25 SYSID (for display)
+             * @example 348
+             */
+            sysid?: string;
+            /** @example 1 */
+            site_id?: number;
+            /** @example butco */
+            site_short_name?: string;
+            /** @example 9178 */
+            tgid?: number;
+            /**
+             * @description Talkgroup short-form display name
+             * @example 09-8L Main
+             */
+            tg_alpha_tag?: string;
+            /**
+             * @description Human-readable talkgroup description
+             * @example Middletown Police Dispatch
+             */
+            tg_description?: string;
+            /**
+             * @description Functional category tag
+             * @example Law Dispatch
+             */
+            tg_tag?: string;
+            /**
+             * @description Broad organizational grouping
+             * @example Butler County (09) Law
+             */
+            tg_group?: string;
+            /** Format: date-time */
+            start_time?: string;
+            /** Format: date-time */
+            stop_time?: string;
+            /** @example 45.5 */
+            duration?: number;
+            /**
+             * @description Number of recordings in this group
+             * @example 2
+             */
+            call_count?: number;
+            /**
+             * @description Call ID of the best-quality recording
+             * @example 48531
+             */
+            primary_call_id?: number;
+            /** @example true */
+            has_transcription?: boolean;
+            transcription_status?: components["schemas"]["TranscriptionStatus"];
+            /** @example Engine 5 responding to the scene */
+            transcription_text?: string | null;
+        };
+        /**
+         * @description - **none**: no transcription attempted
+         *     - **auto**: machine-transcribed, unreviewed
+         *     - **reviewed**: passed quality checks
+         *     - **verified**: human-verified correct
+         *     - **excluded**: permanently excluded from dataset
+         * @enum {string}
+         */
+        TranscriptionStatus: "none" | "auto" | "reviewed" | "verified" | "excluded";
+        /**
+         * @description - **auto**: automated transcription (e.g., Whisper)
+         *     - **human**: human correction/transcription
+         *     - **llm**: LLM-generated correction
+         * @enum {string}
+         */
+        TranscriptionSource: "auto" | "human" | "llm";
+        /** @description A transcription of a call's audio content with unit attribution */
+        Transcription: {
+            /** @example 1 */
+            id: number;
+            /** @example 48531 */
+            call_id: number;
+            /** @example Engine 5 responding to the scene */
+            text: string;
+            source: components["schemas"]["TranscriptionSource"];
+            /** @example true */
+            is_primary?: boolean;
+            /** @example 0.95 */
+            confidence?: number | null;
+            /** @example en */
+            language?: string;
+            /** @example deepdml/faster-whisper-large-v3-turbo-ct2 */
+            model?: string;
+            /** @example whisper */
+            provider?: string;
+            /** @example 6 */
+            word_count?: number;
+            /**
+             * @description Transcription processing time in milliseconds
+             * @example 1500
+             */
+            duration_ms?: number;
+            /** Format: date-time */
+            created_at?: string;
+            /**
+             * @description Unit-attributed word timestamps and segments. The `words` array
+             *     contains every word with timing and the radio unit that said it.
+             *     The `segments` array groups consecutive words by the same unit.
+             */
+            words?: {
+                words?: components["schemas"]["AttributedWord"][];
+                segments?: components["schemas"]["TranscriptionSegment"][];
+            };
+        };
+        /** @description A word with timing and unit attribution */
+        AttributedWord: {
+            /** @example Engine */
+            word: string;
+            /**
+             * @description Start time in seconds from audio start
+             * @example 0.12
+             */
+            start: number;
+            /**
+             * @description End time in seconds from audio start
+             * @example 0.45
+             */
+            end: number;
+            /**
+             * @description Unit/radio ID (0 if unattributed)
+             * @example 9130
+             */
+            src: number;
+            /**
+             * @description Unit alpha tag
+             * @example Medic 83
+             */
+            src_tag?: string;
+        };
+        /** @description Consecutive words from the same radio unit */
+        TranscriptionSegment: {
+            /**
+             * @description Unit/radio ID
+             * @example 9130
+             */
+            src: number;
+            /** @example Medic 83 */
+            src_tag?: string;
+            /** @example 0.12 */
+            start: number;
+            /** @example 1.8 */
+            end: number;
+            /** @example Medic 83 transporting to Fort. */
+            text: string;
+        };
+        /** @description A search result with relevance score and call context */
+        TranscriptionSearchHit: {
+            id?: number;
+            call_id?: number;
+            text?: string;
+            source?: string;
+            is_primary?: boolean;
+            word_count?: number;
+            duration_ms?: number;
+            /** Format: date-time */
+            created_at?: string;
+            /** @description Search relevance score (higher is better) */
+            rank?: number;
+            system_id?: number;
+            system_name?: string;
+            tgid?: number;
+            tg_alpha_tag?: string;
+            /** Format: date-time */
+            call_start_time?: string;
+            call_duration?: number | null;
+        };
+        TranscriptionSearchResponse: {
+            results: components["schemas"]["TranscriptionSearchHit"][];
+            total: number;
+            limit: number;
+            offset: number;
+        };
+        TranscriptionQueueStats: {
+            /** @enum {string} */
+            status?: "ok" | "not_configured";
+            /** @example 15 */
+            pending?: number;
+            /** @example 5000 */
+            completed?: number;
+            /** @example 12 */
+            failed?: number;
+        };
+        StatusChangeResponse: {
+            /** @example 48531 */
+            call_id?: number;
+            /** @example verified */
+            status?: string;
+        };
+        /**
+         * @description A trunk-recorder recorder (SDR channel). Core fields come directly
+         *     from the MQTT `recorders` message. Activity fields (talkgroup, unit)
+         *     are joined from active calls by the API layer when available.
+         */
+        Recorder: {
+            /**
+             * @description Composite recorder ID from MQTT: `{src_num}_{rec_num}`
+             * @example 4_16
+             */
+            id?: string;
+            /**
+             * @description Source number (which SDR dongle)
+             * @example 4
+             */
+            src_num?: number;
+            /**
+             * @description Recorder number within the source
+             * @example 16
+             */
+            rec_num?: number;
+            /**
+             * @description Recorder type from trunk-recorder (P25, P25C, ANALOG, etc.)
+             * @example P25
+             */
+            type?: string;
+            rec_state?: components["schemas"]["RecState"];
+            /**
+             * @description Current frequency in Hz (0 when idle)
+             * @example 852200000
+             */
+            freq?: number;
+            /**
+             * @description Current recording duration in seconds
+             * @example 21182.1
+             */
+            duration?: number;
+            /**
+             * @description Number of transmissions recorded
+             * @example 3563
+             */
+            count?: number;
+            /** @example false */
+            squelched?: boolean;
+            /**
+             * @description Current talkgroup ID (null when idle). Joined from active calls.
+             * @example 9178
+             */
+            tgid?: number | null;
+            /**
+             * @description Current talkgroup display name. Joined from active calls.
+             * @example 09-8L Main
+             */
+            tg_alpha_tag?: string | null;
+            /**
+             * @description Current transmitting unit ID (null when idle). Joined from active calls.
+             * @example 924003
+             */
+            unit_id?: number | null;
+            /**
+             * @description Current transmitting unit display name. Joined from active calls.
+             * @example 09 7COM3
+             */
+            unit_alpha_tag?: string | null;
+        };
+        /**
+         * @description Mutable system-level fields. Only provided fields are updated.
+         *     For P25, changing sysid/wacn affects the network identity used
+         *     at ingest. For site-level changes (short_name, nac, instance_id),
+         *     use SitePatch on PATCH /sites/{id}.
+         */
+        SystemPatch: {
             /**
              * @description P25 System ID (hex)
              * @example 348
              */
             sysid?: string;
             /**
-             * @description Database ID, use this in API calls
-             * @example 1
-             */
-            system_id?: number;
-            /**
-             * @description p25, smartnet, conventional
-             * @example p25
-             */
-            system_type?: string;
-            /**
              * @description P25 WACN
              * @example BEE00
              */
             wacn?: string;
+            /** @description Optional display name for the system (e.g., "Butler/Warren P25") */
+            name?: string;
         };
-        /** @description List of trunk-recorder recording sites. Each site monitors one radio system/site combination. */
-        "rest.SiteListResponse": {
-            /** @example 2 */
-            count?: number;
-            sites?: components["schemas"]["rest.Site"][];
+        /**
+         * @description Mutable site-level fields. Only provided fields are updated.
+         *     Changing `short_name` or `instance_id` updates the ingest
+         *     lookup key — make sure the trunk-recorder config matches or
+         *     future messages will create a new site (fragmentation).
+         */
+        SitePatch: {
+            /**
+             * @description Trunk-recorder sys_name. Changing this updates the
+             *     `(instance_id, short_name)` → `site_id` mapping.
+             * @example butco
+             */
+            short_name?: string;
+            /**
+             * @description Trunk-recorder instance ID this site belongs to
+             * @example trunk-recorder
+             */
+            instance_id?: string;
+            /**
+             * @description P25 NAC
+             * @example 340
+             */
+            nac?: string;
+            /** @example 4 */
+            rfss?: number;
+            /** @example 1 */
+            p25_site_id?: number;
         };
-        "rest.TalkgroupListResponse": {
-            /** @example 100 */
-            count?: number;
-            /** @example 50 */
-            limit?: number;
-            /** @example 0 */
-            offset?: number;
-            talkgroups?: unknown;
+        SystemMergeRequest: {
+            /**
+             * @description System to merge FROM (will be deleted after merge)
+             * @example 3
+             */
+            source_id: number;
+            /**
+             * @description System to merge INTO (keeps its system_id)
+             * @example 1
+             */
+            target_id: number;
+            /**
+             * @description If true, copy short_name/sysid/wacn/nac from source to target
+             *     (useful when the source has better metadata, e.g., was identified
+             *     after the target was created as "unknown").
+             * @default false
+             */
+            update_target_metadata: boolean;
         };
-        "rest.TranscribeCallRequest": {
+        SystemMergeResponse: {
+            /**
+             * @description The surviving system_id
+             * @example 1
+             */
+            target_id?: number;
+            /**
+             * @description The deleted system_id
+             * @example 3
+             */
+            source_id?: number;
+            /**
+             * @description Number of call records repointed
+             * @example 5200
+             */
+            calls_moved?: number;
+            /**
+             * @description Talkgroups moved from source (source-only)
+             * @example 12
+             */
+            talkgroups_moved?: number;
+            /**
+             * @description Talkgroups that existed in both (stats combined)
+             * @example 45
+             */
+            talkgroups_merged?: number;
+            /** @example 30 */
+            units_moved?: number;
+            /** @example 150 */
+            units_merged?: number;
+            /**
+             * @description Unit events repointed
+             * @example 25000
+             */
+            events_moved?: number;
+        };
+        /** @description Mutable talkgroup fields. Only provided fields are updated. */
+        TalkgroupPatch: {
+            alpha_tag?: string;
+            /** @description Source of the alpha_tag value (e.g. "manual"). When set to "manual", MQTT ingest will not overwrite the alpha_tag. */
+            alpha_tag_source?: string;
+            description?: string;
+            group?: string;
+            tag?: string;
             priority?: number;
         };
-        "rest.UnitEventListResponse": {
-            /** @example 100 */
-            count?: number;
-            events?: components["schemas"]["models.UnitEvent"][];
-            /** @example 50 */
-            limit?: number;
-            /** @example 0 */
-            offset?: number;
+        /** @description Mutable unit fields. Only provided fields are updated. */
+        UnitPatch: {
+            alpha_tag?: string;
+            alpha_tag_source?: string;
         };
-        "rest.UnitListResponse": {
+        HealthResponse: {
+            /** @enum {string} */
+            status: "healthy" | "degraded" | "unhealthy";
+            /** @example 0.6.1 */
+            version?: string;
+            /** @example 86400 */
+            uptime_seconds?: number;
+            /** @description Individual subsystem health */
+            checks?: {
+                /** @enum {string} */
+                database?: "ok" | "error";
+                /** @enum {string} */
+                mqtt?: "ok" | "error" | "disconnected";
+                /** @enum {string} */
+                transcription?: "ok" | "not_configured";
+            };
+            /** @description Status of connected trunk-recorder instances */
+            trunk_recorders?: {
+                /** @example trunk-recorder */
+                instance_id?: string;
+                /** @example connected */
+                status?: string;
+                /** Format: date-time */
+                last_seen?: string;
+            }[];
+        };
+        SystemListResponse: {
+            systems: components["schemas"]["System"][];
+            /**
+             * @description Total number of systems
+             * @example 3
+             */
+            total: number;
+        };
+        P25SystemListResponse: {
+            systems: components["schemas"]["P25System"][];
+            /**
+             * @description Total number of P25 networks
+             * @example 2
+             */
+            total: number;
+        };
+        TalkgroupListResponse: {
+            talkgroups: components["schemas"]["Talkgroup"][];
+            /**
+             * @description Total matching results (across all pages)
+             * @example 150
+             */
+            total: number;
             /** @example 50 */
-            count?: number;
-            /** @example 50 */
-            limit?: number;
+            limit: number;
             /** @example 0 */
-            offset?: number;
-            units?: components["schemas"]["models.Unit"][];
+            offset: number;
+        };
+        UnitListResponse: {
+            units: components["schemas"]["Unit"][];
+            /** @example 500 */
+            total: number;
+            /** @example 50 */
+            limit: number;
+            /** @example 0 */
+            offset: number;
+        };
+        UnitEventListResponse: {
+            events: components["schemas"]["UnitEvent"][];
+            /** @example 100 */
+            total: number;
+            /** @example 50 */
+            limit: number;
+            /** @example 0 */
+            offset: number;
+        };
+        Affiliation: {
+            system_id: number;
+            system_name?: string;
+            sysid?: string;
+            unit_id: number;
+            unit_alpha_tag?: string;
+            tgid: number;
+            tg_alpha_tag?: string;
+            tg_description?: string;
+            tg_tag?: string;
+            tg_group?: string;
+            /** @description Previous talkgroup before this affiliation (null if first seen) */
+            previous_tgid?: number | null;
+            /**
+             * Format: date-time
+             * @description When the current talkgroup affiliation started
+             */
+            affiliated_since: string;
+            /**
+             * Format: date-time
+             * @description Most recent event time for this unit
+             */
+            last_event_time: string;
+            /**
+             * @description `affiliated` = unit is actively affiliated with the talkgroup.
+             *     `off` = unit sent an off/deregistration event.
+             * @enum {string}
+             */
+            status: "affiliated" | "off";
+        };
+        AffiliationListResponse: {
+            affiliations: components["schemas"]["Affiliation"][];
+            /** @description Total matching affiliations (before pagination) */
+            total: number;
+            /** @example 50 */
+            limit: number;
+            /** @example 0 */
+            offset: number;
+            summary: {
+                /**
+                 * @description Map of tgid → count of affiliated (non-off) units on that
+                 *     talkgroup. Computed over the full filtered set before pagination.
+                 */
+                talkgroup_counts?: {
+                    [key: string]: number;
+                };
+            };
+        };
+        CallListResponse: {
+            calls: components["schemas"]["Call"][];
+            /**
+             * @description Total matching results (across all pages)
+             * @example 2500
+             */
+            total: number;
+            /** @example 50 */
+            limit: number;
+            /** @example 0 */
+            offset: number;
+        };
+        ActiveCallListResponse: {
+            /**
+             * @description Active calls from MQTT tracker. Fields like stop_time and
+             *     audio_url will be null since the call is still in progress.
+             */
+            calls: components["schemas"]["Call"][];
+            /**
+             * @description Number of currently active calls
+             * @example 5
+             */
+            total: number;
+        };
+        CallGroupListResponse: {
+            call_groups: components["schemas"]["CallGroup"][];
+            /** @example 500 */
+            total: number;
+            /** @example 50 */
+            limit: number;
+            /** @example 0 */
+            offset: number;
+        };
+        CallGroupDetailResponse: {
+            call_group: components["schemas"]["CallGroup"];
+            /** @description All individual recordings in this group */
+            calls: components["schemas"]["Call"][];
+        };
+        CallFrequencyListResponse: {
+            frequencies: components["schemas"]["CallFrequency"][];
+            /** @example 3 */
+            total: number;
+        };
+        CallTransmissionListResponse: {
+            transmissions: components["schemas"]["CallTransmission"][];
+            /** @example 4 */
+            total: number;
+        };
+        StatsResponse: {
+            /**
+             * @description Total recording sites
+             * @example 3
+             */
+            systems?: number;
+            /**
+             * @description Total talkgroups across all systems
+             * @example 500
+             */
+            talkgroups?: number;
+            /**
+             * @description Total units across all systems
+             * @example 1000
+             */
+            units?: number;
+            /**
+             * @description Total call recordings
+             * @example 250000
+             */
+            total_calls?: number;
+            /**
+             * @description Calls recorded in the last 24 hours
+             * @example 5000
+             */
+            calls_24h?: number;
+            /**
+             * @description Calls recorded in the last hour
+             * @example 250
+             */
+            calls_1h?: number;
+            /**
+             * @description Total recorded audio in hours
+             * @example 4500.5
+             */
+            total_duration_hours?: number;
+            /** @description Per-system activity breakdown */
+            system_activity?: components["schemas"]["SystemActivity"][];
+        };
+        SystemActivity: {
+            /** @example 1 */
+            system_id?: number;
+            /**
+             * @description System display name
+             * @example Butler/Warren P25
+             */
+            system_name?: string;
+            /** @example 348 */
+            sysid?: string;
+            /** @example 100 */
+            calls_1h?: number;
+            /** @example 2000 */
+            calls_24h?: number;
+            /**
+             * @description Talkgroups with activity in the last hour
+             * @example 35
+             */
+            active_talkgroups?: number;
+            /**
+             * @description Units with activity in the last hour
+             * @example 80
+             */
+            active_units?: number;
+        };
+        DecodeRatesResponse: {
+            rates: components["schemas"]["DecodeRate"][];
+            /** @example 100 */
+            total: number;
+        };
+        DecodeRate: {
+            /** Format: date-time */
+            time?: string;
+            /** @example 1 */
+            system_id?: number;
+            /**
+             * @description System display name
+             * @example Butler/Warren P25
+             */
+            system_name?: string;
+            /** @example 348 */
+            sysid?: string;
+            /**
+             * @description Decode success rate (0.0 - 1.0)
+             * @example 0.98
+             */
+            decode_rate?: number;
+            /**
+             * @description Total messages in this measurement period
+             * @example 5000
+             */
+            total_messages?: number;
+        };
+        TalkgroupActivity: {
+            /** @example 3 */
+            system_id?: number;
+            /** @example MARCS */
+            system_name?: string;
+            /** @example 9178 */
+            tgid?: number;
+            /** @example 09-8L Main */
+            tg_alpha_tag?: string;
+            /** @example Middletown Police Dispatch */
+            tg_description?: string;
+            /** @example Law Dispatch */
+            tg_tag?: string;
+            /** @example Butler County (09) Law */
+            tg_group?: string;
+            /** @example 923 */
+            call_count?: number;
+            /**
+             * @description Total call duration in seconds
+             * @example 5842.3
+             */
+            total_duration?: number;
+            /** @example 2 */
+            emergency_count?: number;
+            /** Format: date-time */
+            first_call?: string;
+            /** Format: date-time */
+            last_call?: string;
+        };
+        EncryptionStatsResponse: {
+            stats: components["schemas"]["TalkgroupEncryptionStat"][];
+            /** @example 50 */
+            total: number;
+            /**
+             * @description Time window used
+             * @example 24
+             */
+            hours?: number;
+        };
+        TalkgroupEncryptionStat: {
+            /**
+             * @description Database system ID
+             * @example 1
+             */
+            system_id?: number;
+            /**
+             * @description System display name (embedded to avoid lookup)
+             * @example Butler/Warren P25
+             */
+            system_name?: string;
+            /**
+             * @description P25 SYSID (for display)
+             * @example 348
+             */
+            sysid?: string;
+            /** @example 9178 */
+            tgid?: number;
+            /** @example 09-8L Main */
+            tg_alpha_tag?: string;
+            /**
+             * @description Human-readable talkgroup description
+             * @example Middletown Police Dispatch
+             */
+            tg_description?: string;
+            /**
+             * @description Functional category tag
+             * @example Law Dispatch
+             */
+            tg_tag?: string;
+            /**
+             * @description Broad organizational grouping
+             * @example Butler County (09) Law
+             */
+            tg_group?: string;
+            /** @example 0 */
+            encrypted_count?: number;
+            /** @example 150 */
+            clear_count?: number;
+            /** @example 150 */
+            total_count?: number;
+            /**
+             * @description Percentage of calls that were encrypted (0.0 - 100.0)
+             * @example 0
+             */
+            encrypted_pct?: number;
+        };
+        TalkgroupDirectoryEntry: {
+            /** @example 1 */
+            system_id?: number;
+            /** @example butco */
+            system_name?: string;
+            /** @example 5000 */
+            tgid?: number;
+            /** @example FD01DISP */
+            alpha_tag?: string;
+            /** @example D */
+            mode?: string;
+            /** @example County Fire/EMS Dispatch */
+            description?: string;
+            /** @example Fire Dispatch */
+            tag?: string;
+            /** @example Adams County (01) */
+            category?: string;
+            /** @example 1 */
+            priority?: number | null;
+        };
+        RecorderListResponse: {
+            recorders: components["schemas"]["Recorder"][];
+            /** @example 12 */
+            total: number;
+        };
+        /**
+         * @description SSE event types pushed to clients:
+         *     - **call_start**: new call recording began
+         *     - **call_update**: call updated (new transmission, freq change)
+         *     - **call_end**: call recording completed, audio available
+         *     - **unit_event**: unit lifecycle event (on/off/join/call/end/etc.)
+         *     - **recorder_update**: recorder hardware state changed
+         *     - **rate_update**: decode rate update from a system
+         *     - **trunking_message**: P25 control channel message
+         *     - **console**: trunk-recorder console log message
+         * @enum {string}
+         */
+        SSEEventType: "call_start" | "call_update" | "call_end" | "unit_event" | "recorder_update" | "rate_update" | "trunking_message" | "console";
+        /**
+         * @description Each SSE event is sent as three lines:
+         *     ```
+         *     id: 1707912345000-42
+         *     event: call_start
+         *     data: {"call_id": 48531, "system_id": 1, "tgid": 9178, ...}
+         *     ```
+         *
+         *     The SSE fields map to the browser's `EventSource` API:
+         *     - `id` → `event.lastEventId` — unique event ID (`{unix_ms}-{seq}`),
+         *       pass as `Last-Event-ID` header on reconnect for gapless recovery
+         *     - `event` → selects the `addEventListener` handler — one of the
+         *       SSEEventType values (call_start, call_end, unit_event, etc.)
+         *     - `data` → `event.data` — the JSON payload described below
+         *
+         *     The `data` field contains the **domain object directly**, not a
+         *     wrapper. Its structure depends on the event type:
+         *     - `call_start` / `call_update` / `call_end`: Call object
+         *     - `unit_event`: UnitEvent object
+         *     - `recorder_update`: Recorder object
+         *     - `rate_update`: DecodeRate object
+         *     - `trunking_message`: TrunkingMessage object
+         *     - `console`: ConsoleMessage object
+         *
+         *     Server-side filtering metadata (system_id, site_id, tgid, unit_id)
+         *     is used internally to match events against query params but is not
+         *     sent as a separate envelope — these fields are already present in
+         *     the domain objects themselves.
+         */
+        SSEEvent: {
+            event?: components["schemas"]["SSEEventType"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** @description P25 control channel trunking message */
+        TrunkingMessage: {
+            id?: number;
+            /** @example 1 */
+            system_id?: number;
+            /** @example butco */
+            sys_name?: string;
+            /** @description Trunk message code */
+            trunk_msg?: number;
+            /**
+             * @description Trunk message type name
+             * @example GRANT
+             */
+            trunk_msg_type?: string;
+            /**
+             * @description P25 opcode hex value
+             * @example 2c
+             */
+            opcode?: string;
+            /**
+             * @description Human-readable opcode type name
+             * @example Unit Registration Response
+             */
+            opcode_type?: string;
+            /** @description Detailed description of the opcode */
+            opcode_desc?: string;
+            /** @description Opcode-specific metadata fields */
+            meta?: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            time?: string;
+            instance_id?: string;
+        };
+        TrunkingMessageListResponse: {
+            messages: components["schemas"]["TrunkingMessage"][];
+            /** @description Total matching messages (for pagination) */
+            total: number;
+        };
+        /** @description Trunk-recorder console log message */
+        ConsoleMessage: {
+            id?: number;
+            /** @example trunk-recorder */
+            instance_id?: string;
+            /** @example info */
+            severity?: string;
+            /** @example [butco] Control Channel: 851012500 */
+            log_msg?: string;
+            /** Format: date-time */
+            log_time?: string;
+        };
+        ConsoleMessageListResponse: {
+            messages: components["schemas"]["ConsoleMessage"][];
+            /** @description Total matching messages (for pagination) */
+            total: number;
+        };
+        QueryRequest: {
+            /**
+             * @description SQL query to execute. Must be a single statement (no semicolons). Use $1, $2, etc. for parameter placeholders.
+             * @example SELECT tgid, alpha_tag FROM talkgroups WHERE system_id = $1
+             */
+            sql: string;
+            /**
+             * @description Parameter values for $1, $2, etc. placeholders in the SQL query.
+             * @example [
+             *       1
+             *     ]
+             */
+            params?: unknown[];
+            /**
+             * @description Maximum number of rows to return.
+             * @default 1000
+             */
+            limit: number;
+        };
+        QueryResponse: {
+            /**
+             * @description Column names from the query result.
+             * @example [
+             *       "tgid",
+             *       "alpha_tag"
+             *     ]
+             */
+            columns: string[];
+            /**
+             * @description Result rows, each an array of values matching the columns order.
+             * @example [
+             *       [
+             *         9178,
+             *         "09 DISP"
+             *       ],
+             *       [
+             *         9112,
+             *         "09 LAW1"
+             *       ]
+             *     ]
+             */
+            rows: unknown[][];
+            /**
+             * @description Number of rows returned.
+             * @example 2
+             */
+            row_count: number;
         };
     };
-    responses: never;
-    parameters: never;
+    responses: {
+        /** @description Bad Request */
+        BadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Not Found */
+        NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /**
+         * @description Ambiguous ID — the plain ID exists in multiple systems.
+         *     Response includes the list of matching systems to help the
+         *     client disambiguate.
+         */
+        Ambiguous: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["AmbiguousError"];
+            };
+        };
+        /** @description Unauthorized — missing or invalid auth token */
+        Unauthorized: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Internal Server Error */
+        InternalError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+    };
+    parameters: {
+        /** @description Call record database ID */
+        callId: number;
+        /** @description Talkgroup ID: `system_id:tgid` (e.g., `1:9178`) or plain `tgid` */
+        talkgroupId: string;
+        /** @description Unit ID: `system_id:unit_id` (e.g., `1:924003`) or plain `unit_id` */
+        unitId: string;
+        /** @description Start of time range (RFC 3339) */
+        startTime: string;
+        /** @description End of time range (RFC 3339) */
+        endTime: string;
+        /** @description Results per page */
+        limit: number;
+        /** @description Page offset (number of results to skip) */
+        offset: number;
+        /** @description Sort field. Prefix with `-` for descending (e.g., `-last_seen`) */
+        sort: string;
+        /** @description Sort direction (ignored if sort field uses `-` prefix) */
+        sortDir: "asc" | "desc";
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
 }
 export type $defs = Record<string, never>;
-export type operations = Record<string, never>;
+export interface operations {
+    getHealth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Healthy */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Unhealthy */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    listSystems: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getSystem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description System database ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["System"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateSystem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description System database ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SystemPatch"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["System"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getSite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Site database ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Site"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateSite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Site database ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SitePatch"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Site"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            /** @description short_name + instance_id conflicts with an existing site */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listP25Systems: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["P25SystemListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listTalkgroups: {
+        parameters: {
+            query?: {
+                /** @description Filter by system database ID (comma-separated for multiple) */
+                system_id?: string;
+                /** @description Filter by P25 SYSID (comma-separated for multiple, e.g., "348,34D") */
+                sysid?: string;
+                /** @description Filter by talkgroup group/category (e.g., "Fire", "Law Dispatch") */
+                group?: string;
+                /** @description Search by alpha_tag, tgid, group, tag, or description */
+                search?: string;
+                /** @description Sort field. Prefix with `-` for descending (e.g., `-last_seen`) */
+                sort?: components["parameters"]["sort"];
+                /** @description Sort direction (ignored if sort field uses `-` prefix) */
+                sort_dir?: components["parameters"]["sortDir"];
+                /** @description Results per page */
+                limit?: components["parameters"]["limit"];
+                /** @description Page offset (number of results to skip) */
+                offset?: components["parameters"]["offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TalkgroupListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getTalkgroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Talkgroup ID: `system_id:tgid` (e.g., `1:9178`) or plain `tgid` */
+                id: components["parameters"]["talkgroupId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Talkgroup"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Ambiguous"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateTalkgroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Talkgroup ID: `system_id:tgid` (e.g., `1:9178`) or plain `tgid` */
+                id: components["parameters"]["talkgroupId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TalkgroupPatch"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Talkgroup"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Ambiguous"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listTalkgroupCalls: {
+        parameters: {
+            query?: {
+                /** @description Start of time range (RFC 3339) */
+                start_time?: components["parameters"]["startTime"];
+                /** @description End of time range (RFC 3339) */
+                end_time?: components["parameters"]["endTime"];
+                /** @description Results per page */
+                limit?: components["parameters"]["limit"];
+                /** @description Page offset (number of results to skip) */
+                offset?: components["parameters"]["offset"];
+            };
+            header?: never;
+            path: {
+                /** @description Talkgroup ID: `system_id:tgid` (e.g., `1:9178`) or plain `tgid` */
+                id: components["parameters"]["talkgroupId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CallListResponse"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Ambiguous"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listTalkgroupUnits: {
+        parameters: {
+            query?: {
+                /** @description Activity window in minutes (1-1440) */
+                window?: number;
+                /** @description Results per page */
+                limit?: components["parameters"]["limit"];
+                /** @description Page offset (number of results to skip) */
+                offset?: components["parameters"]["offset"];
+            };
+            header?: never;
+            path: {
+                /** @description Talkgroup ID: `system_id:tgid` (e.g., `1:9178`) or plain `tgid` */
+                id: components["parameters"]["talkgroupId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitListResponse"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Ambiguous"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getTalkgroupEncryptionStats: {
+        parameters: {
+            query?: {
+                /** @description Hours of history to include */
+                hours?: number;
+                /** @description Filter by P25 SYSID */
+                sysid?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EncryptionStatsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listTalkgroupDirectory: {
+        parameters: {
+            query?: {
+                /** @description Filter by system ID (repeatable) */
+                system_id?: number;
+                /** @description Full-text search across alpha_tag, description, tag, category */
+                search?: string;
+                /** @description Filter by category */
+                category?: string;
+                /** @description Filter by mode (D, A, E, M) */
+                mode?: string;
+                /** @description Results per page */
+                limit?: components["parameters"]["limit"];
+                /** @description Page offset (number of results to skip) */
+                offset?: components["parameters"]["offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        talkgroups?: components["schemas"]["TalkgroupDirectoryEntry"][];
+                        total?: number;
+                        limit?: number;
+                        offset?: number;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    importTalkgroupDirectory: {
+        parameters: {
+            query?: {
+                /** @description Target system ID (must exist). Mutually exclusive with system_name. */
+                system_id?: number;
+                /** @description Target system name (created if it doesn't exist). Mutually exclusive with system_id. */
+                system_name?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description Talkgroup CSV file
+                     */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Import successful */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Number of talkgroups successfully imported */
+                        imported?: number;
+                        /** @description Total valid rows in the CSV */
+                        total?: number;
+                        /** @description System ID the talkgroups were imported into */
+                        system_id?: number;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listUnits: {
+        parameters: {
+            query?: {
+                /** @description Filter by P25 SYSID */
+                sysid?: string;
+                /** @description Search by alpha_tag or unit_id */
+                search?: string;
+                /**
+                 * @description Only return units active within this many minutes. Replaces the
+                 *     need for a separate "active units" endpoint when combined with
+                 *     other filters.
+                 */
+                active_within?: number;
+                /** @description Filter by talkgroup ID (comma-separated for multiple) */
+                talkgroup?: string;
+                /** @description Sort field. Prefix with `-` for descending (e.g., `-last_seen`) */
+                sort?: components["parameters"]["sort"];
+                /** @description Sort direction (ignored if sort field uses `-` prefix) */
+                sort_dir?: components["parameters"]["sortDir"];
+                /** @description Results per page */
+                limit?: components["parameters"]["limit"];
+                /** @description Page offset (number of results to skip) */
+                offset?: components["parameters"]["offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getUnit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Unit ID: `system_id:unit_id` (e.g., `1:924003`) or plain `unit_id` */
+                id: components["parameters"]["unitId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Unit"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Ambiguous"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateUnit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Unit ID: `system_id:unit_id` (e.g., `1:924003`) or plain `unit_id` */
+                id: components["parameters"]["unitId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnitPatch"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Unit"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Ambiguous"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listUnitCalls: {
+        parameters: {
+            query?: {
+                /** @description Start of time range (RFC 3339) */
+                start_time?: components["parameters"]["startTime"];
+                /** @description End of time range (RFC 3339) */
+                end_time?: components["parameters"]["endTime"];
+                /** @description Results per page */
+                limit?: components["parameters"]["limit"];
+                /** @description Page offset (number of results to skip) */
+                offset?: components["parameters"]["offset"];
+            };
+            header?: never;
+            path: {
+                /** @description Unit ID: `system_id:unit_id` (e.g., `1:924003`) or plain `unit_id` */
+                id: components["parameters"]["unitId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CallListResponse"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Ambiguous"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listUnitEvents: {
+        parameters: {
+            query?: {
+                /** @description Filter by event type */
+                type?: components["schemas"]["EventType"];
+                /** @description Filter by talkgroup ID */
+                talkgroup?: number;
+                /** @description Start of time range (RFC 3339) */
+                start_time?: components["parameters"]["startTime"];
+                /** @description End of time range (RFC 3339) */
+                end_time?: components["parameters"]["endTime"];
+                /** @description Results per page */
+                limit?: components["parameters"]["limit"];
+                /** @description Page offset (number of results to skip) */
+                offset?: components["parameters"]["offset"];
+            };
+            header?: never;
+            path: {
+                /** @description Unit ID: `system_id:unit_id` (e.g., `1:924003`) or plain `unit_id` */
+                id: components["parameters"]["unitId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitEventListResponse"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Ambiguous"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listUnitEventsGlobal: {
+        parameters: {
+            query?: {
+                /** @description Filter by internal system ID (comma-separated for multiple). Alias "systems" also accepted. */
+                system_id?: string;
+                /** @description Filter by P25 sysid hex (comma-separated for multiple). Alias "sysids" also accepted. */
+                sysid?: string;
+                /** @description Filter by unit radio ID (comma-separated for multiple). Aliases "units", "unit_ids" also accepted. */
+                unit_id?: string;
+                /**
+                 * @description Comma-separated event types to include (e.g. `join,on,off`).
+                 *     If omitted, all event types are returned.
+                 */
+                type?: string;
+                /** @description Filter by talkgroup ID (comma-separated for multiple). Alias "tgids" also accepted. */
+                tgid?: string;
+                /** @description Filter by emergency flag */
+                emergency?: boolean;
+                /** @description Start of time range (RFC 3339) */
+                start_time?: components["parameters"]["startTime"];
+                /** @description End of time range (RFC 3339) */
+                end_time?: components["parameters"]["endTime"];
+                /**
+                 * @description Sort field with optional `-` prefix for descending.
+                 *     Allowed: `time`, `unit_rid`, `tgid`, `event_type`. Default: `-time`.
+                 */
+                sort?: string;
+                /** @description Results per page */
+                limit?: components["parameters"]["limit"];
+                /** @description Page offset (number of results to skip) */
+                offset?: components["parameters"]["offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitEventListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listUnitAffiliations: {
+        parameters: {
+            query?: {
+                /** @description Filter by internal system ID (comma-separated for multiple) */
+                system_id?: string;
+                /** @description Filter by P25 sysid hex (comma-separated for multiple) */
+                sysid?: string;
+                /** @description Filter by talkgroup ID (comma-separated for multiple) */
+                tgid?: string;
+                /** @description Filter by unit radio ID (comma-separated for multiple) */
+                unit_id?: string;
+                /** @description Filter by status (`affiliated` or `off`) */
+                status?: "affiliated" | "off";
+                /** @description Exclude entries whose last event is older than this many seconds. */
+                stale_threshold?: number;
+                /** @description Only include entries active within this many seconds. */
+                active_within?: number;
+                /** @description Results per page */
+                limit?: components["parameters"]["limit"];
+                /** @description Page offset (number of results to skip) */
+                offset?: components["parameters"]["offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AffiliationListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listCalls: {
+        parameters: {
+            query?: {
+                /** @description Filter by P25 SYSID (comma-separated for multiple, e.g., "348,34D"). Alias "sysids" also accepted. */
+                sysid?: string;
+                /** @description Filter by system database ID (comma-separated for multiple). Alias "systems" also accepted. */
+                system_id?: string;
+                /** @description Filter by recording site ID (comma-separated for multiple). Alias "sites" also accepted. */
+                site_id?: string;
+                /** @description Filter by talkgroup ID (comma-separated for multiple). Alias "tgids" also accepted. */
+                tgid?: string;
+                /** @description Filter by unit radio ID (comma-separated for multiple). Aliases "units", "unit_ids" also accepted. */
+                unit_id?: string;
+                /** @description Filter by emergency flag */
+                emergency?: boolean;
+                /** @description Filter by encryption status */
+                encrypted?: boolean;
+                /**
+                 * @description When true, returns one call per call_group (best recording).
+                 *     Useful for feed views where simulcast duplicates are unwanted.
+                 */
+                deduplicate?: boolean;
+                /** @description Start of time range (RFC 3339) */
+                start_time?: components["parameters"]["startTime"];
+                /** @description End of time range (RFC 3339) */
+                end_time?: components["parameters"]["endTime"];
+                /**
+                 * @description Sort field. Prefix with `-` for descending.
+                 *     Allowed: start_time, stop_time, duration, tgid, freq
+                 */
+                sort?: string;
+                /** @description Results per page */
+                limit?: components["parameters"]["limit"];
+                /** @description Page offset (number of results to skip) */
+                offset?: components["parameters"]["offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CallListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listActiveCalls: {
+        parameters: {
+            query?: {
+                /** @description Filter by P25 SYSID */
+                sysid?: string;
+                /** @description Filter by talkgroup ID */
+                tgid?: number;
+                /** @description Filter by emergency flag */
+                emergency?: boolean;
+                /** @description Filter by encryption status */
+                encrypted?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActiveCallListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getCall: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Call record database ID */
+                id: components["parameters"]["callId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Call"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getCallAudio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Call record database ID */
+                id: components["parameters"]["callId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Audio stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "audio/mp4": string;
+                    "audio/mpeg": string;
+                    "audio/wav": string;
+                    "audio/ogg": string;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getCallFrequencies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Call record database ID */
+                id: components["parameters"]["callId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CallFrequencyListResponse"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getCallTransmissions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Call record database ID */
+                id: components["parameters"]["callId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CallTransmissionListResponse"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getCallTranscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Call record database ID */
+                id: components["parameters"]["callId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Transcription"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    submitTranscriptionCorrection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Call record database ID */
+                id: components["parameters"]["callId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Transcription text */
+                    text: string;
+                    /**
+                     * @description Transcription source. Defaults to "human" if omitted.
+                     * @example human
+                     */
+                    source?: string;
+                    /**
+                     * @description Provider identifier (e.g., "client-whisper", "elevenlabs")
+                     * @example client-whisper
+                     */
+                    provider?: string;
+                    /**
+                     * @description Language code
+                     * @example en
+                     */
+                    language?: string;
+                    /**
+                     * @description Optional pre-built word/segment data. Same structure as the
+                     *     `words` field in the Transcription schema.
+                     */
+                    words?: Record<string, never> | null;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id?: number;
+                        call_id?: number;
+                        /** @example human */
+                        source?: string;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listCallTranscriptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Call record database ID */
+                id: components["parameters"]["callId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        transcriptions?: components["schemas"]["Transcription"][];
+                        total?: number;
+                    };
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    transcribeCall: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Call record database ID */
+                id: components["parameters"]["callId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted — queued for transcription */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        call_id?: number;
+                        /** @enum {string} */
+                        status?: "queued";
+                    };
+                };
+            };
+            404: components["responses"]["NotFound"];
+            /** @description Transcription queue full or not configured */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    verifyTranscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Call record database ID */
+                id: components["parameters"]["callId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusChangeResponse"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    rejectTranscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Call record database ID */
+                id: components["parameters"]["callId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusChangeResponse"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    excludeFromDataset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Call record database ID */
+                id: components["parameters"]["callId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusChangeResponse"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    searchTranscriptions: {
+        parameters: {
+            query: {
+                /** @description Search query */
+                q: string;
+                /** @description Filter by system ID(s), comma-separated. Alias "systems" also accepted. */
+                system_id?: string;
+                /** @description Filter by talkgroup ID(s), comma-separated. Alias "tgids" also accepted. */
+                tgid?: string;
+                /** @description Filter by site ID(s), comma-separated. Alias "sites" also accepted. */
+                site_id?: string;
+                /** @description Start of time range (RFC 3339) */
+                start_time?: string;
+                /** @description End of time range (RFC 3339) */
+                end_time?: string;
+                /** @description Results per page */
+                limit?: components["parameters"]["limit"];
+                /** @description Page offset (number of results to skip) */
+                offset?: components["parameters"]["offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranscriptionSearchResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+        };
+    };
+    getTranscriptionQueueStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranscriptionQueueStats"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+        };
+    };
+    listCallGroups: {
+        parameters: {
+            query?: {
+                /** @description Filter by P25 SYSID (comma-separated for multiple) */
+                sysid?: string;
+                /** @description Filter by talkgroup ID (comma-separated for multiple) */
+                tgid?: string;
+                /** @description Start of time range (RFC 3339) */
+                start_time?: components["parameters"]["startTime"];
+                /** @description End of time range (RFC 3339) */
+                end_time?: components["parameters"]["endTime"];
+                /** @description Results per page */
+                limit?: components["parameters"]["limit"];
+                /** @description Page offset (number of results to skip) */
+                offset?: components["parameters"]["offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CallGroupListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getCallGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Call group ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CallGroupDetailResponse"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getStats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getDecodeRates: {
+        parameters: {
+            query?: {
+                /** @description Start of time range (RFC 3339) */
+                start_time?: components["parameters"]["startTime"];
+                /** @description End of time range (RFC 3339) */
+                end_time?: components["parameters"]["endTime"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecodeRatesResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getTalkgroupActivity: {
+        parameters: {
+            query?: {
+                /** @description Filter by system ID(s), comma-separated. Alias "systems" also accepted. */
+                system_id?: string;
+                /** @description Filter by site ID(s), comma-separated. Alias "sites" also accepted. */
+                site_id?: string;
+                /** @description Filter by talkgroup ID(s), comma-separated. Alias "tgids" also accepted. */
+                tgid?: string;
+                /** @description Start of time range (RFC 3339). Defaults to 24 hours ago. */
+                after?: string;
+                /** @description End of time range (RFC 3339). Defaults to now. */
+                before?: string;
+                /** @description Sort field — "calls" (default), "duration", "tgid" */
+                sort?: "calls" | "duration" | "tgid";
+                /** @description Results per page */
+                limit?: components["parameters"]["limit"];
+                /** @description Page offset (number of results to skip) */
+                offset?: components["parameters"]["offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        activity?: components["schemas"]["TalkgroupActivity"][];
+                        /** @description Total number of distinct talkgroups matching the filter */
+                        total?: number;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listRecorders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecorderListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listTrunkingMessages: {
+        parameters: {
+            query?: {
+                /** @description Filter by system ID (comma-separated for multiple) */
+                system_id?: string;
+                /** @description Filter by opcode hex value (e.g., "2c") */
+                opcode?: string;
+                /** @description Filter by opcode type name (e.g., "GRP_V_CH_GRANT") */
+                opcode_type?: string;
+                /** @description Start of time range (RFC 3339) */
+                start_time?: components["parameters"]["startTime"];
+                /** @description End of time range (RFC 3339) */
+                end_time?: components["parameters"]["endTime"];
+                /** @description Results per page */
+                limit?: components["parameters"]["limit"];
+                /** @description Page offset (number of results to skip) */
+                offset?: components["parameters"]["offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrunkingMessageListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listConsoleMessages: {
+        parameters: {
+            query?: {
+                /** @description Filter by trunk-recorder instance ID */
+                instance_id?: string;
+                /** @description Filter by log severity (e.g., "info", "error") */
+                severity?: string;
+                /** @description Start of time range (RFC 3339) */
+                start_time?: components["parameters"]["startTime"];
+                /** @description End of time range (RFC 3339) */
+                end_time?: components["parameters"]["endTime"];
+                /** @description Results per page */
+                limit?: components["parameters"]["limit"];
+                /** @description Page offset (number of results to skip) */
+                offset?: components["parameters"]["offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsoleMessageListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    streamEvents: {
+        parameters: {
+            query?: {
+                /** @description Comma-separated system IDs to subscribe to. Omit for all systems. */
+                systems?: string;
+                /**
+                 * @description Comma-separated site IDs. Omit for all sites within the
+                 *     selected systems.
+                 */
+                sites?: string;
+                /**
+                 * @description Comma-separated talkgroup IDs to filter on. These are plain
+                 *     `tgid` values scoped to the selected systems. Omit for all
+                 *     talkgroups.
+                 */
+                tgids?: string;
+                /**
+                 * @description Comma-separated unit radio IDs (RIDs) to filter on. Omit for
+                 *     all units.
+                 */
+                units?: string;
+                /**
+                 * @description Comma-separated event types to subscribe to. Omit for all
+                 *     event types. Valid values: `call_start`, `call_update`,
+                 *     `call_end`, `unit_event`, `recorder_update`, `rate_update`,
+                 *     `trunking_message`, `console`.
+                 *
+                 *     Supports compound syntax with `:` to filter on event
+                 *     subtypes. For example, `unit_event:call` matches only unit
+                 *     call events, while plain `unit_event` matches all unit event
+                 *     subtypes (on, off, call, end, join, location, ackresp, data).
+                 *     Compound and plain values can be mixed:
+                 *     `unit_event:call,unit_event:end,call_start`.
+                 */
+                types?: string;
+                /** @description If true, only push events with the emergency flag set. */
+                emergency_only?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description SSE event stream opened */
+            200: {
+                headers: {
+                    "Content-Type"?: string;
+                    "Cache-Control"?: string;
+                    "X-Accel-Buffering"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["SSEEvent"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listPages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /**
+                         * @description Relative path to the HTML page
+                         * @example /events.html
+                         */
+                        path?: string;
+                        /**
+                         * @description Page title from card-title meta tag
+                         * @example Live Events
+                         */
+                        title?: string;
+                        /**
+                         * @description Page description from card-description meta tag
+                         * @example Real-time event stream
+                         */
+                        description?: string;
+                        /**
+                         * @description Sort order (lower = first)
+                         * @example 2
+                         */
+                        order?: number;
+                    }[];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    executeQuery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QueryRequest"];
+            };
+        };
+        responses: {
+            /** @description Query results */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueryResponse"];
+                };
+            };
+            /** @description Invalid query (parse error, write attempt, timeout, etc.) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    mergeSystems: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SystemMergeRequest"];
+            };
+        };
+        responses: {
+            /** @description Merge completed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemMergeResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Source or target system not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Merge would cause data conflicts that cannot be auto-resolved */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+}

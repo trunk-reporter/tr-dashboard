@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
-    "api:generate": "openapi-typescript https://tr-api.luxprimatech.com/openapi.json -o src/api/generated.ts"
+    "api:generate": "openapi-typescript ./openapi.yaml -o src/api/generated.ts"
   },
   "dependencies": {
     "@radix-ui/react-hover-card": "^1.1.15",
