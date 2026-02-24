@@ -1,482 +1,642 @@
 /**
- * API Types
+ * API Types for tr-engine v0.7.3
  *
- * This file re-exports generated types from the OpenAPI spec and defines
- * WebSocket event types that aren't part of the REST API.
- *
- * To regenerate: npm run api:generate
+ * Hand-written types matching the OpenAPI spec. Reference: /openapi.yaml
+ * Auto-generated types: npm run api:generate → src/api/generated.ts
  */
 
-import type { components } from './generated'
+// =============================================================================
+// Enums
+// =============================================================================
+
+export type SystemType = 'p25' | 'smartnet' | 'conventional'
+
+export type TalkgroupMode = 'D' | 'A' | 'E' | 'M' | 'T'
+
+export type EventType = 'on' | 'off' | 'join' | 'call' | 'end' | 'data' | 'ans_req' | 'location' | 'ackresp'
+
+export type CallState = 'monitoring' | 'recording' | 'stopped' | 'completed'
+
+export type MonState = 'unspecified' | 'active' | 'duplicate'
+
+export type RecState = 'available' | 'recording' | 'idle' | 'stopped'
+
+export type TranscriptionStatus = 'none' | 'auto' | 'reviewed' | 'verified' | 'excluded'
+
+export type TranscriptionSource = 'auto' | 'human' | 'llm'
+
+export type SSEEventType =
+  | 'call_start'
+  | 'call_update'
+  | 'call_end'
+  | 'unit_event'
+  | 'recorder_update'
+  | 'rate_update'
+  | 'trunking_message'
+  | 'console'
 
 // =============================================================================
 // Core Models
 // =============================================================================
 
-// Call unit info (unit that participated in a call)
-export interface CallUnit {
-  unit_rid: number
-  alpha_tag: string
+/** Logical radio network (P25 WACN-level or conventional system) */
+export interface System {
+  system_id: number
+  system_type: SystemType
+  name?: string
+  sysid?: string
+  wacn?: string
+  sites?: Site[]
 }
 
-// A recorded radio call
-export interface Call {
-  // Identifiers
-  call_id: string                    // Composite format: "sysid:tgid:timestamp"
-  tr_call_id?: string               // Trunk-recorder call ID
-  call_group_id?: number
-  call_num?: number
-  // Timing
-  start_time: string
-  stop_time?: string
-  duration: number
-  // Status
-  call_state?: number
-  mon_state?: number
-  encrypted: boolean
-  emergency: boolean
-  // Technical details
-  phase2_tdma?: boolean
-  tdma_slot?: number
-  conventional?: boolean
-  analog?: boolean
-  audio_type?: string
-  freq: number
-  freq_error?: number
-  // Quality metrics
-  error_count?: number
-  spike_count?: number
-  signal_db?: number
-  noise_db?: number
-  // Audio
-  audio_path?: string
-  audio_url?: string
-  audio_size?: number
-  // Talkgroup info (joined fields)
-  tg_sysid?: string
-  tgid?: number
-  tg_alpha_tag?: string
-  // Transcription
-  has_transcription?: boolean
-  transcription_text?: string
-  transcription_word_count?: number
-  // Units
-  units?: CallUnit[]
-  patched_tgids?: number[]
-  metadata_json?: Record<string, unknown>
+/** Recording site — one trunk-recorder sys_name monitoring a system */
+export interface Site {
+  site_id: number
+  system_id: number
+  short_name: string
+  instance_id?: string
+  nac?: string
+  rfss?: number
+  p25_site_id?: number
+  sys_num?: number
 }
 
-// A talkgroup on a radio system
+/** P25 system grouped by network with sites */
+export interface P25System {
+  system_id: number
+  name?: string
+  sysid?: string
+  wacn?: string
+  sites?: Site[]
+  talkgroup_count?: number
+  unit_count?: number
+  calls_24h?: number
+}
+
+/** A talkgroup on a radio system */
 export interface Talkgroup {
-  sysid: string
+  system_id: number
+  system_name?: string
+  sysid?: string
   tgid: number
   alpha_tag?: string
-  description?: string
-  group?: string
   tag?: string
-  priority: number
-  mode?: string
+  group?: string
+  description?: string
+  mode?: TalkgroupMode
+  priority?: number
   first_seen?: string
   last_seen?: string
-  // Stats
   call_count?: number
   calls_1h?: number
   calls_24h?: number
   unit_count?: number
+  relevance_score?: number
 }
 
-// A radio unit (mobile/portable radio)
+/** A radio unit (mobile or portable radio) */
 export interface Unit {
-  sysid: string
+  system_id: number
+  system_name?: string
+  sysid?: string
   unit_id: number
   alpha_tag?: string
   alpha_tag_source?: string
   first_seen?: string
   last_seen?: string
-  last_event_type?: string
+  last_event_type?: EventType
+  last_event_time?: string
   last_event_tgid?: number
   last_event_tg_tag?: string
-  last_event_time?: string
+  relevance_score?: number
 }
 
-// A unit event (registration, affiliation, call activity)
+/** A unit event (registration, affiliation, call activity) */
 export interface UnitEvent {
   id: number
-  instance_id?: number
-  system_id?: number
-  unit_sysid?: string
-  unit_rid: number
-  event_type: string
-  tg_sysid?: string
-  tgid: number
+  event_type: EventType
   time: string
+  system_id?: number
+  system_name?: string
+  unit_rid: number
+  unit_alpha_tag?: string
+  tgid?: number
+  tg_alpha_tag?: string
+  tg_description?: string
+  instance_id?: string
   metadata_json?: Record<string, unknown>
 }
 
-// Transcription word with timing
-export interface TranscriptionWord {
-  word: string
-  start: number
-  end: number
+/** A recorded radio call */
+export interface Call {
+  // Identifiers
+  call_id: number
+  call_group_id?: number
+
+  // System context
+  system_id: number
+  system_name?: string
+  sysid?: string
+
+  // Site context
+  site_id?: number
+  site_short_name?: string
+
+  // Talkgroup context
+  tgid: number
+  tg_alpha_tag?: string
+  tg_description?: string
+  tg_tag?: string
+  tg_group?: string
+
+  // Timing
+  start_time: string
+  stop_time?: string | null
+  duration?: number
+
+  // Audio
+  audio_url?: string | null
+  audio_type?: string
+  audio_size?: number
+
+  // Signal quality
+  freq?: number
+  freq_error?: number
+  signal_db?: number | null
+  noise_db?: number | null
+  error_count?: number
+  spike_count?: number
+
+  // Status
+  call_state?: CallState
+  mon_state?: MonState
+  emergency?: boolean
+  encrypted?: boolean
+  analog?: boolean
+  conventional?: boolean
+  phase2_tdma?: boolean
+  tdma_slot?: number
+
+  // Patches
+  patched_tgids?: number[]
+
+  // Inline transmission/frequency data (JSONB)
+  src_list?: CallTransmission[]
+  freq_list?: CallFrequency[]
+  unit_ids?: number[]
+
+  // Units on this call
+  units?: CallUnit[]
+
+  // Transcription (denormalized)
+  has_transcription?: boolean
+  transcription_status?: TranscriptionStatus
+  transcription_text?: string | null
+  transcription_word_count?: number | null
+
+  // Extensible metadata
+  metadata_json?: Record<string, unknown>
 }
 
-// Call transcription
+/** A unit that transmitted during a call */
+export interface CallUnit {
+  system_id: number
+  unit_id: number
+  alpha_tag?: string
+}
+
+/** A unit key-up from trunk-recorder's srcList */
+export interface CallTransmission {
+  src: number
+  tag?: string
+  time: number
+  pos: number
+  duration: number
+  emergency: number
+  signal_system?: string
+}
+
+/** A frequency segment from trunk-recorder's freqList */
+export interface CallFrequency {
+  freq: number
+  time: number
+  pos: number
+  len: number
+  error_count?: number
+  spike_count?: number
+}
+
+/** A group of duplicate call recordings from multiple recorders */
+export interface CallGroup {
+  id: number
+  system_id?: number
+  system_name?: string
+  sysid?: string
+  site_id?: number
+  site_short_name?: string
+  tgid?: number
+  tg_alpha_tag?: string
+  tg_description?: string
+  tg_tag?: string
+  tg_group?: string
+  start_time?: string
+  stop_time?: string
+  duration?: number
+  call_count?: number
+  primary_call_id?: number
+  has_transcription?: boolean
+  transcription_status?: TranscriptionStatus
+  transcription_text?: string | null
+}
+
+/** A transcription of a call's audio content */
 export interface Transcription {
-  id?: number
-  call_id?: number
-  text?: string
-  words?: TranscriptionWord[]
-  word_count?: number
-  confidence?: number
+  id: number
+  call_id: number
+  text: string
+  source: TranscriptionSource
+  is_primary?: boolean
+  confidence?: number | null
   language?: string
   model?: string
   provider?: string
+  word_count?: number
   duration_ms?: number
-  call_duration?: number
   created_at?: string
+  words?: {
+    words?: AttributedWord[]
+    segments?: TranscriptionSegment[]
+  }
 }
 
-// Use generated types for these (they're simple enough)
-export type Site = components['schemas']['rest.Site']
-export type RecorderInfo = components['schemas']['ingest.RecorderInfo']
-export type TranscriptionQueueStats = components['schemas']['database.TranscriptionQueueStats']
+/** A word with timing and unit attribution */
+export interface AttributedWord {
+  word: string
+  start: number
+  end: number
+  src: number
+  src_tag?: string
+}
+
+/** Consecutive words from the same radio unit */
+export interface TranscriptionSegment {
+  src: number
+  src_tag?: string
+  start: number
+  end: number
+  text: string
+}
+
+/** Trunk-recorder recorder (SDR channel) */
+export interface Recorder {
+  id: string
+  src_num?: number
+  rec_num?: number
+  type?: string
+  rec_state?: RecState
+  freq?: number
+  duration?: number
+  count?: number
+  squelched?: boolean
+  tgid?: number | null
+  tg_alpha_tag?: string | null
+  unit_id?: number | null
+  unit_alpha_tag?: string | null
+}
+
+/** Live talkgroup affiliation entry */
+export interface Affiliation {
+  system_id: number
+  system_name?: string
+  sysid?: string
+  unit_id: number
+  unit_alpha_tag?: string
+  tgid: number
+  tg_alpha_tag?: string
+  tg_description?: string
+  tg_tag?: string
+  tg_group?: string
+  previous_tgid?: number | null
+  affiliated_since: string
+  last_event_time: string
+  status: 'affiliated' | 'off'
+}
+
+/** Talkgroup directory entry (from CSV import) */
+export interface TalkgroupDirectoryEntry {
+  system_id?: number
+  system_name?: string
+  tgid?: number
+  alpha_tag?: string
+  mode?: string
+  description?: string
+  tag?: string
+  category?: string
+  priority?: number | null
+}
 
 // =============================================================================
-// Response Types (from OpenAPI spec)
+// Response Wrappers
 // =============================================================================
 
-// Response types - use generated types but override array types for better DX
-export interface CallListResponse {
-  calls: Call[]
-  count: number
-  limit: number
-  offset: number
+export interface SystemListResponse {
+  systems: System[]
+  total: number
+}
+
+export interface P25SystemListResponse {
+  systems: P25System[]
+  total: number
 }
 
 export interface TalkgroupListResponse {
   talkgroups: Talkgroup[]
-  count?: number
+  total: number
   limit: number
   offset: number
 }
 
 export interface UnitListResponse {
   units: Unit[]
-  count: number
+  total: number
   limit: number
   offset: number
-  window?: number
 }
 
 export interface UnitEventListResponse {
   events: UnitEvent[]
-  count: number
+  total: number
   limit: number
   offset: number
 }
 
-export interface SiteListResponse {
-  sites: Site[]
-  count: number
-}
-
-export type RecorderListResponse = components['schemas']['rest.RecorderListResponse']
-export type ActivityResponse = components['schemas']['rest.ActivityResponse']
-export type RatesResponse = components['schemas']['rest.RatesResponse']
-export type CallGroupListResponse = components['schemas']['rest.CallGroupListResponse']
-export type CallGroupDetailResponse = components['schemas']['rest.CallGroupDetailResponse']
-
-export interface ActiveUnitListResponse {
-  units: Unit[]
-  count: number
+export interface CallListResponse {
+  calls: Call[]
+  total: number
   limit: number
   offset: number
-  window?: number
 }
 
-export type ErrorResponse = components['schemas']['rest.ErrorResponse']
-
-// =============================================================================
-// Legacy Aliases (for backwards compatibility)
-// =============================================================================
-
-/** @deprecated Use Site instead */
-export type System = Site
-/** @deprecated Use SiteListResponse instead */
-export type SystemListResponse = SiteListResponse
-
-// =============================================================================
-// Frontend-specific Types (not in OpenAPI spec)
-// =============================================================================
-
-// P25 System grouping (frontend aggregation)
-export interface P25System {
-  sysid: string
-  wacn: string
-  sites: P25Site[]
+export interface ActiveCallListResponse {
+  calls: Call[]
+  total: number
 }
 
-export interface P25Site {
-  short_name: string
-  nac: string
-  rfss: number
-  site_id: number
-  system_id: number
+export interface CallGroupListResponse {
+  call_groups: CallGroup[]
+  total: number
+  limit: number
+  offset: number
 }
 
-export interface P25SystemListResponse {
-  p25_systems: P25System[]
-  count: number
+export interface CallGroupDetailResponse {
+  call_group: CallGroup
+  calls: Call[]
 }
 
-// Call frequency info
-export interface CallFrequency {
-  id: number
-  call_id: number
-  freq: number
-  time: string
-  position?: number | null
-  duration?: number | null
-  error_count?: number
-  spike_count?: number
-}
-
-export interface FrequencyListResponse {
+export interface CallFrequencyListResponse {
   frequencies: CallFrequency[]
-  count: number
+  total: number
 }
 
-// Transmission info
-export interface Transmission {
+export interface CallTransmissionListResponse {
+  transmissions: CallTransmission[]
+  total: number
+}
+
+export interface AffiliationListResponse {
+  affiliations: Affiliation[]
+  total: number
+  limit: number
+  offset: number
+  summary: {
+    talkgroup_counts: Record<string, number>
+  }
+}
+
+export interface TalkgroupDirectoryListResponse {
+  talkgroups: TalkgroupDirectoryEntry[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface TranscriptionSearchHit {
   id: number
   call_id: number
-  unit_sysid?: string
-  unit_rid: number
-  start_time: string
-  stop_time?: string
-  duration?: number | null
-  position?: number | null
-  emergency: boolean
-  error_count?: number
-  spike_count?: number
-}
-
-export interface TransmissionListResponse {
-  transmissions: Transmission[]
-  count: number
-}
-
-// Recent calls extended format
-export interface RecentCallInfo {
-  call_id: string              // Deterministic composite ID: sysid:tgid:start_unix
-  tr_call_id?: string          // Trunk-recorder call ID
-  call_group_id?: number
-  call_num: number
-  start_time: string
-  stop_time?: string
-  duration: number
-  system: string
-  sysid?: string
-  tgid: number
+  text: string
+  source?: string
+  is_primary?: boolean
+  word_count?: number
+  duration_ms?: number
+  created_at?: string
+  rank?: number
+  system_id?: number
+  system_name?: string
+  tgid?: number
   tg_alpha_tag?: string
-  freq: number
-  encrypted: boolean
-  emergency: boolean
-  audio_path?: string
-  audio_url?: string
-  has_audio: boolean
-  units: Array<{
-    unit_id: number
-    unit_tag: string
-  }>
-}
-
-export interface RecentCallsResponse {
-  calls: RecentCallInfo[]
-  count: number
-}
-
-// Call groups
-export interface CallGroup {
-  id: number
-  system_id: number
-  tg_sysid?: string
-  tgid: number
-  start_time: string
-  end_time?: string
-  primary_call_id?: number
-  call_count: number
-  encrypted: boolean
-  emergency: boolean
-}
-
-// Stats
-export interface StatsResponse {
-  total_systems: number
-  total_talkgroups: number
-  total_units: number
-  total_calls: number
-  active_calls: number
-  calls_last_hour: number
-  calls_last_24h: number
-  audio_files: number
-  audio_bytes: number
-}
-
-export interface EncryptionStatsResponse {
-  stats: Record<string, { encrypted: number; clear: number }>
-  hours: number
-}
-
-// Transcription search
-export interface TranscriptionSearchResult {
-  transcription: Transcription
-  call: Call
+  call_start_time?: string
+  call_duration?: number | null
 }
 
 export interface TranscriptionSearchResponse {
-  results: TranscriptionSearchResult[]
-  count: number
+  results: TranscriptionSearchHit[]
+  total: number
   limit: number
   offset: number
 }
 
-// Health check
+export interface TranscriptionQueueStats {
+  status: string
+  pending?: number
+  completed?: number
+  failed?: number
+}
+
+export interface RecorderListResponse {
+  recorders: Recorder[]
+  total: number
+}
+
+// =============================================================================
+// Stats Types
+// =============================================================================
+
+export interface StatsResponse {
+  systems?: number
+  talkgroups?: number
+  units?: number
+  total_calls?: number
+  calls_24h?: number
+  calls_1h?: number
+  total_duration_hours?: number
+  system_activity?: SystemActivity[]
+}
+
+export interface SystemActivity {
+  system_id: number
+  system_name?: string
+  sysid?: string
+  calls_1h?: number
+  calls_24h?: number
+  active_talkgroups?: number
+  active_units?: number
+}
+
+export interface DecodeRate {
+  time?: string
+  system_id: number
+  system_name?: string
+  sysid?: string
+  decode_rate: number
+  total_messages?: number
+}
+
+export interface DecodeRatesResponse {
+  rates: DecodeRate[]
+  total: number
+}
+
+export interface TalkgroupActivity {
+  system_id?: number
+  system_name?: string
+  tgid?: number
+  tg_alpha_tag?: string
+  tg_description?: string
+  tg_tag?: string
+  tg_group?: string
+  call_count?: number
+  total_duration?: number
+  emergency_count?: number
+  first_call?: string
+  last_call?: string
+}
+
+export interface TalkgroupActivityResponse {
+  activity: TalkgroupActivity[]
+  total: number
+}
+
+export interface TalkgroupEncryptionStat {
+  system_id?: number
+  system_name?: string
+  sysid?: string
+  tgid?: number
+  tg_alpha_tag?: string
+  tg_description?: string
+  tg_tag?: string
+  tg_group?: string
+  encrypted_count?: number
+  clear_count?: number
+  total_count?: number
+  encrypted_pct?: number
+}
+
+export interface EncryptionStatsResponse {
+  stats: TalkgroupEncryptionStat[]
+  total: number
+  hours?: number
+}
+
+// =============================================================================
+// Health
+// =============================================================================
+
 export interface HealthResponse {
   status: string
-  version: string
+  version?: string
+  uptime_seconds?: number
+  checks?: {
+    database?: string
+    mqtt?: string
+    transcription?: string
+  }
+  trunk_recorders?: Array<{
+    instance_id: string
+    status: string
+    last_seen?: string
+  }>
 }
 
 // =============================================================================
-// WebSocket Types (not in REST API spec)
+// Admin
 // =============================================================================
 
-export type WebSocketEventType =
-  | 'subscribed'
-  | 'call_start'
-  | 'call_end'
-  | 'call_active'
-  | 'audio_available'
-  | 'unit_event'
-  | 'rate_update'
-  | 'recorder_update'
-
-export interface WebSocketMessage<T = unknown> {
-  event: WebSocketEventType
-  timestamp: number
-  data: T
+export interface SystemMergeRequest {
+  source_id: number
+  target_id: number
+  update_target_metadata?: boolean
 }
 
-export interface SubscriptionMessage {
-  action: 'subscribe' | 'unsubscribe'
-  channels: string[]
-  systems?: string[]
-  talkgroups?: number[]
-  units?: number[]
+export interface SystemMergeResponse {
+  target_id: number
+  source_id: number
+  calls_moved: number
+  talkgroups_moved: number
+  talkgroups_merged: number
+  units_moved: number
+  units_merged: number
+  events_moved: number
 }
 
-export interface SubscribedData {
-  action: string
-  channels: string[]
-  systems: string[]
-  talkgroups: number[]
-  units: number[]
+export interface QueryRequest {
+  sql: string
+  params?: unknown[]
+  limit?: number
 }
 
-export interface CallStartData {
-  system: string
-  sysid: string
-  call_id: number
-  tr_call_id?: string
-  talkgroup: number
-  talkgroup_alpha_tag?: string
-  unit: number
-  unit_alpha_tag?: string
-  freq: number
-  encrypted: boolean
-  emergency: boolean
+export interface QueryResponse {
+  columns: string[]
+  rows: unknown[][]
+  row_count: number
 }
 
-export interface CallEndData {
-  system: string
-  sysid: string
-  call_id: number
-  tr_call_id?: string
-  talkgroup: number
-  talkgroup_alpha_tag?: string
-  unit: number
-  unit_alpha_tag?: string
-  duration: number
-  encrypted: boolean
-  emergency: boolean
-  error_count?: number
-  spike_count?: number
+// =============================================================================
+// Error Types
+// =============================================================================
+
+export interface ErrorResponse {
+  error: string
+  detail?: string
 }
 
-export interface CallActiveData {
-  system: string
-  sysid: string
-  system_id: number
-  talkgroup: number
-  tg_alpha_tag?: string
-  unit: number
-  freq: number
-  elapsed: number
-  encrypted: boolean
-  emergency: boolean
+export interface AmbiguousError {
+  error: string
+  matches: Array<{
+    system_id: number
+    system_name?: string
+    sysid?: string
+  }>
 }
 
-export interface AudioAvailableData {
-  system: string
-  sysid: string
-  call_id: string
-  tr_call_id?: string
-  talkgroup: number
-  talkgroup_alpha_tag?: string
-  audio_size: number
-  duration: number
-  transmissions: number
-  frequencies: number
+// =============================================================================
+// Patch Types (for PATCH requests)
+// =============================================================================
+
+export interface SystemPatch {
+  sysid?: string
+  wacn?: string
+  name?: string
 }
 
-export interface UnitEventData {
-  system: string
-  sysid: string
-  unit: number
-  unit_tag?: string
-  event_type: string
-  talkgroup: number
+export interface SitePatch {
+  short_name?: string
+  instance_id?: string
+  nac?: string
+  rfss?: number
+  p25_site_id?: number
 }
 
-export interface RateUpdateData {
-  system: string
-  sysid: string
-  system_id: number
-  decode_rate: number
-  max_rate: number
-  control_channel: number
+export interface TalkgroupPatch {
+  alpha_tag?: string
+  alpha_tag_source?: string
+  description?: string
+  group?: string
+  tag?: string
+  priority?: number
 }
 
-export interface RecorderUpdateData {
-  system: string
-  rec_num: number
-  state: number
-  state_name: string
-  freq: number
-  talkgroup: number
-  tg_alpha_tag?: string
-  unit: number
-  unit_alpha_tag?: string
+export interface UnitPatch {
+  alpha_tag?: string
+  alpha_tag_source?: string
 }
-
-// Event type enum (for type narrowing)
-export type EventType =
-  | 'on'
-  | 'off'
-  | 'join'
-  | 'call'
-  | 'ackresp'
-  | 'end'
-  | 'leave'
-  | 'data'
-  | 'status_update'
