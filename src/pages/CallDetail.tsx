@@ -4,8 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useAudioStore, selectIsPlaying } from '@/stores/useAudioStore'
-import { getCall, getCallTransmissions, getCallFrequencies, getCallTranscription, getTalkgroup, getUnit } from '@/api/client'
-import type { Call, Transmission, CallFrequency, Talkgroup, Unit, Transcription } from '@/api/types'
+import { getCall, getCallTransmissions, getCallFrequencies, getCallTranscription } from '@/api/client'
+import type { Call, CallTransmission, CallFrequency, Transcription } from '@/api/types'
 import {
   formatDuration,
   formatDateTime,
@@ -16,65 +16,12 @@ import {
   cn,
 } from '@/lib/utils'
 
-// Find which unit spoke a word based on transmission time ranges
-function findSpeaker(
-  wordStart: number,
-  wordEnd: number,
-  transmissions: Transmission[]
-): number | null {
-  if (transmissions.length === 0) return null
-
-  // Build transmission ranges with start/end times
-  const ranges = transmissions
-    .map(tx => {
-      const start = (tx.position != null && tx.position >= 0) ? tx.position : 0
-      const duration = (tx.duration != null && tx.duration > 0) ? tx.duration : 0
-      return { start, end: start + duration, unit_rid: tx.unit_rid }
-    })
-    .sort((a, b) => a.start - b.start)
-
-  // Find the transmission with the most overlap with this word
-  let bestMatch: { unit_rid: number; overlap: number } | null = null
-
-  for (const range of ranges) {
-    const overlapStart = Math.max(wordStart, range.start)
-    const overlapEnd = Math.min(wordEnd, range.end)
-    const overlap = Math.max(0, overlapEnd - overlapStart)
-
-    if (overlap > 0 && (bestMatch === null || overlap > bestMatch.overlap)) {
-      bestMatch = { unit_rid: range.unit_rid, overlap }
-    }
-  }
-
-  if (bestMatch) {
-    return bestMatch.unit_rid
-  }
-
-  // If no overlap, find the transmission closest to the word's midpoint
-  const wordMid = (wordStart + wordEnd) / 2
-  let closest = ranges[0]
-  let closestDist = Math.abs(wordMid - (closest.start + closest.end) / 2)
-
-  for (const range of ranges) {
-    const rangeMid = (range.start + range.end) / 2
-    const dist = Math.abs(wordMid - rangeMid)
-    if (dist < closestDist) {
-      closest = range
-      closestDist = dist
-    }
-  }
-
-  return closest?.unit_rid ?? null
-}
-
 export default function CallDetail() {
   const { id } = useParams<{ id: string }>()
   const [call, setCall] = useState<Call | null>(null)
-  const [talkgroup, setTalkgroup] = useState<Talkgroup | null>(null)
-  const [transmissions, setTransmissions] = useState<Transmission[]>([])
+  const [transmissions, setTransmissions] = useState<CallTransmission[]>([])
   const [frequencies, setFrequencies] = useState<CallFrequency[]>([])
   const [transcription, setTranscription] = useState<Transcription | null>(null)
-  const [unitMap, setUnitMap] = useState<Map<number, Unit>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -82,60 +29,48 @@ export default function CallDetail() {
   const currentCall = useAudioStore((s) => s.currentCall)
   const isPlaying = useAudioStore(selectIsPlaying)
 
+  const callId = id ? parseInt(id, 10) : NaN
+
   useEffect(() => {
-    if (!id) return
+    if (isNaN(callId)) return
 
     setLoading(true)
     setError(null)
 
-    Promise.all([
-      getCall(id),
-      getCallTransmissions(id).catch(() => []),
-      getCallFrequencies(id).catch(() => []),
-    ])
-      .then(async ([callRes, txRes, freqRes]) => {
+    getCall(callId)
+      .then(async (callRes) => {
         setCall(callRes)
-        // API returns raw arrays, not wrapped objects
-        const txArray: Transmission[] = Array.isArray(txRes) ? txRes : (txRes.transmissions || [])
-        const freqArray: CallFrequency[] = Array.isArray(freqRes) ? freqRes : (freqRes.frequencies || [])
-        setTransmissions(txArray)
-        setFrequencies(freqArray)
 
-        // Fetch talkgroup info if we have tg_sysid and tgid but no tg_alpha_tag
-        if (callRes.tg_sysid && callRes.tgid && !callRes.tg_alpha_tag) {
+        // Use inline src_list if present, otherwise fetch
+        if (callRes.src_list && callRes.src_list.length > 0) {
+          setTransmissions(callRes.src_list)
+        } else {
           try {
-            const tg = await getTalkgroup(`${callRes.tg_sysid}:${callRes.tgid}`)
-            setTalkgroup(tg)
-          } catch (e) {
-            console.error('Failed to fetch talkgroup:', e)
+            const txRes = await getCallTransmissions(callId)
+            setTransmissions(txRes.transmissions || [])
+          } catch {
+            // No transmissions available
           }
         }
 
-        // Fetch unit info for transmissions - use composite keys (sysid:unit_rid)
-        const uniqueUnitKeys = [...new Set(
-          txArray
-            .filter(tx => tx.unit_sysid && tx.unit_rid)
-            .map(tx => `${tx.unit_sysid}:${tx.unit_rid}`)
-        )]
-        if (uniqueUnitKeys.length > 0) {
-          const unitResults = await Promise.all(
-            uniqueUnitKeys.map(key => getUnit(key).catch(() => null))
-          )
-          const newUnitMap = new Map<number, Unit>()
-          unitResults.forEach(unit => {
-            if (unit) {
-              newUnitMap.set(unit.unit_id, unit)
-            }
-          })
-          setUnitMap(newUnitMap)
+        // Use inline freq_list if present, otherwise fetch
+        if (callRes.freq_list && callRes.freq_list.length > 0) {
+          setFrequencies(callRes.freq_list)
+        } else {
+          try {
+            const freqRes = await getCallFrequencies(callId)
+            setFrequencies(freqRes.frequencies || [])
+          } catch {
+            // No frequencies available
+          }
         }
 
-        // Fetch transcription if available
+        // Fetch transcription
         try {
-          const tx = await getCallTranscription(id)
+          const tx = await getCallTranscription(callId)
           setTranscription(tx)
         } catch {
-          // Transcription not available - that's fine
+          // Transcription not available
         }
       })
       .catch((err) => {
@@ -143,29 +78,23 @@ export default function CallDetail() {
         setError('Failed to load call details')
       })
       .finally(() => setLoading(false))
-  }, [id])
+  }, [callId])
 
-  // Get talkgroup display info from either call or fetched talkgroup
-  const tgid = call?.tgid || talkgroup?.tgid || 0
-  const tgAlphaTag = call?.tg_alpha_tag || talkgroup?.alpha_tag
+  const tgid = call?.tgid ?? 0
+  const tgAlphaTag = call?.tg_alpha_tag
 
-  // Compare using the route param id (composite format) since that's what we use for callId
-  const isCurrentlyPlaying = currentCall?.callId === id
+  const isCurrentlyPlaying = currentCall?.callId === callId
 
-  // Get unique unit RIDs in order of appearance for color-coding
+  // Get unique unit src IDs in order of appearance for color-coding
   const uniqueUnits = useMemo(() => {
     if (transmissions.length === 0) return []
     const seen = new Set<number>()
     const units: number[] = []
-    const sorted = [...transmissions].sort((a, b) => {
-      const posA = (a.position != null && a.position >= 0) ? a.position : 0
-      const posB = (b.position != null && b.position >= 0) ? b.position : 0
-      return posA - posB
-    })
+    const sorted = [...transmissions].sort((a, b) => a.pos - b.pos)
     for (const tx of sorted) {
-      if (!seen.has(tx.unit_rid)) {
-        seen.add(tx.unit_rid)
-        units.push(tx.unit_rid)
+      if (!seen.has(tx.src)) {
+        seen.add(tx.src)
+        units.push(tx.src)
       }
     }
     return units
@@ -173,48 +102,9 @@ export default function CallDetail() {
 
   const hasUnits = uniqueUnits.length > 0
 
-  // Find which transmissions have transcribed words
-  const transmissionsWithWords = useMemo(() => {
-    if (!transcription?.words || transmissions.length === 0) return new Set<number>()
-
-    const withWords = new Set<number>()
-    for (const word of transcription.words) {
-      // Find which transmission this word belongs to
-      for (const tx of transmissions) {
-        const start = (tx.position != null && tx.position >= 0) ? tx.position : 0
-        const duration = (tx.duration != null && tx.duration > 0) ? tx.duration : 0
-        const end = start + duration
-
-        // Check for overlap
-        if (word.start < end && word.end > start) {
-          withWords.add(tx.id)
-          break
-        }
-      }
-    }
-    return withWords
-  }, [transcription?.words, transmissions])
-
   const handlePlay = () => {
-    if (!call || !call.audio_path) return
-    // Use route param id as call_id (composite format) for audio URL
-    const callIdStr = id || call.call_id
-    loadCall({
-      call_id: callIdStr,
-      system: '',
-      tgid: tgid,
-      tg_alpha_tag: tgAlphaTag,
-      duration: call.duration,
-      start_time: call.start_time,
-      stop_time: call.stop_time || '',
-      call_num: call.call_num ?? 0,
-      freq: call.freq,
-      encrypted: call.encrypted,
-      emergency: call.emergency,
-      has_audio: true,
-      audio_path: call.audio_path,
-      units: [],
-    })
+    if (!call || !call.audio_url) return
+    loadCall(call)
   }
 
   if (loading) {
@@ -251,21 +141,21 @@ export default function CallDetail() {
             </Link>
           </div>
           <h1 className="text-2xl font-bold">
-            {call.tg_sysid ? (
-              <Link to={`/talkgroups/${call.tg_sysid}:${tgid}`} className="hover:underline">
-                {getTalkgroupDisplayName(tgid, tgAlphaTag)}
-              </Link>
-            ) : (
-              getTalkgroupDisplayName(tgid, tgAlphaTag)
-            )}
+            <Link to={`/talkgroups/${call.system_id}:${tgid}`} className="hover:underline">
+              {getTalkgroupDisplayName(tgid, tgAlphaTag)}
+            </Link>
           </h1>
-          <p className="text-muted-foreground">{formatDateTime(call.start_time)}</p>
+          <p className="text-muted-foreground">
+            {formatDateTime(call.start_time)}
+            {call.system_name && ` • ${call.system_name}`}
+            {call.site_short_name && ` (${call.site_short_name})`}
+          </p>
         </div>
 
         <Button
           size="lg"
           onClick={handlePlay}
-          disabled={!call.audio_path}
+          disabled={!call.audio_url}
         >
           {isCurrentlyPlaying && isPlaying ? (
             <>
@@ -292,6 +182,7 @@ export default function CallDetail() {
         {call.encrypted && <Badge variant="secondary">ENCRYPTED</Badge>}
         {call.analog && <Badge variant="outline">Analog</Badge>}
         {call.phase2_tdma && <Badge variant="outline">Phase 2 TDMA</Badge>}
+        {call.call_state && <Badge variant="outline">{call.call_state}</Badge>}
       </div>
 
       {/* Call info */}
@@ -304,11 +195,11 @@ export default function CallDetail() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-muted-foreground">Duration</p>
-                <p className="font-mono text-lg">{formatDuration(call.duration)}</p>
+                <p className="font-mono text-lg">{formatDuration(call.duration ?? 0)}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Frequency</p>
-                <p className="font-mono">{formatFrequency(call.freq)}</p>
+                <p className="font-mono">{call.freq ? formatFrequency(call.freq) : '—'}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Start Time</p>
@@ -320,20 +211,30 @@ export default function CallDetail() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Audio Type</p>
-                <p className="capitalize">{call.audio_type}</p>
+                <p className="capitalize">{call.audio_type || '—'}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Talkgroup ID</p>
                 <p className="font-mono">{tgid || '—'}</p>
               </div>
+              {call.tg_group && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Group</p>
+                  <p>{call.tg_group}</p>
+                </div>
+              )}
+              {call.tg_tag && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Tag</p>
+                  <p>{call.tg_tag}</p>
+                </div>
+              )}
             </div>
 
-            {call.tr_call_id && (
-              <div>
-                <p className="text-sm text-muted-foreground">Call ID</p>
-                <p className="font-mono text-xs">{call.tr_call_id}</p>
-              </div>
-            )}
+            <div>
+              <p className="text-sm text-muted-foreground">Call ID</p>
+              <p className="font-mono text-xs">{call.call_id}</p>
+            </div>
           </CardContent>
         </Card>
 
@@ -391,87 +292,27 @@ export default function CallDetail() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {/* Full text with color-coding */}
+              {/* Full text with color-coding via attributed words */}
               <div className="rounded-lg bg-muted/50 p-4">
-                {hasUnits && transcription.words && transcription.words.length > 0 ? (
-                  <div className="text-lg leading-relaxed">
-                    {(() => {
-                      const elements: React.ReactNode[] = []
-                      let lastWordEnd = 0
-
-                      // Sort transmissions by position for inline display
-                      const sortedTx = [...transmissions].sort((a, b) => {
-                        const posA = (a.position != null && a.position >= 0) ? a.position : 0
-                        const posB = (b.position != null && b.position >= 0) ? b.position : 0
-                        return posA - posB
-                      })
-
-                      // Track which untranscribed transmissions we've shown
-                      const shownUntranscribed = new Set<number>()
-
-                      transcription.words.forEach((word, i) => {
-                        // Before this word, show any untranscribed transmissions that occurred
-                        for (const tx of sortedTx) {
-                          if (shownUntranscribed.has(tx.id)) continue
-                          if (transmissionsWithWords.has(tx.id)) continue
-
-                          const txStart = (tx.position != null && tx.position >= 0) ? tx.position : 0
-                          const txEnd = txStart + ((tx.duration != null && tx.duration > 0) ? tx.duration : 0)
-
-                          // Show if this transmission ended before or during this word
-                          if (txEnd <= word.end && txStart >= lastWordEnd) {
-                            const color = getUnitColorByRid(tx.unit_rid, uniqueUnits)
-                            const unitName = unitMap.get(tx.unit_rid)?.alpha_tag || `Unit ${tx.unit_rid}`
-                            elements.push(
-                              <span
-                                key={`untx-${tx.id}`}
-                                className={cn(
-                                  "inline-flex items-center justify-center w-5 h-5 mx-0.5 rounded-full text-xs cursor-help",
-                                  color?.bg,
-                                  color?.text
-                                )}
-                                title={`${unitName} - no transcription (${txStart.toFixed(1)}s - ${txEnd.toFixed(1)}s)`}
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                                  <line x1="4" y1="4" x2="20" y2="20" />
-                                </svg>
-                              </span>
-                            )
-                            shownUntranscribed.add(tx.id)
-                          }
-                        }
-
-                        // Add the word
-                        const speaker = findSpeaker(word.start, word.end, transmissions)
-                        const color = speaker !== null ? getUnitColorByRid(speaker, uniqueUnits) : null
-                        elements.push(
-                          <span key={`word-${i}`}>
-                            {i > 0 && ' '}
-                            <span className={color?.text}>{word.word}</span>
-                          </span>
-                        )
-                        lastWordEnd = word.end
-                      })
-
-                      return elements
-                    })()}
-                  </div>
+                {hasUnits && transcription.words?.words && transcription.words.words.length > 0 ? (
+                  <TranscriptionWithSpeakers
+                    words={transcription.words.words}
+                    uniqueUnits={uniqueUnits}
+                  />
                 ) : (
                   <p className="text-lg leading-relaxed">{transcription.text}</p>
                 )}
               </div>
 
-              {/* Word-level timestamps */}
-              {transcription.words && transcription.words.length > 0 && (
+              {/* Word timeline */}
+              {transcription.words?.words && transcription.words.words.length > 0 && (
                 <div>
                   <h4 className="mb-2 text-sm font-medium text-muted-foreground">
                     Word Timeline
                   </h4>
                   <div className="flex flex-wrap gap-1">
-                    {transcription.words.map((word, i) => {
-                      const speaker = hasUnits ? findSpeaker(word.start, word.end, transmissions) : null
-                      const color = speaker !== null ? getUnitColorByRid(speaker, uniqueUnits) : null
+                    {transcription.words.words.map((word, i) => {
+                      const color = hasUnits && word.src ? getUnitColorByRid(word.src, uniqueUnits) : null
                       return (
                         <button
                           key={i}
@@ -509,25 +350,26 @@ export default function CallDetail() {
       {/* Transmissions */}
       <Card>
         <CardHeader>
-          <CardTitle>Transmissions ({transmissions?.length ?? 0})</CardTitle>
+          <CardTitle>Transmissions ({transmissions.length})</CardTitle>
         </CardHeader>
         <CardContent>
-          {!transmissions || transmissions.length === 0 ? (
+          {transmissions.length === 0 ? (
             <p className="text-muted-foreground">No transmission data available</p>
           ) : (
             <div className="space-y-2">
               {transmissions.map((tx, i) => {
-                const unitColor = hasUnits ? getUnitColorByRid(tx.unit_rid, uniqueUnits) : null
-                const txStart = (tx.position != null && tx.position >= 0) ? tx.position : 0
+                const unitColor = hasUnits ? getUnitColorByRid(tx.src, uniqueUnits) : null
+                const unitName = tx.tag || getUnitDisplayName(tx.src)
+
                 // Find frequency active during this transmission
                 const freq = frequencies.find(f => {
-                  const fStart = (f.position != null && f.position >= 0) ? f.position : 0
-                  const fEnd = fStart + ((f.duration != null && f.duration > 0) ? f.duration : 9999)
-                  return txStart >= fStart && txStart < fEnd
+                  const fEnd = f.pos + f.len
+                  return tx.pos >= f.pos && tx.pos < fEnd
                 })
+
                 return (
                   <div
-                    key={tx.id || i}
+                    key={i}
                     className={cn(
                       "flex items-center justify-between rounded-lg border bg-card p-3",
                       unitColor?.border
@@ -542,31 +384,21 @@ export default function CallDetail() {
                       </div>
                       <div>
                         <p className={cn("font-medium", unitColor?.text)}>
-                          {tx.unit_sysid ? (
-                            <Link to={`/units/${tx.unit_sysid}:${tx.unit_rid}`} className="hover:underline">
-                              {unitMap.get(tx.unit_rid)?.alpha_tag
-                                ? unitMap.get(tx.unit_rid)!.alpha_tag
-                                : getUnitDisplayName(tx.unit_rid)}
-                            </Link>
-                          ) : (
-                            unitMap.get(tx.unit_rid)?.alpha_tag
-                              ? unitMap.get(tx.unit_rid)!.alpha_tag
-                              : getUnitDisplayName(tx.unit_rid)
-                          )}
+                          <Link
+                            to={`/units/${call.system_id}:${tx.src}`}
+                            className="hover:underline"
+                          >
+                            {unitName}
+                          </Link>
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          {freq?.freq ? formatFrequency(freq.freq) : ''}{freq?.freq ? ' • ' : ''}{txStart.toFixed(1)}s{tx.duration != null && tx.duration > 0 ? ` • ${formatDuration(tx.duration)}` : ''}
+                          {freq?.freq ? formatFrequency(freq.freq) : ''}{freq?.freq ? ' • ' : ''}{tx.pos.toFixed(1)}s{tx.duration > 0 ? ` • ${formatDuration(tx.duration)}` : ''}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {tx.emergency && (
+                      {tx.emergency === 1 && (
                         <Badge variant="destructive">EMERG</Badge>
-                      )}
-                      {transcription && !transmissionsWithWords.has(tx.id) && (
-                        <Badge variant="outline" className="text-xs text-muted-foreground">
-                          No transcript
-                        </Badge>
                       )}
                     </div>
                   </div>
@@ -576,7 +408,42 @@ export default function CallDetail() {
           )}
         </CardContent>
       </Card>
+    </div>
+  )
+}
 
+// Transcription display with speaker attribution from AttributedWord
+function TranscriptionWithSpeakers({
+  words,
+  uniqueUnits,
+}: {
+  words: { word: string; start: number; end: number; src: number; src_tag?: string }[]
+  uniqueUnits: number[]
+}) {
+  // Group consecutive words by speaker
+  const segments: { src: number | null; srcTag?: string; words: string[] }[] = []
+  let current: { src: number | null; srcTag?: string; words: string[] } | null = null
+
+  for (const w of words) {
+    if (!current || current.src !== (w.src ?? null)) {
+      current = { src: w.src ?? null, srcTag: w.src_tag, words: [] }
+      segments.push(current)
+    }
+    current.words.push(w.word)
+  }
+
+  return (
+    <div className="text-lg leading-relaxed space-y-1">
+      {segments.map((seg, i) => {
+        const color = seg.src !== null ? getUnitColorByRid(seg.src, uniqueUnits) : null
+        const name = seg.srcTag || (seg.src !== null ? `Unit ${seg.src}` : 'Unknown')
+        return (
+          <p key={i}>
+            <span className={cn("font-medium text-sm", color?.text)}>{name}:</span>{' '}
+            {seg.words.join(' ')}
+          </p>
+        )
+      })}
     </div>
   )
 }
