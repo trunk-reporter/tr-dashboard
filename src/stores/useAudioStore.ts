@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { RecentCallInfo, Transmission } from '@/api/types'
+import type { Call, CallTransmission } from '@/api/types'
 import { getCallAudioUrl, getCallTransmissions } from '@/api/client'
 
 // Explicit state machine for audio playback
@@ -12,10 +12,10 @@ export type PlaybackState =
   | 'error'     // Playback failed
 
 export interface QueuedCall {
-  id: string                   // Same as callId - deterministic composite ID
-  callId: string               // Composite format: "sysid:tgid:timestamp"
-  system: string
-  sysid?: string
+  id: number                     // call_id
+  callId: number                 // same as id
+  systemId: number
+  systemName?: string
   tgid: number
   tgAlphaTag?: string
   duration: number
@@ -35,7 +35,7 @@ interface AudioState {
 
   // Current call data
   currentCall: QueuedCall | null
-  transmissions: Transmission[]
+  transmissions: CallTransmission[]
   unitTags: Map<number, string>
 
   // Playback position (updated by audio element)
@@ -60,7 +60,7 @@ interface AudioState {
   retryTimeoutId: ReturnType<typeof setTimeout> | null
 
   // Actions - called by UI
-  loadCall: (call: RecentCallInfo | QueuedCall) => void
+  loadCall: (call: Call | QueuedCall) => void
   requestPlay: () => void
   requestPause: () => void
   requestSeek: (time: number) => void
@@ -68,7 +68,7 @@ interface AudioState {
   toggleMute: () => void
   skipNext: () => void
   skipPrevious: () => void
-  addToQueue: (call: RecentCallInfo) => void
+  addToQueue: (call: Call) => void
   removeFromQueue: (index: number) => void
   clearQueue: () => void
   setAutoPlay: (enabled: boolean) => void
@@ -87,24 +87,23 @@ interface AudioState {
   unlockAndPlay: () => void
 
   // For transmissions loading
-  loadTransmissions: (callId: string | number) => Promise<void>
+  loadTransmissions: (callId: number) => Promise<void>
 }
 
-function toQueuedCall(call: RecentCallInfo | QueuedCall): QueuedCall {
+function toQueuedCall(call: Call | QueuedCall): QueuedCall {
   if ('audioUrl' in call) {
     return call
   }
 
-  const callId = call.call_id ?? ''
   return {
-    id: callId,
-    callId,
-    system: call.system,
-    sysid: call.sysid,
+    id: call.call_id,
+    callId: call.call_id,
+    systemId: call.system_id,
+    systemName: call.system_name,
     tgid: call.tgid,
     tgAlphaTag: call.tg_alpha_tag,
-    duration: call.duration,
-    audioUrl: call.audio_url ?? getCallAudioUrl(callId),
+    duration: call.duration ?? 0,
+    audioUrl: call.audio_url ?? getCallAudioUrl(call.call_id),
   }
 }
 
@@ -135,11 +134,9 @@ export const useAudioStore = create<AudioState>((set, get) => ({
     // Extract unit tags if available
     const unitTags = new Map<number, string>()
     if ('units' in call && Array.isArray(call.units)) {
-      for (const unit of call.units as Array<{ unit_id?: number; unit_tag?: string; unit_rid?: number; alpha_tag?: string }>) {
-        const unitId = unit.unit_id ?? unit.unit_rid
-        const tag = unit.unit_tag ?? unit.alpha_tag
-        if (unitId && tag) {
-          unitTags.set(unitId, tag)
+      for (const unit of call.units) {
+        if (unit.unit_id && unit.alpha_tag) {
+          unitTags.set(unit.unit_id, unit.alpha_tag)
         }
       }
     }
@@ -166,10 +163,8 @@ export const useAudioStore = create<AudioState>((set, get) => ({
 
   requestPlay: () => {
     const { playbackState } = get()
-    // Only valid from paused state - audio element will confirm via onPlay
     if (playbackState === 'paused') {
       // Don't set playing here - wait for onPlay event
-      // The AudioPlayer component will call audio.play()
     }
   },
 
@@ -177,7 +172,6 @@ export const useAudioStore = create<AudioState>((set, get) => ({
     const { playbackState } = get()
     if (playbackState === 'playing') {
       // Don't set paused here - wait for onPause event
-      // The AudioPlayer component will call audio.pause()
     }
   },
 
@@ -200,7 +194,6 @@ export const useAudioStore = create<AudioState>((set, get) => ({
       set({ queue: rest })
       get().loadCall(next)
     } else {
-      // No more in queue - go to idle
       set({
         playbackState: 'idle',
         currentCall: null,
@@ -214,11 +207,9 @@ export const useAudioStore = create<AudioState>((set, get) => ({
 
   skipPrevious: () => {
     const { currentTime, history } = get()
-    // If more than 3 seconds in, restart current track
     if (currentTime > 3) {
       set({ currentTime: 0 })
     } else if (history.length > 0) {
-      // Go to previous call
       const [prev, ...rest] = history
       set({ history: rest })
       get().loadCall(prev)
@@ -229,7 +220,6 @@ export const useAudioStore = create<AudioState>((set, get) => ({
     const queued = toQueuedCall(call)
     const { currentCall, playbackState } = get()
 
-    // If nothing is playing/loading/blocked, play immediately
     if (!currentCall || playbackState === 'idle') {
       get().loadCall(queued)
     } else {
@@ -247,7 +237,7 @@ export const useAudioStore = create<AudioState>((set, get) => ({
 
   setAutoPlay: (enabled) => set({ autoPlay: enabled }),
 
-  // Audio element event handlers - these are the source of truth for playback state
+  // Audio element event handlers
   onLoadStart: () => {
     const { playbackState } = get()
     if (playbackState !== 'blocked') {
@@ -257,7 +247,6 @@ export const useAudioStore = create<AudioState>((set, get) => ({
 
   onCanPlay: () => {
     // Audio is ready - component will attempt to play
-    // State transition happens in onPlay or onAutoplayBlocked
   },
 
   onPlay: () => {
@@ -266,8 +255,6 @@ export const useAudioStore = create<AudioState>((set, get) => ({
 
   onPause: () => {
     const { playbackState } = get()
-    // Only transition to paused if we were playing
-    // Ignore pause events during loading/blocked states
     if (playbackState === 'playing') {
       set({ playbackState: 'paused' })
     }
@@ -276,10 +263,8 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   onEnded: () => {
     const { autoPlay, queue } = get()
     if (autoPlay && queue.length > 0) {
-      // Auto-advance to next in queue
       get().skipNext()
     } else {
-      // No more in queue or autoPlay disabled - stay on current call for replay
       set({ playbackState: 'paused', currentTime: 0 })
     }
   },
@@ -287,14 +272,11 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   onError: () => {
     const { queue, retryCount, currentCall } = get()
 
-    // Check if we should retry
     if (retryCount < AUDIO_RETRY.MAX_ATTEMPTS && currentCall) {
       const delay = AUDIO_RETRY.INITIAL_DELAY_MS * Math.pow(AUDIO_RETRY.BACKOFF_MULTIPLIER, retryCount)
       console.warn(`Audio load failed, retrying in ${delay}ms (attempt ${retryCount + 1}/${AUDIO_RETRY.MAX_ATTEMPTS})`)
 
       const timeoutId = setTimeout(() => {
-        // Trigger a reload by resetting playback state
-        // The AudioPlayer component will detect this and reload
         set({
           playbackState: 'loading',
           retryTimeoutId: null,
@@ -304,12 +286,11 @@ export const useAudioStore = create<AudioState>((set, get) => ({
       set({
         retryCount: retryCount + 1,
         retryTimeoutId: timeoutId,
-        playbackState: 'loading', // Keep in loading state during retry
+        playbackState: 'loading',
       })
       return
     }
 
-    // Max retries exceeded or no current call - skip to next
     console.error('Audio playback error after retries, skipping to next')
     if (queue.length > 0) {
       get().skipNext()
@@ -329,7 +310,6 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   unlockAndPlay: () => {
     // Called when user clicks to unlock audio
     // Component will handle the actual play() call
-    // State will update via onPlay when successful
   },
 
   loadTransmissions: async (callId) => {

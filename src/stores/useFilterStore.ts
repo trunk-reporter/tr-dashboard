@@ -1,12 +1,12 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { talkgroupKey, parseTalkgroupKey } from './useTalkgroupCache'
+import { talkgroupKey, parseTalkgroupKey } from '@/lib/utils'
 
 interface FilterState {
-  // System filter
-  selectedSystems: string[]
+  // System filter (system_id integers)
+  selectedSystems: number[]
 
-  // Talkgroup filters - stored as "sysid:tgid" keys
+  // Talkgroup filters - stored as "systemId:tgid" keys
   favoriteTalkgroups: string[]
   selectedTalkgroups: string[]
 
@@ -26,17 +26,17 @@ interface FilterState {
   showEmergencyOnly: boolean
 
   // Actions
-  setSelectedSystems: (systems: string[]) => void
-  toggleSystem: (system: string) => void
+  setSelectedSystems: (systems: number[]) => void
+  toggleSystem: (systemId: number) => void
 
   setFavoriteTalkgroups: (talkgroups: string[]) => void
-  toggleFavoriteTalkgroup: (sysid: string, tgid: number) => void
-  isFavorite: (sysid: string, tgid: number) => boolean
-  // Fallback check when sysid unknown
+  toggleFavoriteTalkgroup: (systemId: number, tgid: number) => void
+  isFavorite: (systemId: number, tgid: number) => boolean
+  // Fallback check when systemId unknown
   isFavoriteByTgid: (tgid: number) => boolean
 
   setSelectedTalkgroups: (talkgroups: string[]) => void
-  toggleTalkgroup: (sysid: string, tgid: number) => void
+  toggleTalkgroup: (systemId: number, tgid: number) => void
 
   setSelectedUnits: (units: number[]) => void
   toggleUnit: (unitId: number) => void
@@ -53,7 +53,7 @@ interface FilterState {
 }
 
 const initialState = {
-  selectedSystems: [] as string[],
+  selectedSystems: [] as number[],
   favoriteTalkgroups: [] as string[],
   selectedTalkgroups: [] as string[],
   selectedUnits: [] as number[],
@@ -72,18 +72,18 @@ export const useFilterStore = create<FilterState>()(
 
       setSelectedSystems: (systems) => set({ selectedSystems: systems }),
 
-      toggleSystem: (system) =>
+      toggleSystem: (systemId) =>
         set((state) => ({
-          selectedSystems: state.selectedSystems.includes(system)
-            ? state.selectedSystems.filter((s) => s !== system)
-            : [...state.selectedSystems, system],
+          selectedSystems: state.selectedSystems.includes(systemId)
+            ? state.selectedSystems.filter((s) => s !== systemId)
+            : [...state.selectedSystems, systemId],
         })),
 
       setFavoriteTalkgroups: (talkgroups) => set({ favoriteTalkgroups: talkgroups }),
 
-      toggleFavoriteTalkgroup: (sysid, tgid) =>
+      toggleFavoriteTalkgroup: (systemId, tgid) =>
         set((state) => {
-          const key = talkgroupKey(sysid, tgid)
+          const key = talkgroupKey(systemId, tgid)
           return {
             favoriteTalkgroups: state.favoriteTalkgroups.includes(key)
               ? state.favoriteTalkgroups.filter((t) => t !== key)
@@ -91,7 +91,7 @@ export const useFilterStore = create<FilterState>()(
           }
         }),
 
-      isFavorite: (sysid, tgid) => get().favoriteTalkgroups.includes(talkgroupKey(sysid, tgid)),
+      isFavorite: (systemId, tgid) => get().favoriteTalkgroups.includes(talkgroupKey(systemId, tgid)),
 
       isFavoriteByTgid: (tgid) => {
         for (const key of get().favoriteTalkgroups) {
@@ -105,9 +105,9 @@ export const useFilterStore = create<FilterState>()(
 
       setSelectedTalkgroups: (talkgroups) => set({ selectedTalkgroups: talkgroups }),
 
-      toggleTalkgroup: (sysid, tgid) =>
+      toggleTalkgroup: (systemId, tgid) =>
         set((state) => {
-          const key = talkgroupKey(sysid, tgid)
+          const key = talkgroupKey(systemId, tgid)
           return {
             selectedTalkgroups: state.selectedTalkgroups.includes(key)
               ? state.selectedTalkgroups.filter((t) => t !== key)

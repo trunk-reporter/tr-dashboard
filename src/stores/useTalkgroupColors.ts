@@ -23,7 +23,7 @@ export interface TalkgroupFields {
   description?: string
   group?: string
   tag?: string
-  sysid?: string
+  system_id?: number
   tgid?: number
 }
 
@@ -75,8 +75,8 @@ function matchKeyword(keyword: string, text: string): boolean {
 
 export interface TalkgroupColorsState {
   rules: ColorRule[]
-  overrides: Record<string, TalkgroupOverride> // key is "sysid:tgid"
-  colorCache: Map<string, string | null> // key is "sysid:tgid", value is hex color (e.g., "#3b82f6") or null
+  overrides: Record<string, TalkgroupOverride> // key is "system_id:tgid"
+  colorCache: Map<string, string | null> // key is "system_id:tgid", value is hex color or null
 
   // Actions for rules
   setRules: (rules: ColorRule[]) => void
@@ -87,13 +87,13 @@ export interface TalkgroupColorsState {
   resetToDefaults: () => void
 
   // Actions for per-talkgroup overrides
-  setOverride: (sysid: string, tgid: number, override: TalkgroupOverride | null) => void
-  getOverride: (sysid: string, tgid: number) => TalkgroupOverride | null
+  setOverride: (systemId: number, tgid: number, override: TalkgroupOverride | null) => void
+  getOverride: (systemId: number, tgid: number) => TalkgroupOverride | null
   clearAllOverrides: () => void
 
   // Utility - these check overrides first, then fall back to keyword rules
   getColorForTalkgroup: (fields: TalkgroupFields) => string | null
-  getCachedColor: (sysid: string, tgid: number, fields: TalkgroupFields) => string | null
+  getCachedColor: (systemId: number, tgid: number, fields: TalkgroupFields) => string | null
   shouldHideTalkgroup: (fields: TalkgroupFields) => boolean
   shouldHighlightTalkgroup: (fields: TalkgroupFields) => boolean
   getRuleForTalkgroup: (fields: TalkgroupFields) => ColorRule | null
@@ -144,13 +144,13 @@ export const useTalkgroupColors = create<TalkgroupColorsState>()(
 
       resetToDefaults: () => set({ rules: DEFAULT_RULES, overrides: {}, colorCache: new Map() }),
 
-      // Override actions - clear cache for affected talkgroup
-      setOverride: (sysid, tgid, override) => {
-        const key = `${sysid}:${tgid}`
+      // Override actions
+      setOverride: (systemId, tgid, override) => {
+        const key = `${systemId}:${tgid}`
         set((state) => {
           const newOverrides = { ...state.overrides }
           const newColorCache = new Map(state.colorCache)
-          newColorCache.delete(key) // Clear cached color for this talkgroup
+          newColorCache.delete(key)
           if (override === null || override.mode === 'default') {
             delete newOverrides[key]
           } else {
@@ -160,8 +160,8 @@ export const useTalkgroupColors = create<TalkgroupColorsState>()(
         })
       },
 
-      getOverride: (sysid, tgid) => {
-        const key = `${sysid}:${tgid}`
+      getOverride: (systemId, tgid) => {
+        const key = `${systemId}:${tgid}`
         return get().overrides[key] || null
       },
 
@@ -169,7 +169,6 @@ export const useTalkgroupColors = create<TalkgroupColorsState>()(
 
       // Utility functions
       getRuleForTalkgroup: (fields) => {
-        // Build array of strings to match against
         const searchStrings = [
           fields.alpha_tag,
           fields.description,
@@ -194,8 +193,8 @@ export const useTalkgroupColors = create<TalkgroupColorsState>()(
 
       getEffectiveStyle: (fields) => {
         // Check for per-talkgroup override first
-        if (fields.sysid !== undefined && fields.tgid !== undefined) {
-          const override = get().getOverride(fields.sysid, fields.tgid)
+        if (fields.system_id !== undefined && fields.tgid !== undefined) {
+          const override = get().getOverride(fields.system_id, fields.tgid)
           if (override && override.mode !== 'default') {
             return {
               mode: override.mode,
@@ -224,21 +223,17 @@ export const useTalkgroupColors = create<TalkgroupColorsState>()(
         return null
       },
 
-      // Get color with caching - returns hex color or null
-      getCachedColor: (sysid, tgid, fields) => {
-        const key = `${sysid}:${tgid}`
+      getCachedColor: (systemId, tgid, fields) => {
+        const key = `${systemId}:${tgid}`
         const { colorCache } = get()
 
-        // Check cache first
         if (colorCache.has(key)) {
           return colorCache.get(key) ?? null
         }
 
-        // Compute color and convert to hex
         const colorName = get().getColorForTalkgroup(fields)
         const hexColor = colorName ? getHexFromTailwind(colorName) : null
 
-        // Cache the hex result (even if null)
         set((state) => {
           const newCache = new Map(state.colorCache)
           newCache.set(key, hexColor)
@@ -260,14 +255,13 @@ export const useTalkgroupColors = create<TalkgroupColorsState>()(
     }),
     {
       name: 'tr-dashboard-talkgroup-colors',
-      version: 2,
+      version: 3,
       // Don't persist colorCache - it's a runtime cache
       partialize: (state) => ({ rules: state.rules, overrides: state.overrides }),
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as { rules?: ColorRule[]; overrides?: Record<string, TalkgroupOverride> }
 
         if (version < 1) {
-          // Migration v0 -> v1: add 'mode' field to existing rules
           if (state.rules) {
             state.rules = state.rules.map((rule) => ({
               ...rule,
@@ -277,8 +271,13 @@ export const useTalkgroupColors = create<TalkgroupColorsState>()(
         }
 
         if (version < 2) {
-          // Migration v1 -> v2: add overrides object
           state.overrides = state.overrides || {}
+        }
+
+        if (version < 3) {
+          // Migration v2 -> v3: clear overrides that used old sysid:tgid format
+          // New format uses integer system_id:tgid — can't reliably map old keys
+          state.overrides = {}
         }
 
         return state as TalkgroupColorsState

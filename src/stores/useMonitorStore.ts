@@ -1,23 +1,23 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { talkgroupKey, parseTalkgroupKey } from './useTalkgroupCache'
+import { talkgroupKey, parseTalkgroupKey } from '@/lib/utils'
 
 interface MonitorState {
-  // Monitored talkgroups (by "sysid:tgid" key)
+  // Monitored talkgroups (by "systemId:tgid" key)
   monitoredTalkgroups: Set<string>
   // Whether monitoring is active (master switch)
   isMonitoring: boolean
 
   // Actions
-  toggleTalkgroupMonitor: (sysid: string, tgid: number) => void
-  addTalkgroupMonitor: (sysid: string, tgid: number) => void
-  removeTalkgroupMonitor: (sysid: string, tgid: number) => void
+  toggleTalkgroupMonitor: (systemId: number, tgid: number) => void
+  addTalkgroupMonitor: (systemId: number, tgid: number) => void
+  removeTalkgroupMonitor: (systemId: number, tgid: number) => void
   clearAllMonitors: () => void
   setMonitoring: (enabled: boolean) => void
   toggleMonitoring: () => void
-  isMonitored: (sysid: string, tgid: number) => boolean
+  isMonitored: (systemId: number, tgid: number) => boolean
 
-  // Check if any talkgroup with this tgid is monitored (for when sysid unknown)
+  // Check if any talkgroup with this tgid is monitored (for when systemId unknown)
   isMonitoredByTgid: (tgid: number) => boolean
 
   // Get all monitored talkgroup keys
@@ -30,36 +30,33 @@ export const useMonitorStore = create<MonitorState>()(
       monitoredTalkgroups: new Set(),
       isMonitoring: false,
 
-      toggleTalkgroupMonitor: (sysid, tgid) =>
+      toggleTalkgroupMonitor: (systemId, tgid) =>
         set((state) => {
-          const key = talkgroupKey(sysid, tgid)
+          const key = talkgroupKey(systemId, tgid)
           const newSet = new Set(state.monitoredTalkgroups)
           if (newSet.has(key)) {
             newSet.delete(key)
-            // Disable monitoring if no talkgroups left
             return {
               monitoredTalkgroups: newSet,
               isMonitoring: newSet.size > 0 ? state.isMonitoring : false
             }
           } else {
             newSet.add(key)
-            // Auto-enable monitoring when adding a talkgroup
             return { monitoredTalkgroups: newSet, isMonitoring: true }
           }
         }),
 
-      addTalkgroupMonitor: (sysid, tgid) =>
+      addTalkgroupMonitor: (systemId, tgid) =>
         set((state) => {
-          const key = talkgroupKey(sysid, tgid)
+          const key = talkgroupKey(systemId, tgid)
           const newSet = new Set(state.monitoredTalkgroups)
           newSet.add(key)
-          // Auto-enable monitoring when adding a talkgroup
           return { monitoredTalkgroups: newSet, isMonitoring: true }
         }),
 
-      removeTalkgroupMonitor: (sysid, tgid) =>
+      removeTalkgroupMonitor: (systemId, tgid) =>
         set((state) => {
-          const key = talkgroupKey(sysid, tgid)
+          const key = talkgroupKey(systemId, tgid)
           const newSet = new Set(state.monitoredTalkgroups)
           newSet.delete(key)
           return { monitoredTalkgroups: newSet }
@@ -71,9 +68,8 @@ export const useMonitorStore = create<MonitorState>()(
 
       toggleMonitoring: () => set((state) => ({ isMonitoring: !state.isMonitoring })),
 
-      isMonitored: (sysid, tgid) => get().monitoredTalkgroups.has(talkgroupKey(sysid, tgid)),
+      isMonitored: (systemId, tgid) => get().monitoredTalkgroups.has(talkgroupKey(systemId, tgid)),
 
-      // Fallback check when sysid is unknown
       isMonitoredByTgid: (tgid) => {
         for (const key of get().monitoredTalkgroups) {
           const parsed = parseTalkgroupKey(key)
@@ -93,14 +89,19 @@ export const useMonitorStore = create<MonitorState>()(
           const str = localStorage.getItem(name)
           if (!str) return null
           const parsed = JSON.parse(str)
-          // Convert array back to Set
           if (parsed.state?.monitoredTalkgroups) {
-            parsed.state.monitoredTalkgroups = new Set(parsed.state.monitoredTalkgroups)
+            const keys = parsed.state.monitoredTalkgroups as string[]
+            // Migration: clear stale old-format keys (P25 sysid strings like "348:9178")
+            // New format uses integer system_id (small numbers like "1:9178")
+            const valid = keys.filter((key: string) => {
+              const result = parseTalkgroupKey(key)
+              return result !== null
+            })
+            parsed.state.monitoredTalkgroups = new Set(valid)
           }
           return parsed
         },
         setItem: (name, value) => {
-          // Convert Set to array for JSON serialization
           const toStore = {
             ...value,
             state: {

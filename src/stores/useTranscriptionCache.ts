@@ -1,21 +1,19 @@
 import { create } from 'zustand'
-import { getCallTranscription, getCallTransmissions } from '@/api/client'
-import type { TranscriptionWord, Transmission } from '@/api/types'
+import { getCallTranscription } from '@/api/client'
+import type { Transcription } from '@/api/types'
 
 type TranscriptionStatus = 'idle' | 'loading' | 'loaded' | 'none'
 
 interface TranscriptionEntry {
   status: TranscriptionStatus
-  text?: string
-  words?: TranscriptionWord[]
-  transmissions?: Transmission[]
+  transcription?: Transcription
 }
 
 interface TranscriptionCacheState {
-  cache: Map<number | string, TranscriptionEntry>
+  cache: Map<number, TranscriptionEntry>
 
-  getEntry: (callId: number | string) => TranscriptionEntry | undefined
-  fetchTranscription: (callId: number | string) => Promise<void>
+  getEntry: (callId: number) => TranscriptionEntry | undefined
+  fetchTranscription: (callId: number) => Promise<void>
 }
 
 export const useTranscriptionCache = create<TranscriptionCacheState>((set, get) => ({
@@ -37,18 +35,12 @@ export const useTranscriptionCache = create<TranscriptionCacheState>((set, get) 
     })
 
     try {
-      // Fetch both transcription and transmissions in parallel
-      const [transcription, transmissionsRes] = await Promise.all([
-        getCallTranscription(callId),
-        getCallTransmissions(callId).catch(() => ({ transmissions: [] })),
-      ])
+      const transcription = await getCallTranscription(callId)
       set((state) => {
         const newCache = new Map(state.cache)
         newCache.set(callId, {
           status: 'loaded',
-          text: transcription.text,
-          words: transcription.words,
-          transmissions: transmissionsRes.transmissions || [],
+          transcription,
         })
         return { cache: newCache }
       })

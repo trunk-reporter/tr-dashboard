@@ -83,9 +83,22 @@ export function formatBytes(bytes: number): string {
 }
 
 export function formatDecodeRate(rate: number): string {
-  // P25 Phase 1 control channel sends max 40 messages/sec
-  const rounded = Math.round(rate)
-  return `${rounded}/40`
+  // Decode rate is 0-1 ratio
+  return `${Math.round(rate * 100)}%`
+}
+
+// Composite key helpers (system_id:tgid format)
+export function talkgroupKey(systemId: number, tgid: number): string {
+  return `${systemId}:${tgid}`
+}
+
+export function parseTalkgroupKey(key: string): { systemId: number; tgid: number } | null {
+  const parts = key.split(':')
+  if (parts.length !== 2) return null
+  const systemId = parseInt(parts[0], 10)
+  const tgid = parseInt(parts[1], 10)
+  if (isNaN(systemId) || isNaN(tgid)) return null
+  return { systemId, tgid }
 }
 
 export function getTalkgroupDisplayName(tgid: number, alphaTag?: string): string {
