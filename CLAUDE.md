@@ -17,15 +17,30 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 tr-engine aggregates data from trunk-recorder radio systems. API documentation lives in `../tr-engine/docs/` (swagger at `/swagger/`, markdown in `docs/api/`).
 
+## Development Commands
+
+```bash
+npm install           # Install dependencies
+npm run dev           # Start dev server on 0.0.0.0:5173
+npm run build         # Type-check (tsc -b) then build with Vite
+npm run lint          # Type-check only (tsc --noEmit)
+npm run api:generate  # Regenerate TypeScript types from OpenAPI spec
+```
+
+There are no tests configured in this project. The `lint` command is the primary code quality check.
+
+Vite proxies `/api` to `https://tr-api.luxprimatech.com` and `/api/events` to the SSE endpoint in dev mode.
+
 ## Tech Stack
 
-- **React 18 + TypeScript** - UI framework
-- **Vite** - Build tool
-- **Tailwind CSS** - Styling
-- **shadcn/ui** - Component primitives (Radix-based)
-- **Zustand** - State management
-- **React Router v6** - Routing
+- **React 19 + TypeScript** (strict mode, `noUnusedLocals`, `noUnusedParameters`)
+- **Vite 7** - Build tool
+- **Tailwind CSS v4** (via `@tailwindcss/vite` plugin, theme defined in `src/index.css`)
+- **shadcn/ui** - Component primitives (Radix-based), in `src/components/ui/`
+- **Zustand v5** - State management with persist middleware
+- **React Router v7** - Routing
 - **react-hotkeys-hook + cmdk** - Keyboard shortcuts and command palette
+- **openapi-typescript** - Auto-generated types from backend OpenAPI spec
 
 ## Design
 
@@ -33,13 +48,91 @@ Full design plan with UI mockups: `docs/DESIGN_PLAN.md`
 
 Selected design: **Option C "Hybrid Scanner"** - Dense information display with modern aesthetics, collapsible sidebar, split-pane layout, transmission timeline in audio player.
 
-## Repository Structure
+## Architecture
+
+### Path Aliases
+
+All imports use `@/` alias mapped to `src/`. Example: `import { cn } from '@/lib/utils'`
+
+### Source Structure
 
 ```
-docs/
-└── DESIGN_PLAN.md  # UI designs and implementation plan
-src/                # React application
+src/
+├── api/
+│   ├── client.ts         # REST API client (fetch wrapper with typed functions)
+│   ├── types.ts           # TypeScript types (REST + SSE events)
+│   ├── generated.ts       # Auto-generated OpenAPI types (don't edit)
+│   └── eventsource.ts     # SSE event source manager singleton
+├── stores/                # Zustand state stores
+├── components/
+│   ├── layout/            # MainLayout, Header, Sidebar
+│   ├── audio/             # AudioPlayer, TransmissionTimeline
+│   ├── calls/             # CallCard, CallList, TranscriptionPreview
+│   ├── command/           # CommandPalette, GoToMenu
+│   └── ui/                # shadcn/ui primitives (Button, Card, Badge, etc.)
+├── pages/                 # Route page components
+├── lib/
+│   ├── constants.ts       # Keyboard shortcuts, refresh intervals, colors
+│   └── utils.ts           # Formatters and display helpers (cn, formatFrequency, etc.)
+├── App.tsx                # React Router route definitions
+├── main.tsx               # Entry point
+└── index.css              # Tailwind theme (@theme block with custom colors)
 ```
+
+### Routing
+
+React Router v7 with all routes nested under `MainLayout` (provides sidebar, header, audio player):
+
+```
+/                    → Dashboard (live monitoring + recent calls)
+/calls               → Call history browser
+/calls/:id           → Call detail with transmissions/audio
+/talkgroups          → Talkgroup list
+/talkgroups/:id      → Talkgroup detail
+/units               → Unit list
+/units/:id           → Unit detail
+/affiliations        → Live unit-talkgroup affiliation status
+/directory           → Reference talkgroup directory browser
+/settings            → Color rules, favorites, display preferences
+/admin               → System merge, metadata editing, CSV import
+```
+
+### API Layer (`src/api/`)
+
+- `client.ts`: Typed REST functions organized by domain (Systems, Talkgroups, Units, Calls, Affiliations, Admin). Base URL `/api/v1`. Uses `fetch` with a `request<T>()` wrapper.
+- `types.ts`: Hand-written types for API responses and SSE events.
+- `generated.ts`: Auto-generated from OpenAPI spec via `npm run api:generate`. Referenced by `types.ts`.
+- `eventsource.ts`: Singleton `SSEManager` using the `EventSource` API. Connects to `/api/events`. Auto-reconnect with exponential backoff. Typed event handlers for `call_start`, `call_update`, `call_end`, `unit_event`, `recorder_update`, `rate_update`. Methods: `connect()`, `disconnect()`, `reconnect()`.
+
+### State Management (Zustand Stores)
+
+| Store | File | Purpose | Persisted |
+|-------|------|---------|-----------|
+| `useRealtimeStore` | `stores/useRealtimeStore.ts` | SSE events, active calls `Map<number, Call>`, decode rates, recorders | No |
+| `useAudioStore` | `stores/useAudioStore.ts` | Playback state machine, queue, transmissions, history | No |
+| `useMonitorStore` | `stores/useMonitorStore.ts` | Monitored talkgroups `Set<system_id:tgid>`, monitoring toggle | localStorage |
+| `useTalkgroupColors` | `stores/useTalkgroupColors.ts` | Color rules, per-talkgroup overrides, hide/highlight modes | localStorage |
+| `useFilterStore` | `stores/useFilterStore.ts` | Selected systems, favorite talkgroups, search, time range | localStorage |
+
+### Key Architectural Patterns
+
+**Composite Keys**: Talkgroups/Units use `"system_id:tgid"` or `"system_id:unit_id"` strings as map keys throughout stores and components. `system_id` is a `number` (the logical system ID from the backend). Helper functions `talkgroupKey(systemId, tgid)` and `parseTalkgroupKey(key)` in `lib/utils.ts`.
+
+**SSE → Store Binding**: `initializeRealtimeConnection()` (called in `MainLayout`) connects the SSE event source and wires typed events to store actions. Events flow: `SSEManager` → event handler → `useRealtimeStore` actions.
+
+**Embedded Context**: API responses embed display names directly (e.g., `tg_alpha_tag`, `system_name`, `unit_alpha_tag`). No client-side talkgroup cache needed — display names come from the API.
+
+**Audio Playback State Machine**: `useAudioStore` uses explicit states: `'idle' | 'loading' | 'playing' | 'paused' | 'blocked' | 'error'`. The HTML audio element's event handlers (`onPlay`, `onPause`, `onEnded`) are the source of truth — UI reads state from store, never manipulates audio element directly.
+
+**Persisted Stores**: `useMonitorStore` serializes `Set` ↔ `Array` for JSON/localStorage. Key: `'tr-dashboard-monitor'`.
+
+**Talkgroup Color Rules**: `useTalkgroupColors` matches keywords against talkgroup fields with wildcard support (`*osp*` = substring, `osp*` = starts-with, `osp` = whole word). First matching rule wins. Modes: `'color' | 'hide' | 'highlight'`.
+
+**Data Fetching**: Pages use `useEffect` + API client functions. Polling intervals defined in `lib/constants.ts` (`REFRESH_INTERVALS`).
+
+### Styling
+
+Tailwind v4 with custom theme in `src/index.css` `@theme` block. Dark theme (slate-900 background, amber-500 primary). Uses `cn()` utility (clsx + tailwind-merge) for conditional classes. Custom CSS classes for scrollbar styling.
 
 ## Radio System Domain Model
 
@@ -58,26 +151,23 @@ Understanding the P25 trunked radio hierarchy is essential for this codebase:
 │           │                    │                            │
 │           └────────┬───────────┘                            │
 │                    ▼                                        │
-│  ┌─────────────────────────────────────────────────────┐   │
+│  ┌─────────────────────────────────────────────────────────┐   │
 │  │ Shared Talkgroups & Units (statewide)               │   │
 │  │ - Talkgroup 9178 "09-8L Main" exists once           │   │
 │  │ - Unit 943001 "09 8COM1" can affiliate anywhere     │   │
-│  │ - Composite key: sysid:tgid (e.g., "348:9178")      │   │
+│  │ - Composite key: system_id:tgid (e.g., "1:9178")   │   │
 │  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 **Key Concepts:**
+- **system_id** = Logical system identifier in the backend (integer)
 - **sysid** (e.g., "348") = The statewide P25 system identifier (Ohio MARCS)
 - **wacn** (e.g., "BEE00") = Wide Area Communication Network ID (shared statewide)
-- **nac** = Network Access Code - **unique per site** (340=butco, 34D=warco) - set by radio system admins
-- **rfss** = RF Subsystem number (4=butco, 1=warco)
-- **site_id** = Site identifier within the RFSS
+- **nac** = Network Access Code - **unique per site** (340=butco, 34D=warco)
 - **short_name** (butco, warco) = User-defined name for the trunk-recorder instance
 - **Talkgroups/Units** = Shared across all sites in the system; same radio IDs work statewide
-- **Calls** = Tagged with which site captured them (`system_id`), but reference shared talkgroups (`tg_sysid:tgid`)
-
-Sites only broadcast traffic relevant to radios currently affiliated at that site. A call on talkgroup 9178 may come from butco OR warco depending on where participating radios are located.
+- **Calls** = Tagged with `system_id` and reference talkgroups by `tgid`
 
 **Current Sites:**
 | short_name | NAC | RFSS | site_id | system_id |
@@ -85,107 +175,38 @@ Sites only broadcast traffic relevant to radios currently affiliated at that sit
 | butco | 340 | 4 | 1 | 1 |
 | warco | 34D | 1 | 13 | 17 |
 
-## API Architecture (tr-engine v0.3.1-beta4)
+## API Conventions (tr-engine v0.7.3)
 
-**Dual API Pattern:**
+**REST + SSE Pattern:**
 - REST API (`/api/v1`) for CRUD operations and queries
-- WebSocket API (`/api/ws`) for real-time event subscriptions
+- SSE API (`/api/events`) for real-time event streaming
 
 **Key Endpoints:**
-- `GET /api/v1/p25-systems` - Returns P25 systems with nested sites (`{p25_systems: [{sysid, wacn, sites: [...]}]}`)
-- `GET /api/v1/systems` - Returns recording sites (`{sites: [...], count}` - note: array key is `sites`, not `systems`)
+- `GET /api/v1/systems` → `{systems: [...], count}` — logical systems
+- `GET /api/v1/talkgroups` → `{talkgroups: [...], total}`
+- `GET /api/v1/units` → `{units: [...], total}`
+- `GET /api/v1/calls` → `{calls: [...], total}`
+- `GET /api/v1/calls/:id` → `Call` with inline `src_list`, `freq_list`, `units`
+- `GET /api/v1/affiliations` → `{affiliations: [...], total, summary}`
+- `GET /api/v1/talkgroup-directory` → `{talkgroups: [...], total}`
+- `POST /api/v1/admin/merge-systems` → `SystemMergeResponse`
+- `PATCH /api/v1/talkgroups/:id` → Update talkgroup metadata
+- `PATCH /api/v1/units/:id` → Update unit metadata
+- `POST /api/v1/systems/:id/import-directory` → CSV talkgroup import
 
-**Core Data Model:**
-- **System** - A trunk-recorder site/instance (butco, warco) within a P25 network
-- **Talkgroup** - Virtual channel with composite key `(sysid, tgid)` - shared across sites
-- **Unit** - Individual radio device with composite key `(sysid, unit_id)` - can affiliate at any site
-- **Call** - Audio recording captured by a specific site, references shared talkgroup
-- **Transcription** - Speech-to-text with word-level timestamps
-
-**Key Conventions:**
+**Data Conventions:**
 - Frequencies stored in Hz (not MHz)
 - Timestamps in ISO 8601 RFC3339 UTC format
-- Pagination: `limit` (max 1000, default 50) + `offset`
-- **Natural composite keys**: Talkgroups/Units use `sysid:id` format (e.g., `348:9178`)
-- Plain ID lookups return 409 Conflict if ambiguous across systems
-- Calls have `system_id` (which site captured) and `tg_sysid` (which P25 system the talkgroup belongs to)
+- Pagination: `limit` (max 1000, default 50) + `offset`, response uses `total` field
+- Composite keys: `system_id:tgid` format (integer system_id)
+- Calls include inline `src_list` (transmissions), `freq_list` (frequencies), `units` (participating units)
+- API responses embed display names: `tg_alpha_tag`, `system_name`, `unit_alpha_tag`, etc.
+- Signal/noise values of 999 are sentinel for "unknown" — display as "—"
+- Decode rates are 0-1 ratio (display as percentage)
 
-## WebSocket Event Types
+**SSE Event Types:** `call_start`, `call_update`, `call_end`, `unit_event`, `rate_update`, `recorder_update`
 
-`call_start`, `call_end`, `call_active`, `audio_available`, `unit_event`, `rate_update`, `recorder_update`
+## Remaining Feature Work
 
-Subscriptions filter by `systems`, `talkgroups`, and `units` arrays.
-
-## When Building Frontend
-
-Refer to `../tr-engine/docs/api/MODELS.md` for TypeScript interfaces. Key changes in v0.3.1:
-- Talkgroups/Units no longer have database `id` fields - use `(sysid, tgid)` or `(sysid, unit_id)`
-- Calls now include `tg_sysid`, `tgid`, `tg_alpha_tag`, and `audio_url` directly
-- Transmissions now return wrapped `{transmissions: [...]}` format
-- New transcription endpoints for speech-to-text with word timestamps
-
-## Development Progress
-
-### Completed Features
-
-- **Core Layout**: MainLayout with collapsible sidebar, Header with status indicators
-- **Real-time Dashboard**: Active calls display, decode rate indicators, WebSocket connection
-- **Call History**: Browsable call list with filtering, CallCard components
-- **Call Detail Page**: Full call view with transmissions, audio player, frequency info
-- **Audio Player**: Global player with transmission timeline, keyboard shortcuts (J/K/Space/M)
-- **Talkgroup Browser**: List view with search, detail pages
-- **Unit Browser**: List view with activity history
-- **Command Palette**: cmdk integration for quick navigation (Cmd+K)
-- **Live Monitoring**: Auto-play calls from selected talkgroups with browser autoplay handling
-- **Talkgroup Cache**: Warm cache on startup for instant alpha tag display
-
-### Key Implementation Details
-
-**Talkgroup Activity Sidebar**: Shows recent talkgroup activity with clickable links. Uses `useTalkgroupCache` store to display alpha tags immediately (cache warmed on app startup via `getTalkgroups({limit: 500})`).
-
-**Monitor Store**: Tracks monitored talkgroups by `sysid:tgid` composite key. Auto-enables monitoring when adding a talkgroup. Persisted to localStorage.
-
-**Browser Autoplay Handling**: `AudioPlayer` catches `NotAllowedError` and shows "Click to Enable Audio" prompt. Once unlocked, subsequent auto-plays work.
-
-**API Notes (v0.3.1)**:
-- Calls include `tgid`, `tg_alpha_tag`, `tg_sysid` directly (no separate fetch needed)
-- Transmissions endpoint now returns `{transmissions: [...], count: N}`
-- `rate_update` WebSocket events include `max_rate: 40`
-- Signal/noise values of 999 are sentinel for "unknown" - display as "—"
-- Decode rates are X/40 (P25 Phase 1 max is 40 control messages/sec)
-
-### Stores
-
-| Store | Purpose |
-|-------|---------|
-| `useRealtimeStore` | WebSocket data, active calls, recent calls, unit events |
-| `useAudioStore` | Playback state, queue, transmissions, autoplay unlock |
-| `useMonitorStore` | Monitored talkgroups, monitoring enabled state (persisted) |
-| `useTalkgroupCache` | sysid:tgid → alpha_tag cache for instant display |
-| `useFilterStore` | Search/filter state |
-| `useTranscriptionCache` | Call transcription + transmission data cache |
-
-### Migration Status (v0.3.1) - COMPLETE
-
-All v0.3.1 migration work has been completed:
-- ✅ Radio ID-based lookups via composite keys `sysid:tgid`
-- ✅ Calls include `tgid`, `tg_alpha_tag`, `tg_sysid`
-- ✅ Transmissions wrapped in response object
-- ✅ WebSocket subscription confirmation
-- ✅ `max_rate` in rate_update events
-- ✅ Talkgroup cache keys by `sysid:tgid`
-- ✅ Monitor store tracks `sysid:tgid` pairs
-- ✅ Database ID references removed from talkgroup/unit types
-- ✅ Transcription display on call detail page
-
-**Remaining feature work:**
-- Transcription search/browse UI (types exist, no page)
-- Call groups browser UI (types exist, no page)
-
-### Running Development
-
-```bash
-npm run dev  # Starts on 0.0.0.0:5173
-```
-
-Vite proxies `/api` to `localhost:8080` (tr-engine backend).
+- Transcription search/browse UI (types exist, no page yet)
+- Call groups browser UI (types exist, no page yet)
