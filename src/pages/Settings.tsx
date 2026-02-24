@@ -8,10 +8,10 @@ import { useRealtimeStore } from '@/stores/useRealtimeStore'
 import { useFilterStore } from '@/stores/useFilterStore'
 import { useAudioStore } from '@/stores/useAudioStore'
 import { useTalkgroupColors, ColorRule, RuleMode } from '@/stores/useTalkgroupColors'
-import { useTalkgroupCache } from '@/stores/useTalkgroupCache'
-import { getWebSocketManager } from '@/api/websocket'
+import { getSSEManager } from '@/api/eventsource'
 import { Plus, Trash2, RotateCcw } from 'lucide-react'
 import { ColorPicker, getHexFromTailwind } from '@/components/ui/color-picker'
+import { parseTalkgroupKey } from '@/lib/utils'
 
 export default function Settings() {
   const connectionStatus = useRealtimeStore((s) => s.connectionStatus)
@@ -36,7 +36,6 @@ export default function Settings() {
   const clearAllOverrides = useTalkgroupColors((s) => s.clearAllOverrides)
   const overrideCount = Object.keys(overrides).length
   const overrideEntries = Object.entries(overrides)
-  const talkgroupCache = useTalkgroupCache((s) => s.cache)
 
   // Drag and drop state for rule reordering
   const [dragIndex, setDragIndex] = useState<number | null>(null)
@@ -57,10 +56,8 @@ export default function Settings() {
   ]
 
   const handleReconnect = () => {
-    const ws = getWebSocketManager()
-    ws.disconnect()
-    ws.connect()
-    ws.subscribe(['calls', 'units', 'rates', 'recorders'])
+    const sse = getSSEManager()
+    sse.reconnect()
   }
 
   return (
@@ -74,7 +71,7 @@ export default function Settings() {
       <Card>
         <CardHeader>
           <CardTitle>Connection</CardTitle>
-          <CardDescription>WebSocket connection to tr-engine backend</CardDescription>
+          <CardDescription>SSE connection to tr-engine backend</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-between">
@@ -391,10 +388,9 @@ export default function Settings() {
                 </div>
                 <div className="space-y-1 max-h-48 overflow-y-auto">
                   {overrideEntries.map(([key, override]) => {
-                    const [sysid, tgidStr] = key.split(':')
-                    const tgid = parseInt(tgidStr, 10)
-                    const cachedInfo = talkgroupCache.get(key)
-                    const cachedName = cachedInfo?.alphaTag
+                    const parsed = parseTalkgroupKey(key)
+                    const systemId = parsed?.systemId ?? 0
+                    const tgid = parsed?.tgid ?? 0
                     return (
                       <div
                         key={key}
@@ -418,15 +414,12 @@ export default function Settings() {
                               Color
                             </span>
                           )}
-                          <span className="truncate">
-                            {cachedName || <span className="font-mono text-xs">{sysid}:{tgid}</span>}
-                          </span>
-                          {cachedName && <span className="font-mono text-xs text-muted-foreground shrink-0">{tgid}</span>}
+                          <span className="font-mono text-xs">{key}</span>
                         </div>
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => setOverride(sysid, tgid, null)}
+                          onClick={() => setOverride(systemId, tgid, null)}
                           className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive shrink-0"
                         >
                           <Trash2 className="h-3 w-3" />
@@ -456,17 +449,17 @@ export default function Settings() {
             </p>
           ) : (
             <div className="space-y-2">
-              {favoriteTalkgroups.map((tgid) => (
+              {favoriteTalkgroups.map((tgKey) => (
                 <div
-                  key={tgid}
+                  key={tgKey}
                   className="flex items-center justify-between rounded-lg border p-3"
                 >
-                  <span className="font-mono">TG {tgid}</span>
+                  <span className="font-mono">{tgKey}</span>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() =>
-                      setFavoriteTalkgroups(favoriteTalkgroups.filter((t) => t !== tgid))
+                      setFavoriteTalkgroups(favoriteTalkgroups.filter((t) => t !== tgKey))
                     }
                   >
                     Remove
@@ -501,7 +494,10 @@ export default function Settings() {
             <ShortcutItem label="Go to Calls" keys={['G', 'C']} />
             <ShortcutItem label="Go to Talkgroups" keys={['G', 'T']} />
             <ShortcutItem label="Go to Units" keys={['G', 'U']} />
+            <ShortcutItem label="Go to Affiliations" keys={['G', 'A']} />
+            <ShortcutItem label="Go to Directory" keys={['G', 'R']} />
             <ShortcutItem label="Go to Settings" keys={['G', 'S']} />
+            <ShortcutItem label="Go to Admin" keys={['G', 'X']} />
           </div>
         </CardContent>
       </Card>
@@ -517,7 +513,7 @@ export default function Settings() {
             It provides real-time monitoring and historical analysis of trunk-recorder radio systems.
           </p>
           <div className="mt-4 flex gap-2">
-            <Badge variant="outline">React 18</Badge>
+            <Badge variant="outline">React 19</Badge>
             <Badge variant="outline">TypeScript</Badge>
             <Badge variant="outline">Tailwind CSS</Badge>
             <Badge variant="outline">Zustand</Badge>
