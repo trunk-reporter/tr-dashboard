@@ -15,6 +15,7 @@ import {
   getUnitColorByRid,
   cn,
 } from '@/lib/utils'
+import { useSignalThresholds, getSignalColor } from '@/stores/useSignalThresholds'
 
 export default function CallDetail() {
   const { id } = useParams<{ id: string }>()
@@ -99,6 +100,8 @@ export default function CallDetail() {
     }
     return units
   }, [transmissions])
+
+  const thresholds = useSignalThresholds()
 
   const hasUnits = uniqueUnits.length > 0
 
@@ -246,23 +249,23 @@ export default function CallDetail() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-muted-foreground">Signal</p>
-                <p className="font-mono">
+                <p className={cn("font-mono", getSignalColor(call.signal_db, thresholds.signalGood, thresholds.signalPoor, true))}>
                   {call.signal_db != null && call.signal_db < 900 ? `${call.signal_db.toFixed(1)} dB` : '—'}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Noise</p>
-                <p className="font-mono">
+                <p className={cn("font-mono", getSignalColor(call.noise_db, thresholds.noiseGood, thresholds.noisePoor, false))}>
                   {call.noise_db != null && call.noise_db < 900 ? `${call.noise_db.toFixed(1)} dB` : '—'}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Errors</p>
-                <p className="font-mono">{call.error_count ?? 0}</p>
+                <p className={cn("font-mono", getSignalColor(call.error_count, thresholds.errorsGood, thresholds.errorsPoor, false))}>{call.error_count ?? 0}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Spikes</p>
-                <p className="font-mono">{call.spike_count ?? 0}</p>
+                <p className={cn("font-mono", getSignalColor(call.spike_count, thresholds.spikesGood, thresholds.spikesPoor, false))}>{call.spike_count ?? 0}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Freq Error</p>
