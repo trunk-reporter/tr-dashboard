@@ -62,10 +62,10 @@ function bucketCallsByDay(calls: Call[], days: number): { buckets: number[]; lab
   const now = Date.now()
   const buckets = new Array(days).fill(0)
   const labels: string[] = []
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(now - i * 86_400_000)
-    labels.push(i === 0 ? 'Today' : i === 1 ? 'Yest' : dayNames[d.getDay()])
+    labels.push(i === 0 ? 'Today' : `${months[d.getMonth()]} ${d.getDate()}`)
   }
   for (const call of calls) {
     const daysAgo = (now - new Date(call.start_time).getTime()) / 86_400_000
@@ -76,13 +76,15 @@ function bucketCallsByDay(calls: Call[], days: number): { buckets: number[]; lab
   return { buckets, labels }
 }
 
-// Paginate call fetches — up to maxCalls total
-async function fetchAllCalls(id: string, maxCalls: number): Promise<Call[]> {
+// Paginate call fetches — up to maxCalls total, requesting `days` of history
+// (API defaults to 24h if no start_time is provided)
+async function fetchAllCalls(id: string, maxCalls: number, days: number): Promise<Call[]> {
   const pageSize = 1000
+  const startTime = new Date(Date.now() - days * 86_400_000).toISOString()
   const all: Call[] = []
   let offset = 0
   while (offset < maxCalls) {
-    const res = await getTalkgroupCalls(id, { limit: pageSize, offset })
+    const res = await getTalkgroupCalls(id, { limit: pageSize, offset, start_time: startTime })
     const batch = res.calls || []
     all.push(...batch)
     if (batch.length < pageSize || all.length >= res.total) break
@@ -156,7 +158,7 @@ export default function TalkgroupAnalytics() {
 
     Promise.all([
       getTalkgroup(id),
-      fetchAllCalls(id, 5000),
+      fetchAllCalls(id, 10000, 30),
       getTalkgroupUnits(id, { limit: 100 }),
       getUnitAffiliations({ tgid: tgidStr, status: 'affiliated', limit: 200 }).catch(() => ({ affiliations: [] as Affiliation[], total: 0, limit: 200, offset: 0, summary: { talkgroup_counts: {} } })),
       transcriptionFetch,
@@ -216,7 +218,7 @@ export default function TalkgroupAnalytics() {
   // ─── Derived data ───────────────────────────────────────────────────────
 
   // 7-day daily buckets
-  const daily = useMemo(() => bucketCallsByDay(calls, 7), [calls])
+  const daily = useMemo(() => bucketCallsByDay(calls, 30), [calls])
   const maxDaily = Math.max(...daily.buckets, 1)
 
   // 24h hourly detail
@@ -331,7 +333,7 @@ export default function TalkgroupAnalytics() {
       <div className="rounded-lg border px-4 py-3 space-y-3">
         {/* 7-day daily view */}
         <div>
-          <h2 className="text-sm font-semibold mb-2">Call Activity (7 days) <span className="text-xs text-muted-foreground font-normal">{calls.length.toLocaleString()} calls loaded</span></h2>
+          <h2 className="text-sm font-semibold mb-2">Call Activity (30 days) <span className="text-xs text-muted-foreground font-normal">{calls.length.toLocaleString()} calls loaded</span></h2>
           <div className="flex items-end gap-1 h-16">
             {daily.buckets.map((count, i) => (
               <div
@@ -348,7 +350,9 @@ export default function TalkgroupAnalytics() {
           </div>
           <div className="flex mt-1">
             {daily.labels.map((l, i) => (
-              <span key={i} className="flex-1 text-center text-[10px] text-muted-foreground/60 tabular-nums">{l}</span>
+              <span key={i} className="flex-1 text-center text-[9px] text-muted-foreground/50 tabular-nums">
+                {i % 7 === 0 || i === daily.labels.length - 1 ? l : ''}
+              </span>
             ))}
           </div>
         </div>
