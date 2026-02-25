@@ -8,6 +8,7 @@ import { useRealtimeStore } from '@/stores/useRealtimeStore'
 import { useFilterStore } from '@/stores/useFilterStore'
 import { useAudioStore } from '@/stores/useAudioStore'
 import { useTalkgroupColors, ColorRule, RuleMode } from '@/stores/useTalkgroupColors'
+import { useSignalThresholds, type SignalThresholds } from '@/stores/useSignalThresholds'
 import { getSSEManager } from '@/api/eventsource'
 import { Plus, Trash2, RotateCcw } from 'lucide-react'
 import { ColorPicker, getHexFromTailwind } from '@/components/ui/color-picker'
@@ -23,6 +24,11 @@ export default function Settings() {
   const setAutoPlay = useAudioStore((s) => s.setAutoPlay)
   const volume = useAudioStore((s) => s.volume)
   const setVolume = useAudioStore((s) => s.setVolume)
+
+  // Signal quality thresholds
+  const signalThresholds = useSignalThresholds()
+  const setThreshold = useSignalThresholds((s) => s.setThreshold)
+  const resetSignalThresholds = useSignalThresholds((s) => s.resetToDefaults)
 
   // Talkgroup color rules
   const colorRules = useTalkgroupColors((s) => s.rules)
@@ -160,6 +166,58 @@ export default function Settings() {
               {showEncrypted ? 'Shown' : 'Hidden'}
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Signal Quality Thresholds */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Signal Quality Thresholds</CardTitle>
+              <CardDescription>
+                Set thresholds for color-coding signal quality on call detail pages
+              </CardDescription>
+            </div>
+            <Button variant="outline" size="sm" onClick={resetSignalThresholds} className="gap-1">
+              <RotateCcw className="h-3 w-3" />
+              Reset
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <div className="grid grid-cols-[1fr_auto_auto] gap-2 text-sm items-center">
+              <span />
+              <span className="text-center text-xs text-muted-foreground w-24">Good <span className="text-green-400">(green)</span></span>
+              <span className="text-center text-xs text-muted-foreground w-24">Poor <span className="text-red-400">(red)</span></span>
+            </div>
+            {([
+              { label: 'Signal (dB)', goodKey: 'signalGood', poorKey: 'signalPoor' },
+              { label: 'Noise (dB)', goodKey: 'noiseGood', poorKey: 'noisePoor' },
+              { label: 'Errors', goodKey: 'errorsGood', poorKey: 'errorsPoor' },
+              { label: 'Spikes', goodKey: 'spikesGood', poorKey: 'spikesPoor' },
+            ] as { label: string; goodKey: keyof SignalThresholds; poorKey: keyof SignalThresholds }[]).map(({ label, goodKey, poorKey }) => (
+              <div key={goodKey} className="grid grid-cols-[1fr_auto_auto] gap-2 items-center">
+                <span className="text-sm font-medium">{label}</span>
+                <Input
+                  type="number"
+                  value={signalThresholds[goodKey]}
+                  onChange={(e) => setThreshold(goodKey, Number(e.target.value))}
+                  className="w-24 h-8 text-center font-mono"
+                />
+                <Input
+                  type="number"
+                  value={signalThresholds[poorKey]}
+                  onChange={(e) => setThreshold(poorKey, Number(e.target.value))}
+                  className="w-24 h-8 text-center font-mono"
+                />
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Signal: higher is better. Noise/Errors/Spikes: lower is better. Values between thresholds show as <span className="text-yellow-400">yellow</span>.
+          </p>
         </CardContent>
       </Card>
 
