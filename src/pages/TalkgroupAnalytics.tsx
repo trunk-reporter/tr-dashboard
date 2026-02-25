@@ -76,12 +76,12 @@ function bucketCallsByDay(calls: Call[], days: number): { buckets: number[]; lab
   return { buckets, labels }
 }
 
-// Paginate call fetches — up to maxCalls total
-async function fetchAllCalls(id: string, maxCalls: number): Promise<Call[]> {
+// Paginate all calls for the talkgroup — fetches everything available
+async function fetchAllCalls(id: string): Promise<Call[]> {
   const pageSize = 1000
   const all: Call[] = []
   let offset = 0
-  while (offset < maxCalls) {
+  for (;;) {
     const res = await getTalkgroupCalls(id, { limit: pageSize, offset })
     const batch = res.calls || []
     all.push(...batch)
@@ -156,7 +156,7 @@ export default function TalkgroupAnalytics() {
 
     Promise.all([
       getTalkgroup(id),
-      fetchAllCalls(id, 10000),
+      fetchAllCalls(id),
       getTalkgroupUnits(id, { limit: 100 }),
       getUnitAffiliations({ tgid: tgidStr, status: 'affiliated', limit: 200 }).catch(() => ({ affiliations: [] as Affiliation[], total: 0, limit: 200, offset: 0, summary: { talkgroup_counts: {} } })),
       transcriptionFetch,
