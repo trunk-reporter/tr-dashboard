@@ -2,16 +2,13 @@ import { NavLink, Link } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
-import { Badge } from '@/components/ui/badge'
 import { useRealtimeStore } from '@/stores/useRealtimeStore'
 import { useFilterStore } from '@/stores/useFilterStore'
 import { useMonitorStore } from '@/stores/useMonitorStore'
-import { useTalkgroupCache, parseTalkgroupKey } from '@/stores/useTalkgroupCache'
 import {
   formatDecodeRate,
-  getUnitDisplayName,
-  formatRelativeTime,
-  formatDuration,
+  parseTalkgroupKey,
+  getTalkgroupDisplayName,
 } from '@/lib/utils'
 
 interface SidebarProps {
@@ -129,47 +126,20 @@ const navItems = [
 
 export function Sidebar({ collapsed }: SidebarProps) {
   const decodeRates = useRealtimeStore((s) => s.decodeRates)
-  const recentCalls = useRealtimeStore((s) => s.recentCalls)
+  const activeCalls = useRealtimeStore((s) => s.activeCalls)
   const favoriteTalkgroups = useFilterStore((s) => s.favoriteTalkgroups)
   const toggleFavoriteTalkgroup = useFilterStore((s) => s.toggleFavoriteTalkgroup)
   const monitoredTalkgroups = useMonitorStore((s) => s.monitoredTalkgroups)
   const removeTalkgroupMonitor = useMonitorStore((s) => s.removeTalkgroupMonitor)
   const isMonitoring = useMonitorStore((s) => s.isMonitoring)
-  const tgCache = useTalkgroupCache((s) => s.cache)
 
-  const recentTalkgroupActivity = recentCalls.slice(0, 10)
+  // Recent calls from active calls for talkgroup activity
+  const recentActivity = Array.from(activeCalls.values()).slice(0, 10)
 
-  // Helper to get talkgroup link using composite key format
-  const getTalkgroupLink = (sysid: string | undefined, tgid: number): string => {
-    if (sysid) {
-      return `/talkgroups/${sysid}:${tgid}`
-    }
-    // Fallback to search if no sysid
-    return `/talkgroups?search=${tgid}`
-  }
-
-  // Helper to get talkgroup display name from cache or fallback
-  const getTgDisplayName = (sysid: string | undefined, tgid: number, alphaTagFromCall?: string): string => {
-    // First try the alpha tag from the call data
-    if (alphaTagFromCall) return alphaTagFromCall
-    // Then try the cache with composite key
-    if (sysid) {
-      const key = `${sysid}:${tgid}`
-      const info = tgCache.get(key)
-      if (info?.alphaTag) return info.alphaTag
-    }
-    // Fallback to TG ID
-    return `TG ${tgid}`
-  }
-
-  // Helper to get display name from composite key string
+  // Display name from composite key
   const getTgDisplayNameFromKey = (key: string): string => {
     const parsed = parseTalkgroupKey(key)
-    if (parsed) {
-      const info = tgCache.get(key)
-      if (info?.alphaTag) return info.alphaTag
-      return `TG ${parsed.tgid}`
-    }
+    if (parsed) return `TG ${parsed.tgid}`
     return key
   }
 
@@ -234,24 +204,24 @@ export function Sidebar({ collapsed }: SidebarProps) {
             <div className="space-y-1">
               {Array.from(decodeRates.values()).map((rate) => (
                 <div
-                  key={rate.system}
+                  key={rate.system_id}
                   className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-accent"
                 >
                   <div className="flex items-center gap-2">
                     <span
                       className={cn(
                         'h-2 w-2 rounded-full',
-                        rate.decodeRate >= 90
+                        rate.decode_rate >= 0.9
                           ? 'bg-success'
-                          : rate.decodeRate >= 70
+                          : rate.decode_rate >= 0.7
                             ? 'bg-warning'
                             : 'bg-destructive'
                       )}
                     />
-                    <span className="capitalize">{rate.system}</span>
+                    <span className="capitalize">{rate.system_name || `System ${rate.system_id}`}</span>
                   </div>
                   <span className="font-mono text-xs text-muted-foreground">
-                    {formatDecodeRate(rate.decodeRate)}
+                    {formatDecodeRate(rate.decode_rate)}
                   </span>
                 </div>
               ))}
@@ -284,7 +254,7 @@ export function Sidebar({ collapsed }: SidebarProps) {
                       {getTgDisplayNameFromKey(key)}
                     </Link>
                     <button
-                      onClick={() => toggleFavoriteTalkgroup(parsed.sysid, parsed.tgid)}
+                      onClick={() => toggleFavoriteTalkgroup(parsed.systemId, parsed.tgid)}
                       className="text-primary hover:text-primary/80 shrink-0"
                     >
                       <svg
@@ -342,7 +312,7 @@ export function Sidebar({ collapsed }: SidebarProps) {
                       </Link>
                     </div>
                     <button
-                      onClick={() => removeTalkgroupMonitor(parsed.sysid, parsed.tgid)}
+                      onClick={() => removeTalkgroupMonitor(parsed.systemId, parsed.tgid)}
                       className="text-muted-foreground hover:text-destructive shrink-0"
                       title="Stop monitoring"
                     >
@@ -372,50 +342,25 @@ export function Sidebar({ collapsed }: SidebarProps) {
 
         <div className="p-3">
           <h3 className="mb-2 px-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Talkgroup Activity
+            Active Calls
           </h3>
-          {recentTalkgroupActivity.length === 0 ? (
-            <p className="px-2 text-xs text-muted-foreground">No recent activity</p>
+          {recentActivity.length === 0 ? (
+            <p className="px-2 text-xs text-muted-foreground">No active calls</p>
           ) : (
             <div className="space-y-1">
-              {recentTalkgroupActivity.map((call) => (
+              {recentActivity.map((call) => (
                 <div
                   key={call.call_id}
                   className="rounded-md px-2 py-1.5 text-xs hover:bg-accent"
                 >
                   <div className="flex items-center justify-between">
                     <Link
-                      to={getTalkgroupLink(call.sysid, call.tgid)}
+                      to={`/talkgroups/${call.system_id}:${call.tgid}`}
                       className="font-medium text-foreground hover:text-primary hover:underline truncate max-w-[120px]"
-                      title={getTgDisplayName(call.sysid, call.tgid, call.tg_alpha_tag)}
+                      title={getTalkgroupDisplayName(call.tgid, call.tg_alpha_tag)}
                     >
-                      {getTgDisplayName(call.sysid, call.tgid, call.tg_alpha_tag)}
+                      {getTalkgroupDisplayName(call.tgid, call.tg_alpha_tag)}
                     </Link>
-                    <Badge variant="secondary" className="text-[10px] shrink-0">
-                      {formatDuration(call.duration)}
-                    </Badge>
-                  </div>
-                  {call.units && call.units.length > 0 && (
-                    <div className="mt-0.5 flex flex-wrap gap-1">
-                      {call.units.slice(0, 3).map((unit, ui) => (
-                        <Link
-                          key={ui}
-                          to={call.sysid ? `/units/${call.sysid}:${unit.unit_id}` : `/units?search=${unit.unit_id}`}
-                          className="text-muted-foreground hover:text-primary hover:underline"
-                          title={getUnitDisplayName(unit.unit_id, unit.unit_tag)}
-                        >
-                          {getUnitDisplayName(unit.unit_id, unit.unit_tag)}
-                        </Link>
-                      ))}
-                      {call.units.length > 3 && (
-                        <span className="text-muted-foreground">
-                          +{call.units.length - 3}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  <div className="mt-0.5 text-muted-foreground">
-                    {formatRelativeTime(call.start_time)}
                   </div>
                 </div>
               ))}

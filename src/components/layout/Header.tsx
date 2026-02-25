@@ -32,7 +32,7 @@ export function Header({ onToggleSidebar, onOpenCommand }: HeaderProps) {
   // Fetch API version on mount
   useEffect(() => {
     getHealth()
-      .then((health) => setApiVersion(health.version))
+      .then((health) => setApiVersion(health.version ?? null))
       .catch(() => setApiVersion(null))
   }, [])
 
@@ -40,7 +40,7 @@ export function Header({ onToggleSidebar, onOpenCommand }: HeaderProps) {
   const monitoredCount = monitoredTalkgroups.size
   const avgDecodeRate =
     decodeRates.size > 0
-      ? Array.from(decodeRates.values()).reduce((acc, r) => acc + r.decodeRate, 0) /
+      ? Array.from(decodeRates.values()).reduce((acc, r) => acc + r.decode_rate, 0) /
         decodeRates.size
       : null
 
