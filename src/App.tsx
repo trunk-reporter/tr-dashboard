@@ -12,6 +12,7 @@ import Affiliations from '@/pages/Affiliations'
 import TalkgroupDirectory from '@/pages/TalkgroupDirectory'
 import Admin from '@/pages/Admin'
 import Transcriptions from '@/pages/Transcriptions'
+import TalkgroupAnalytics from '@/pages/TalkgroupAnalytics'
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
         <Route path="/transcriptions" element={<Transcriptions />} />
         <Route path="/talkgroups" element={<Talkgroups />} />
         <Route path="/talkgroups/:id" element={<TalkgroupDetail />} />
+        <Route path="/talkgroups/:id/analytics" element={<TalkgroupAnalytics />} />
         <Route path="/units" element={<Units />} />
         <Route path="/units/:id" element={<UnitDetail />} />
         <Route path="/affiliations" element={<Affiliations />} />
