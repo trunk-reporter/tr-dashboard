@@ -487,9 +487,11 @@ export interface DecodeRate {
   time?: string
   system_id: number
   system_name?: string
+  sys_name?: string
   sysid?: string
   decode_rate: number
   total_messages?: number
+  control_channel?: number
 }
 
 export interface DecodeRatesResponse {

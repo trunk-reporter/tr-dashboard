@@ -24,9 +24,9 @@
 
   /* Semantic colors from Tailwind palette */
   --color-success: #22c55e; /* green-500 */
-  --color-warning: #f59e0b; /* amber-500 */
+  --color-warning: #f97316; /* orange-500 — distinct from primary amber */
   --color-info: #3b82f6; /* blue-500 */
-  --color-live: #ef4444; /* red-500 */
+  --color-live: #f43f5e; /* rose-500 — distinct from destructive red */
 
   --radius-sm: 0.25rem;
   --radius-md: 0.375rem;
@@ -45,6 +45,152 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: 'rlig' 1, 'calt' 1;
+  }
+}
+
+@layer components {
+  /* Subtle top-highlight gradient + refined shadow for all cards */
+  .card-glass {
+    background-image: linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.04) 0%,
+      transparent 40%
+    );
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.3),
+      0 4px 12px rgba(0, 0, 0, 0.15),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  /* More prominent diagonal gradient for stats bar */
+  .stat-bar-glass {
+    background-color: var(--color-card);
+    background-image: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.05) 0%,
+      transparent 50%,
+      rgba(0, 0, 0, 0.05) 100%
+    );
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.3),
+      0 6px 16px rgba(0, 0, 0, 0.15),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  /* Soft rose outer glow for recording recorder cards */
+  .card-recording-glow {
+    box-shadow:
+      0 0 12px rgba(244, 63, 94, 0.15),
+      0 0 4px rgba(244, 63, 94, 0.1),
+      inset 0 1px 0 rgba(244, 63, 94, 0.06);
+  }
+
+  /* Inset shadow for idle/available/stopped recorders */
+  .card-recessed {
+    box-shadow:
+      inset 0 1px 3px rgba(0, 0, 0, 0.25),
+      inset 0 0 1px rgba(0, 0, 0, 0.15);
+  }
+
+  /* Hover lift + shadow expansion for call cards */
+  .card-call-hover {
+    transition: transform 200ms ease-in-out, box-shadow 200ms ease-in-out;
+  }
+  .card-call-hover:hover {
+    transform: translateY(-1px);
+    box-shadow:
+      0 4px 16px rgba(0, 0, 0, 0.25),
+      0 1px 4px rgba(0, 0, 0, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  /* Soft amber glow for currently-playing call card */
+  .card-playing-glow {
+    box-shadow:
+      0 0 12px rgba(245, 158, 11, 0.15),
+      0 0 4px rgba(245, 158, 11, 0.1),
+      inset 0 1px 0 rgba(245, 158, 11, 0.06);
+  }
+
+  /* Entrance animation for new call cards */
+  @keyframes card-fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .card-fade-in {
+    animation: card-fade-in 300ms ease-out both;
+    animation-delay: calc(var(--i, 0) * 40ms);
+  }
+
+  /* Subtle amber glow for active sidebar nav items */
+  .nav-active-glow {
+    box-shadow:
+      0 0 8px rgba(245, 158, 11, 0.2),
+      0 0 2px rgba(245, 158, 11, 0.15);
+  }
+
+  /* Top-edge amber glow for active audio player */
+  .player-active {
+    border-top: 2px solid rgba(245, 158, 11, 0.5);
+    box-shadow:
+      0 -4px 12px rgba(245, 158, 11, 0.12),
+      inset 0 1px 0 rgba(245, 158, 11, 0.08);
+  }
+
+  /* Equalizer bar animations for now-playing indicator */
+  @keyframes player-bar1 {
+    0%, 100% { height: 30%; }
+    50% { height: 100%; }
+  }
+  @keyframes player-bar2 {
+    0%, 100% { height: 60%; }
+    50% { height: 30%; }
+  }
+  @keyframes player-bar3 {
+    0%, 100% { height: 50%; }
+    50% { height: 80%; }
+  }
+
+  /* Loading skeleton shimmer */
+  @keyframes skeleton-shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  .skeleton-shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.03) 25%,
+      rgba(255, 255, 255, 0.08) 50%,
+      rgba(255, 255, 255, 0.03) 75%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  }
+
+  /* Section header with left amber accent */
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--color-muted-foreground);
+  }
+  .section-header::before {
+    content: '';
+    display: block;
+    width: 2px;
+    height: 1em;
+    background-color: var(--color-primary);
+    border-radius: 1px;
   }
 }
 

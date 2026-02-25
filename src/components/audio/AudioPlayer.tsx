@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { TransmissionTimeline, TransmissionLegend } from './TransmissionTimeline'
 import { useAudioStore, selectIsPlaying, selectIsBlocked, selectRetryCount } from '@/stores/useAudioStore'
-import { formatDuration, getTalkgroupDisplayName } from '@/lib/utils'
+import { cn, formatDuration, getTalkgroupDisplayName } from '@/lib/utils'
 import { KEYBOARD_SHORTCUTS, AUDIO } from '@/lib/constants'
 
 export function AudioPlayer() {
@@ -313,9 +313,14 @@ export function AudioPlayer() {
   // Idle state - no call loaded
   if (!currentCall) {
     return (
-      <div className="border-t border-border bg-card px-4 py-3">
-        <div className="flex items-center justify-center text-sm text-muted-foreground">
-          No audio playing. Select a call to begin playback.
+      <div className="border-t border-border bg-card card-glass px-4 py-3">
+        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground/60">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-50">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+          </svg>
+          Select a call to begin playback
         </div>
       </div>
     )
@@ -324,7 +329,7 @@ export function AudioPlayer() {
   // Blocked state - awaiting user gesture
   if (isBlocked) {
     return (
-      <div className="border-t border-border bg-card px-4 py-3">
+      <div className="border-t border-border bg-card card-glass px-4 py-3">
         <audio
           ref={audioRef}
           onCanPlay={handleCanPlay}
@@ -335,23 +340,23 @@ export function AudioPlayer() {
           onPause={handlePause}
         />
         <div className="flex items-center justify-center gap-4">
-          <span className="text-sm text-muted-foreground">
-            Browser blocked autoplay.
-          </span>
-          <Button onClick={handleUnlockClick} variant="default" size="sm">
-            Click to Enable Audio
+          <Button onClick={handleUnlockClick} variant="default" size="sm" className="gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3" />
+            </svg>
+            Enable Audio
           </Button>
           <span className="text-sm text-muted-foreground">
             <Link
               to={`/talkgroups/${currentCall.systemId}:${currentCall.tgid}`}
-              className="hover:underline"
+              className="font-medium text-foreground hover:underline"
             >
               {getTalkgroupDisplayName(currentCall.tgid, currentCall.tgAlphaTag)}
             </Link>
-            {' '}is ready to play
+            {' '}is ready
           </span>
           {queue.length > 0 && (
-            <span className="text-xs text-muted-foreground">
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary font-medium">
               +{queue.length} queued
             </span>
           )}
@@ -360,9 +365,14 @@ export function AudioPlayer() {
     )
   }
 
+  const isActive = playbackState === 'playing' || playbackState === 'paused'
+
   // Normal player UI
   return (
-    <div className="border-t border-border bg-card px-4 py-3">
+    <div className={cn(
+      "border-t border-border bg-card card-glass px-4 py-2.5 transition-all duration-300",
+      isActive && "player-active"
+    )}>
       <audio
         ref={audioRef}
         onCanPlay={handleCanPlay}
@@ -373,187 +383,140 @@ export function AudioPlayer() {
         onPause={handlePause}
       />
 
-      <div className="flex items-center gap-4">
-        {/* Playback controls */}
-        <div className="flex items-center gap-1">
+      <div className="flex items-center gap-3">
+        {/* Now playing indicator + call info — left side */}
+        <div className="flex items-center gap-3 min-w-[180px]">
+          {/* Play/pause — prominent center button */}
           <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              playAttemptedRef.current = false
-              skipPrevious()
-            }}
-            title="Previous (K)"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <polygon points="19 20 9 12 19 4 19 20" />
-              <line x1="5" x2="5" y1="19" y2="5" />
-            </svg>
-          </Button>
-
-          <Button
-            variant="ghost"
+            variant={isPlaying ? "default" : "ghost"}
             size="icon"
             onClick={handlePlayPause}
             title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
-            className="h-10 w-10"
+            className={cn(
+              "h-10 w-10 rounded-full shrink-0 transition-all",
+              isPlaying && "shadow-[0_0_12px_rgba(245,158,11,0.3)]"
+            )}
           >
             {isPlaying ? (
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="22"
-                height="22"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-              >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                 <rect x="6" y="4" width="4" height="16" />
                 <rect x="14" y="4" width="4" height="16" />
               </svg>
             ) : (
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="22"
-                height="22"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-              >
-                <polygon points="5 3 19 12 5 21 5 3" />
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="6 3 20 12 6 21 6 3" />
               </svg>
             )}
           </Button>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              playAttemptedRef.current = false
-              skipNext()
-            }}
-            title="Next (J)"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <polygon points="5 4 15 12 5 20 5 4" />
-              <line x1="19" x2="19" y1="5" y2="19" />
-            </svg>
-          </Button>
-        </div>
-
-        {/* Progress and timeline */}
-        <div className="flex flex-1 flex-col gap-1">
-          <div className="flex items-center gap-3">
-            <span className="w-12 text-right font-mono text-xs text-muted-foreground">
-              {formatDuration(currentTime)}
-            </span>
-
-            <div className="relative flex-1 overflow-hidden">
-              <Slider
-                value={currentTime}
-                max={duration || 100}
-                step={0.1}
-                onChange={handleSeek}
-                className="cursor-pointer"
-              />
-              {transmissions && transmissions.length > 0 && (
-                <TransmissionTimeline
-                  transmissions={transmissions}
-                  unitTags={unitTags}
-                  duration={duration}
-                  currentTime={currentTime}
-                  onSeek={handleSeek}
-                />
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              {isPlaying && (
+                <span className="flex items-end gap-[2px] h-3">
+                  <span className="w-[3px] bg-primary rounded-full animate-[player-bar1_0.8s_ease-in-out_infinite]" />
+                  <span className="w-[3px] bg-primary rounded-full animate-[player-bar2_0.8s_ease-in-out_0.2s_infinite]" />
+                  <span className="w-[3px] bg-primary rounded-full animate-[player-bar3_0.8s_ease-in-out_0.4s_infinite]" />
+                </span>
               )}
+              <Link
+                to={`/talkgroups/${currentCall.systemId}:${currentCall.tgid}`}
+                className="font-medium text-sm truncate hover:underline"
+              >
+                {getTalkgroupDisplayName(currentCall.tgid, currentCall.tgAlphaTag)}
+              </Link>
             </div>
-
-            <span className="w-12 font-mono text-xs text-muted-foreground">
-              {formatDuration(duration)}
+            <span className="text-[11px] text-muted-foreground truncate block">
+              {currentCall.systemName || `System ${currentCall.systemId}`}
             </span>
           </div>
         </div>
 
-        {/* Call info */}
-        <div className="flex min-w-[160px] flex-col items-end">
-          <Link
-            to={`/talkgroups/${currentCall.systemId}:${currentCall.tgid}`}
-            className="font-medium hover:underline"
-          >
-            {getTalkgroupDisplayName(currentCall.tgid, currentCall.tgAlphaTag)}
-          </Link>
-          <span className="text-xs text-muted-foreground">
-            {currentCall.systemName || `System ${currentCall.systemId}`}
+        {/* Skip prev */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0"
+          onClick={() => {
+            playAttemptedRef.current = false
+            skipPrevious()
+          }}
+          title="Previous (K)"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="19 20 9 12 19 4 19 20" />
+            <line x1="5" x2="5" y1="19" y2="5" />
+          </svg>
+        </Button>
+
+        {/* Progress and timeline — takes remaining space */}
+        <div className="flex flex-1 items-center gap-2 min-w-0">
+          <span className="w-10 text-right font-mono text-[11px] text-muted-foreground tabular-nums shrink-0">
+            {formatDuration(currentTime)}
+          </span>
+
+          <div className="relative flex-1 overflow-hidden min-w-[80px]">
+            <Slider
+              value={currentTime}
+              max={duration || 100}
+              step={0.1}
+              onChange={handleSeek}
+              className="cursor-pointer"
+            />
+            {transmissions && transmissions.length > 0 && (
+              <TransmissionTimeline
+                transmissions={transmissions}
+                unitTags={unitTags}
+                duration={duration}
+                currentTime={currentTime}
+                onSeek={handleSeek}
+              />
+            )}
+          </div>
+
+          <span className="w-10 font-mono text-[11px] text-muted-foreground tabular-nums shrink-0">
+            {formatDuration(duration)}
           </span>
         </div>
 
+        {/* Skip next */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0"
+          onClick={() => {
+            playAttemptedRef.current = false
+            skipNext()
+          }}
+          title="Next (J)"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="5 4 15 12 5 20 5 4" />
+            <line x1="19" x2="19" y1="5" y2="19" />
+          </svg>
+        </Button>
+
         {/* Volume controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 shrink-0">
           <Button
             variant="ghost"
             size="icon"
+            className="h-8 w-8"
             onClick={toggleMute}
             title={muted ? 'Unmute (M)' : 'Mute (M)'}
           >
             {muted || volume === 0 ? (
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
                 <line x1="22" x2="16" y1="9" y2="15" />
                 <line x1="16" x2="22" y1="9" y2="15" />
               </svg>
             ) : volume < 0.5 ? (
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
                 <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
               </svg>
             ) : (
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
                 <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
                 <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
@@ -570,72 +533,67 @@ export function AudioPlayer() {
           />
         </div>
 
-        {/* Queue indicator */}
-        {queue.length > 0 && (
-          <div className="text-xs text-muted-foreground">{queue.length} in queue</div>
-        )}
+        {/* Queue + history — right side compact group */}
+        <div className="flex items-center gap-2 shrink-0">
+          {queue.length > 0 && (
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary font-medium tabular-nums">
+              {queue.length} queued
+            </span>
+          )}
 
-        {/* History button */}
-        {history.length > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowHistory(!showHistory)}
-            className="text-xs text-muted-foreground"
-            title="Play history"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="mr-1"
+          {history.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowHistory(!showHistory)}
+              className={cn(
+                "h-7 px-2 text-xs gap-1",
+                showHistory ? "text-primary" : "text-muted-foreground"
+              )}
+              title="Play history"
             >
-              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-              <path d="M3 3v5h5" />
-              <path d="M12 7v5l4 2" />
-            </svg>
-            {history.length}
-          </Button>
-        )}
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                <path d="M3 3v5h5" />
+                <path d="M12 7v5l4 2" />
+              </svg>
+              {history.length}
+            </Button>
+          )}
 
-        {/* Keyboard hints */}
-        <div className="hidden items-center gap-1 text-xs text-muted-foreground xl:flex">
-          <kbd className="rounded border bg-muted px-1.5 py-0.5">J</kbd>
-          <kbd className="rounded border bg-muted px-1.5 py-0.5">K</kbd>
-          <kbd className="rounded border bg-muted px-1.5 py-0.5">Space</kbd>
+          {/* Keyboard hints */}
+          <div className="hidden items-center gap-1 text-[10px] text-muted-foreground/50 xl:flex">
+            <kbd className="rounded border border-border/50 bg-muted/30 px-1 py-0.5 font-mono">Space</kbd>
+            <kbd className="rounded border border-border/50 bg-muted/30 px-1 py-0.5 font-mono">J</kbd>
+            <kbd className="rounded border border-border/50 bg-muted/30 px-1 py-0.5 font-mono">K</kbd>
+          </div>
         </div>
       </div>
 
       {/* Transmission legend - unit names below timeline */}
       {transmissions && transmissions.length > 0 && (
-        <div className="mt-1 ml-[136px]">
+        <div className="mt-1.5 flex items-center gap-4 pl-[196px]">
           <TransmissionLegend transmissions={transmissions} unitTags={unitTags} />
         </div>
       )}
 
       {/* History panel */}
       {showHistory && history.length > 0 && (
-        <div className="mt-2 border-t border-border pt-2">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-medium text-muted-foreground">Play History</span>
+        <div className="mt-2 border-t border-border/50 pt-2">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">History</span>
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setShowHistory(false)}
-              className="h-5 w-5 p-0"
+              className="h-5 w-5 p-0 text-muted-foreground/50 hover:text-muted-foreground"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M18 6 6 18M6 6l12 12" />
               </svg>
             </Button>
           </div>
-          <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
+          <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
             {history.map((call, index) => (
               <button
                 key={`${call.callId}-${index}`}
@@ -644,13 +602,13 @@ export function AudioPlayer() {
                   loadCall(call)
                   setShowHistory(false)
                 }}
-                className="flex items-center gap-1.5 rounded bg-muted/50 px-2 py-1 text-xs hover:bg-muted transition-colors"
+                className="flex items-center gap-1.5 rounded-full bg-muted/40 px-2.5 py-1 text-xs hover:bg-muted transition-colors"
                 title={`${call.tgAlphaTag || `TG ${call.tgid}`} - ${call.systemName || `System ${call.systemId}`}`}
               >
                 <span className="font-medium truncate max-w-[120px]">
                   {call.tgAlphaTag || `TG ${call.tgid}`}
                 </span>
-                <span className="text-muted-foreground">{formatDuration(call.duration)}</span>
+                <span className="text-muted-foreground/60 font-mono tabular-nums">{formatDuration(call.duration)}</span>
               </button>
             ))}
           </div>

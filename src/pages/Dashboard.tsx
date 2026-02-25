@@ -15,6 +15,7 @@ import { useTalkgroupColors } from '@/stores/useTalkgroupColors'
 import type { StatsResponse, Call, Recorder } from '@/api/types'
 import {
   formatDecodeRate,
+  normalizeDecodeRate,
   formatDuration,
   formatFrequency,
   formatRelativeTime,
@@ -24,15 +25,16 @@ import {
   cn,
 } from '@/lib/utils'
 import { REFRESH_INTERVALS } from '@/lib/constants'
+import { SkeletonCard } from '@/components/ui/skeleton'
 
 // Recorder state config - keyed by string rec_state
-const RECORDER_STATES: Record<string, { label: string; badgeClass: string; cardClass: string }> = {
-  available: { label: 'AVAILABLE', badgeClass: 'bg-indigo-800 text-indigo-300', cardClass: 'border-indigo-800/30 bg-indigo-950/20' },
-  recording: { label: 'RECORDING', badgeClass: 'bg-live text-white', cardClass: 'border-live/50 bg-red-950/40 shadow-sm shadow-live/30' },
-  idle: { label: 'IDLE', badgeClass: 'bg-amber-700 text-amber-200', cardClass: 'border-amber-700/40 bg-amber-950/20' },
-  stopped: { label: 'STOPPED', badgeClass: 'bg-red-900 text-red-300', cardClass: 'border-red-900/40 bg-red-950/20' },
+const RECORDER_STATES: Record<string, { label: string; badgeClass: string; cardClass: string; dotColor: string }> = {
+  available: { label: 'AVAILABLE', badgeClass: 'bg-indigo-800 text-indigo-300', cardClass: 'border-indigo-800/30 bg-indigo-950/20 card-recessed', dotColor: 'bg-indigo-500' },
+  recording: { label: 'RECORDING', badgeClass: 'bg-live text-white', cardClass: 'border-live/50 bg-red-950/40 card-recording-glow', dotColor: 'bg-live animate-pulse' },
+  idle: { label: 'IDLE', badgeClass: 'bg-amber-700 text-amber-200', cardClass: 'border-amber-700/40 bg-amber-950/20 card-recessed', dotColor: 'bg-amber-500' },
+  stopped: { label: 'STOPPED', badgeClass: 'bg-red-900 text-red-300', cardClass: 'border-red-900/40 bg-red-950/20 card-recessed', dotColor: 'bg-red-400' },
 }
-const DEFAULT_STATE = { label: 'UNKNOWN', badgeClass: 'bg-zinc-700 text-zinc-400', cardClass: 'border-zinc-700/30 bg-zinc-900/20' }
+const DEFAULT_STATE = { label: 'UNKNOWN', badgeClass: 'bg-zinc-700 text-zinc-400', cardClass: 'border-zinc-700/30 bg-zinc-900/20 card-recessed', dotColor: 'bg-zinc-500' }
 
 // Elapsed time display component
 function RecorderElapsed({ startTime }: { startTime: number }) {
@@ -69,6 +71,15 @@ export default function Dashboard() {
   const [filterTranscribed, setFilterTranscribed] = useState(false)
   const [filterEmergency, setFilterEmergency] = useState(false)
   const [filterLong, setFilterLong] = useState(false)
+
+  // Recorder grid collapse state (default collapsed, persisted to sessionStorage)
+  const [recordersExpanded, setRecordersExpanded] = useState(() => {
+    return sessionStorage.getItem('dashboard-recorders-expanded') === 'true'
+  })
+
+  useEffect(() => {
+    sessionStorage.setItem('dashboard-recorders-expanded', String(recordersExpanded))
+  }, [recordersExpanded])
 
   // Pause refresh when hovering over recent calls
   const isHoveringRef = useRef(false)
@@ -207,10 +218,10 @@ export default function Dashboard() {
 
   const systemsArray = Array.from(decodeRates.values())
   const avgDecodeRate = systemsArray.length > 0
-    ? systemsArray.reduce((acc, s) => acc + s.decode_rate, 0) / systemsArray.length
+    ? systemsArray.reduce((acc, s) => acc + normalizeDecodeRate(s.decode_rate), 0) / systemsArray.length
     : 0
 
-  const recordingCount = mergedRecorders.filter(r => r.rec_state === 'recording').length
+  const recordingCount = mergedRecorders.filter(r => (r.rec_state ?? '').toLowerCase() === 'recording').length
   const usedCount = mergedRecorders.length
   const totalCount = apiRecorders.length
 
@@ -239,7 +250,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-4">
       {/* Compact stats bar */}
-      <div className="flex flex-wrap items-center gap-4 lg:gap-6 rounded-lg border bg-card px-4 py-3">
+      <div className="flex flex-wrap items-center gap-4 lg:gap-6 rounded-lg border stat-bar-glass px-4 py-3">
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">Recorders</span>
           <span className="text-xl font-bold tabular-nums">{recordingCount}</span>
@@ -289,100 +300,147 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Recorders grid */}
+      {/* Recorders grid — collapsible */}
       {mergedRecorders.length > 0 && (
         <div>
-          <div className="mb-2 flex items-center gap-2">
-            <h2 className="text-sm font-medium text-muted-foreground">RECORDERS</h2>
+          {/* Summary bar — always visible, clickable to toggle */}
+          <button
+            onClick={() => setRecordersExpanded((v) => !v)}
+            className="w-full flex items-center gap-3 rounded-lg border stat-bar-glass px-3 py-2 group cursor-pointer"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={cn(
+                "text-muted-foreground transition-transform duration-200 shrink-0",
+                recordersExpanded && "rotate-90"
+              )}
+            >
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+            <span className="section-header">RECORDERS</span>
             <span className="text-xs text-muted-foreground">
               {recordingCount} recording / {usedCount} used / {totalCount} available
             </span>
-          </div>
+            <div className="flex items-center gap-1 ml-2">
+              {mergedRecorders.map((rec) => {
+                const stateInfo = RECORDER_STATES[(rec.rec_state ?? 'available').toLowerCase()] || DEFAULT_STATE
+                return (
+                  <span
+                    key={rec.id}
+                    className={cn("h-2 w-2 rounded-full shrink-0", stateInfo.dotColor)}
+                    title={`REC ${rec.rec_num ?? 0}: ${stateInfo.label}`}
+                  />
+                )
+              })}
+            </div>
+            <span className="ml-auto text-xs text-muted-foreground/0 group-hover:text-muted-foreground/60 transition-colors">
+              {recordersExpanded ? 'collapse' : 'expand'}
+            </span>
+          </button>
+
+          {/* Animated expandable grid */}
           <div
-            className="grid gap-1.5"
-            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}
+            className={cn(
+              "grid transition-all duration-300 ease-in-out",
+              recordersExpanded ? "grid-rows-[1fr] opacity-100 mt-2" : "grid-rows-[0fr] opacity-0"
+            )}
           >
-            {mergedRecorders.map((rec) => {
-              const stateInfo = RECORDER_STATES[rec.rec_state ?? 'available'] || DEFAULT_STATE
-              const recStartTime = recordingStartMap.get(rec.id)
-              const lastDuration = lastCallDurationMap.get(rec.id)
+            <div className="overflow-hidden">
+              <div
+                className="grid gap-1.5"
+                style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}
+              >
+                {mergedRecorders.map((rec) => {
+                  const stateInfo = RECORDER_STATES[(rec.rec_state ?? 'available').toLowerCase()] || DEFAULT_STATE
+                  const recStartTime = recordingStartMap.get(rec.id)
+                  const lastDuration = lastCallDurationMap.get(rec.id)
 
-              // Get color for talkgroup
-              const tgColor = rec.tgid
-                ? getCachedColor(0, rec.tgid, {
-                    alpha_tag: rec.tg_alpha_tag ?? undefined,
-                    tgid: rec.tgid,
-                  })
-                : null
+                  // Get color for talkgroup
+                  const tgColor = rec.tgid
+                    ? getCachedColor(0, rec.tgid, {
+                        alpha_tag: rec.tg_alpha_tag ?? undefined,
+                        tgid: rec.tgid,
+                      })
+                    : null
 
-              return (
-                <div
-                  key={rec.id}
-                  className={cn(
-                    "rounded-lg border p-2.5 transition-all min-h-[100px] flex flex-col",
-                    stateInfo.cardClass
-                  )}
-                >
-                  {/* Header: recorder info + state badge */}
-                  <div className="flex items-start justify-between gap-1">
-                    <span className="text-[10px] font-mono text-muted-foreground">
-                      SRC {rec.src_num ?? 0} / REC {rec.rec_num ?? 0}
-                    </span>
-                    <Badge className={cn("text-[10px] px-1.5 py-0 h-5 font-bold shrink-0", stateInfo.badgeClass)}>
-                      {stateInfo.label}
-                    </Badge>
-                  </div>
-
-                  {/* Frequency + recording time */}
-                  <div className="flex items-center justify-between text-xs font-mono">
-                    <span className="text-muted-foreground">
-                      {rec.freq ? formatFrequency(rec.freq) : '—'}
-                    </span>
-                    {recStartTime && (
-                      <span className="text-live font-medium">
-                        <RecorderElapsed startTime={recStartTime} />
-                      </span>
-                    )}
-                  </div>
-
-                  {/* TG/Unit context */}
-                  <div className="border-t border-border/30 pt-1 mt-0.5 space-y-0.5 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      {rec.tgid ? (
-                        <span
-                          className={cn("truncate text-sm", !tgColor && "text-sky-400")}
-                          style={tgColor ? { color: tgColor } : undefined}
-                          title={rec.tg_alpha_tag || `TG ${rec.tgid}`}
-                        >
-                          {rec.tg_alpha_tag || `TG ${rec.tgid}`}
-                        </span>
-                      ) : (
-                        <span className="text-sm text-muted-foreground/50">—</span>
+                  return (
+                    <div
+                      key={rec.id}
+                      className={cn(
+                        "rounded-lg border p-2.5 transition-all min-h-[100px] flex flex-col",
+                        stateInfo.cardClass
                       )}
-                      {!recStartTime && lastDuration !== undefined && (
-                        <span className="text-[11px] font-mono text-muted-foreground shrink-0">
-                          {formatDuration(lastDuration)}
+                    >
+                      {/* Header: recorder info + state badge */}
+                      <div className="flex items-start justify-between gap-1">
+                        <span className="text-[10px] font-mono text-muted-foreground">
+                          SRC {rec.src_num ?? 0} / REC {rec.rec_num ?? 0}
                         </span>
-                      )}
-                    </div>
-                    <div className="truncate text-sm text-amber-400" title={rec.unit_alpha_tag || (rec.unit_id ? `Unit ${rec.unit_id}` : '')}>
-                      {rec.unit_alpha_tag || (rec.unit_id ? `Unit ${rec.unit_id}` : <span className="text-muted-foreground/50">—</span>)}
-                    </div>
-                  </div>
+                        <Badge className={cn("text-[10px] px-1.5 py-0 h-5 font-bold shrink-0", stateInfo.badgeClass)}>
+                          {stateInfo.label}
+                        </Badge>
+                      </div>
 
-                  {/* Footer */}
-                  <div className="flex items-center justify-between mt-1 pt-1 border-t border-border/20">
-                    <span className="text-[10px] font-mono text-muted-foreground/70">
-                      {rec.count ?? 0} calls
-                      {(rec.duration ?? 0) > 0 && ` • ${((rec.duration ?? 0) / 60).toFixed(1)}m`}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground/50 uppercase">
-                      {rec.type ?? 'P25'}
-                    </span>
-                  </div>
-                </div>
-              )
-            })}
+                      {/* Frequency + recording time */}
+                      <div className="flex items-center justify-between text-xs font-mono">
+                        <span className="text-muted-foreground">
+                          {rec.freq ? formatFrequency(rec.freq) : '—'}
+                        </span>
+                        {recStartTime && (
+                          <span className="text-live font-medium">
+                            <RecorderElapsed startTime={recStartTime} />
+                          </span>
+                        )}
+                      </div>
+
+                      {/* TG/Unit context */}
+                      <div className="border-t border-border/30 pt-1 mt-0.5 space-y-0.5 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          {rec.tgid ? (
+                            <span
+                              className={cn("truncate text-sm", !tgColor && "text-sky-400")}
+                              style={tgColor ? { color: tgColor } : undefined}
+                              title={rec.tg_alpha_tag || `TG ${rec.tgid}`}
+                            >
+                              {rec.tg_alpha_tag || `TG ${rec.tgid}`}
+                            </span>
+                          ) : (
+                            <span className="text-sm text-muted-foreground/50">—</span>
+                          )}
+                          {!recStartTime && lastDuration !== undefined && (
+                            <span className="text-[11px] font-mono text-muted-foreground shrink-0">
+                              {formatDuration(lastDuration)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="truncate text-sm text-amber-400" title={rec.unit_alpha_tag || (rec.unit_id ? `Unit ${rec.unit_id}` : '')}>
+                          {rec.unit_alpha_tag || (rec.unit_id ? `Unit ${rec.unit_id}` : <span className="text-muted-foreground/50">—</span>)}
+                        </div>
+                      </div>
+
+                      {/* Footer */}
+                      <div className="flex items-center justify-between mt-1 pt-1 border-t border-border/20">
+                        <span className="text-[10px] font-mono text-muted-foreground/70">
+                          {rec.count ?? 0} calls
+                          {(rec.duration ?? 0) > 0 && ` • ${((rec.duration ?? 0) / 60).toFixed(1)}m`}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground/50 uppercase">
+                          {rec.type ?? 'P25'}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -392,31 +450,36 @@ export default function Dashboard() {
         <div className="flex flex-wrap gap-2">
           {systemsArray.map((rate) => (
             <div
-              key={rate.system_id}
-              className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2"
+              key={rate.sys_name || rate.system_id}
+              className="flex items-center gap-3 rounded-lg border bg-card card-glass px-3 py-2"
             >
               <div>
                 <div className="font-medium capitalize text-sm">
-                  {rate.system_name || `System ${rate.system_id}`}
+                  {rate.sys_name || rate.system_name || `System ${rate.system_id}`}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-16 h-1.5 rounded-full bg-secondary overflow-hidden">
-                  <div
-                    className={cn(
-                      "h-full transition-all",
-                      rate.decode_rate >= 0.9 ? 'bg-success' : rate.decode_rate >= 0.7 ? 'bg-warning' : 'bg-destructive'
-                    )}
-                    style={{ width: `${rate.decode_rate * 100}%` }}
-                  />
-                </div>
-                <span className={cn(
-                  "text-sm font-bold tabular-nums w-12",
-                  rate.decode_rate >= 0.9 ? 'text-success' : rate.decode_rate >= 0.7 ? 'text-warning' : 'text-destructive'
-                )}>
-                  {formatDecodeRate(rate.decode_rate)}
-                </span>
-              </div>
+              {(() => {
+                const norm = normalizeDecodeRate(rate.decode_rate)
+                return (
+                  <div className="flex items-center gap-2">
+                    <div className="w-16 h-1.5 rounded-full bg-secondary overflow-hidden">
+                      <div
+                        className={cn(
+                          "h-full transition-all",
+                          norm >= 0.9 ? 'bg-success' : norm >= 0.7 ? 'bg-warning' : 'bg-destructive'
+                        )}
+                        style={{ width: `${norm * 100}%` }}
+                      />
+                    </div>
+                    <span className={cn(
+                      "text-sm font-bold tabular-nums w-12",
+                      norm >= 0.9 ? 'text-success' : norm >= 0.7 ? 'text-warning' : 'text-destructive'
+                    )}>
+                      {formatDecodeRate(rate.decode_rate)}
+                    </span>
+                  </div>
+                )
+              })()}
             </div>
           ))}
         </div>
@@ -425,7 +488,7 @@ export default function Dashboard() {
       {/* Recent calls */}
       <div>
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          <h2 className="text-sm font-medium text-muted-foreground">RECENT CALLS</h2>
+          <h2 className="section-header">RECENT CALLS</h2>
           <div className="flex flex-wrap items-center gap-1">
             <button
               onClick={() => setFilterFavorites(!filterFavorites)}
@@ -495,12 +558,20 @@ export default function Dashboard() {
         </div>
 
         {loading ? (
-          <div className="flex h-32 items-center justify-center text-muted-foreground">
-            Loading...
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <SkeletonCard key={i} />
+            ))}
           </div>
         ) : filteredCalls.length === 0 ? (
-          <div className="flex h-32 items-center justify-center text-muted-foreground">
-            No calls match filters
+          <div className="flex h-32 flex-col items-center justify-center gap-2 text-muted-foreground">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-40">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <line x1="12" x2="12" y1="19" y2="22" />
+            </svg>
+            <span>No calls match filters</span>
+            <span className="text-xs">Try adjusting your filter selection</span>
           </div>
         ) : (
           <div
@@ -508,7 +579,7 @@ export default function Dashboard() {
             onMouseEnter={() => { isHoveringRef.current = true }}
             onMouseLeave={() => { isHoveringRef.current = false }}
           >
-            {filteredCalls.map((call) => {
+            {filteredCalls.map((call, i) => {
               const isCurrentlyPlaying = currentCall?.callId === call.call_id
               const hasAudio = !!call.audio_url
 
@@ -528,9 +599,10 @@ export default function Dashboard() {
                   <HoverCardTrigger asChild>
                     <Card
                       className={cn(
-                        "transition-colors hover:bg-accent/50 cursor-pointer",
-                        isCurrentlyPlaying && "border-primary bg-primary/5"
+                        "card-call-hover card-fade-in cursor-pointer",
+                        isCurrentlyPlaying ? "border-primary bg-primary/5 card-playing-glow" : ""
                       )}
+                      style={{ '--i': i } as React.CSSProperties}
                     >
                       <CardContent className="p-3">
                         <div className="flex items-start gap-2">
@@ -592,7 +664,7 @@ export default function Dashboard() {
                       </CardContent>
                     </Card>
                   </HoverCardTrigger>
-                  <HoverCardContent side="top" className="w-96 bg-zinc-900 border-zinc-700 shadow-xl">
+                  <HoverCardContent side="top" className="w-96 bg-card card-glass border-border shadow-xl">
                     <DashboardHoverContent call={call} tgColor={tgColor} getEntry={getEntry} />
                   </HoverCardContent>
                 </HoverCard>

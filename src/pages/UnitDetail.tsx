@@ -73,7 +73,7 @@ export default function UnitDetail() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <div>
         <div className="mb-2">
@@ -81,63 +81,42 @@ export default function UnitDetail() {
             ← Back to units
           </Link>
         </div>
-        <h1 className="text-2xl font-bold">
-          {unit.alpha_tag || `Unit ${unit.unit_id}`}
-        </h1>
-        <p className="text-muted-foreground">
-          Radio Unit ID: {unit.unit_id}
-          {unit.system_name && ` • ${unit.system_name}`}
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold">
+            {unit.alpha_tag || `Unit ${unit.unit_id}`}
+          </h1>
+          <Badge variant="outline" className="font-mono">
+            {unit.unit_id}
+          </Badge>
+          {unit.alpha_tag_source && (
+            <Badge variant="secondary" className="text-xs">Source: {unit.alpha_tag_source}</Badge>
+          )}
+        </div>
+        <p className="text-muted-foreground text-sm">
+          {unit.system_name && `${unit.system_name} `}
+          <span className="font-mono text-muted-foreground/70">({unit.system_id})</span>
         </p>
       </div>
 
-      {/* Info badges */}
-      <div className="flex flex-wrap gap-2">
-        <Badge variant="outline" className="font-mono text-base">
-          {unit.unit_id}
-        </Badge>
-        {unit.alpha_tag_source && (
-          <Badge variant="secondary">Source: {unit.alpha_tag_source}</Badge>
-        )}
-      </div>
-
-      {/* Details card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div>
-              <p className="text-sm text-muted-foreground">First Seen</p>
-              <p>{formatDateTime(unit.first_seen || '')}</p>
+      {/* Details — compact inline */}
+      <div className="rounded-lg border px-4 py-3">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
+          {unit.last_event_type && (
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className={`text-xs ${getEventTypeColor(unit.last_event_type)}`}>
+                {getEventTypeLabel(unit.last_event_type)}
+              </Badge>
+              {unit.last_event_tg_tag && (
+                <span className="text-muted-foreground">{unit.last_event_tg_tag}</span>
+              )}
             </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Last Seen</p>
-              <p>{formatDateTime(unit.last_seen || '')}</p>
-              <p className="text-xs text-muted-foreground">
-                {formatRelativeTime(unit.last_seen || '')}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">System</p>
-              <p>
-                {unit.system_name && <span className="font-medium">{unit.system_name}</span>}
-                {unit.system_name && ' '}
-                <span className="font-mono text-muted-foreground">({unit.system_id})</span>
-              </p>
-            </div>
-            {unit.last_event_type && (
-              <div>
-                <p className="text-sm text-muted-foreground">Last Activity</p>
-                <p>{getEventTypeLabel(unit.last_event_type)}</p>
-                {unit.last_event_tg_tag && (
-                  <p className="text-xs text-muted-foreground">{unit.last_event_tg_tag}</p>
-                )}
-              </div>
-            )}
+          )}
+          <div className="ml-auto flex items-center gap-4 text-xs text-muted-foreground">
+            <span>First {formatDateTime(unit.first_seen || '')}</span>
+            <span>Last {formatRelativeTime(unit.last_seen || '')}</span>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Recent events */}

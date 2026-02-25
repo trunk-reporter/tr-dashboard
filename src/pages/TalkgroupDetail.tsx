@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { getTalkgroup, getTalkgroupCalls } from '@/api/client'
 import type { Talkgroup, Call } from '@/api/types'
+import { useTranscriptionCache } from '@/stores/useTranscriptionCache'
 import { useFilterStore } from '@/stores/useFilterStore'
 import { useMonitorStore } from '@/stores/useMonitorStore'
 import { useRealtimeStore } from '@/stores/useRealtimeStore'
@@ -31,6 +32,9 @@ export default function TalkgroupDetail() {
   void favoriteTalkgroups
   void monitoredTalkgroups
 
+  // Transcription cache
+  const fetchTranscription = useTranscriptionCache((s) => s.fetchTranscription)
+
   // Real-time updates
   const activeCalls = useRealtimeStore((s) => s.activeCalls)
 
@@ -50,7 +54,13 @@ export default function TalkgroupDetail() {
     Promise.all([getTalkgroup(id), getTalkgroupCalls(id, { limit: 100 })])
       .then(([tgRes, callsRes]) => {
         setTalkgroup(tgRes)
-        setCalls(callsRes.calls || [])
+        const fetched = callsRes.calls || []
+        setCalls(fetched)
+        for (const call of fetched) {
+          if (call.has_transcription) {
+            fetchTranscription(call.call_id)
+          }
+        }
       })
       .catch((err) => {
         console.error(err)
@@ -168,7 +178,7 @@ export default function TalkgroupDetail() {
   const monitored = isMonitored(talkgroup.system_id, talkgroup.tgid)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <div>
         <div className="mb-2">
@@ -250,69 +260,38 @@ export default function TalkgroupDetail() {
         {talkgroup.priority != null && talkgroup.priority > 0 && <Badge variant="warning">Priority {talkgroup.priority}</Badge>}
       </div>
 
-      {/* Stats cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Total Calls</p>
-            <p className="text-2xl font-bold">{talkgroup.call_count?.toLocaleString() ?? '—'}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Calls (24h)</p>
-            <p className="text-2xl font-bold">{talkgroup.calls_24h?.toLocaleString() ?? '—'}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Calls (1h)</p>
-            <p className="text-2xl font-bold">{talkgroup.calls_1h ?? '—'}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Active Units</p>
-            <p className="text-2xl font-bold">{talkgroup.unit_count?.toLocaleString() ?? '—'}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Details card */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 text-sm">
-            <div>
-              <p className="text-muted-foreground">First Seen</p>
-              <p>{formatDateTime(talkgroup.first_seen || '')}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Last Seen</p>
-              <p>{formatDateTime(talkgroup.last_seen || '')}</p>
-              <p className="text-xs text-muted-foreground">
-                {formatRelativeTime(talkgroup.last_seen || '')}
-              </p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">System</p>
-              <p>
-                {talkgroup.system_name && <span className="font-medium">{talkgroup.system_name}</span>}
-                {talkgroup.system_name && ' '}
-                <span className="font-mono text-muted-foreground">({talkgroup.system_id})</span>
-              </p>
-            </div>
-            {talkgroup.mode && talkgroup.mode !== 'D' && talkgroup.mode !== 'A' && talkgroup.mode !== 'E' && (
-              <div>
-                <p className="text-muted-foreground">Mode</p>
-                <p>{talkgroup.mode}</p>
-              </div>
-            )}
+      {/* Stats + Details — compact inline */}
+      <div className="rounded-lg border px-4 py-3 space-y-2">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
+          <div>
+            <span className="text-muted-foreground">Total </span>
+            <span className="font-bold tabular-nums">{talkgroup.call_count?.toLocaleString() ?? '—'}</span>
           </div>
-        </CardContent>
-      </Card>
+          <div>
+            <span className="text-muted-foreground">24h </span>
+            <span className="font-bold tabular-nums">{talkgroup.calls_24h?.toLocaleString() ?? '—'}</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground">1h </span>
+            <span className="font-bold tabular-nums">{talkgroup.calls_1h ?? '—'}</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground">Units </span>
+            <span className="font-bold tabular-nums">{talkgroup.unit_count?.toLocaleString() ?? '—'}</span>
+          </div>
+          <div className="ml-auto flex items-center gap-4 text-xs text-muted-foreground">
+            {talkgroup.system_name && (
+              <span>
+                <span className="font-medium text-foreground">{talkgroup.system_name}</span>
+                {' '}
+                <span className="font-mono">({talkgroup.system_id})</span>
+              </span>
+            )}
+            <span>First {formatDateTime(talkgroup.first_seen || '')}</span>
+            <span>Last {formatRelativeTime(talkgroup.last_seen || '')}</span>
+          </div>
+        </div>
+      </div>
 
       {/* Units list */}
       {unitStats.length > 0 && (

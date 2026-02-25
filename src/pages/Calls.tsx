@@ -1,13 +1,16 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { SkeletonRow } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { Pagination } from '@/components/ui/pagination'
 import { CallList } from '@/components/calls/CallList'
 import { getCalls, getTalkgroups, getSystems } from '@/api/client'
+import { useRealtimeStore } from '@/stores/useRealtimeStore'
+import { useTranscriptionCache } from '@/stores/useTranscriptionCache'
 import type { Call, Talkgroup, System } from '@/api/types'
 
-const DEFAULT_PAGE_SIZE = 25
+const DEFAULT_PAGE_SIZE = 50
 
 export default function Calls() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -34,6 +37,8 @@ export default function Calls() {
       .catch(console.error)
   }, [])
 
+  const fetchTranscription = useTranscriptionCache((s) => s.fetchTranscription)
+
   // Fetch calls
   useEffect(() => {
     setLoading(true)
@@ -46,12 +51,18 @@ export default function Calls() {
       offset,
     })
       .then((res) => {
-        setCalls(res.calls || [])
+        const fetched = res.calls || []
+        setCalls(fetched)
         setTotalCount(res.total)
+        for (const call of fetched) {
+          if (call.has_transcription) {
+            fetchTranscription(call.call_id)
+          }
+        }
       })
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [page, pageSize, systemFilter, talkgroupFilter, offset])
+  }, [page, pageSize, systemFilter, talkgroupFilter, offset, fetchTranscription])
 
   const updateFilter = useCallback(
     (key: string, value: string) => {
@@ -85,6 +96,17 @@ export default function Calls() {
     },
     [searchParams, setSearchParams]
   )
+
+  // On page 1, prepend active (in-progress) calls from the realtime store
+  const activeCalls = useRealtimeStore((s) => s.activeCalls)
+  const mergedCalls = useMemo(() => {
+    if (page !== 1) return calls
+    const apiCallIds = new Set(calls.map((c) => c.call_id))
+    const active = Array.from(activeCalls.values())
+      .filter((c) => !apiCallIds.has(c.call_id))
+      .sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime())
+    return [...active, ...calls]
+  }, [page, calls, activeCalls])
 
   return (
     <div className="space-y-6">
@@ -162,11 +184,13 @@ export default function Calls() {
       {/* Results */}
       <div>
         {loading ? (
-          <div className="flex h-64 items-center justify-center text-muted-foreground">
-            Loading...
+          <div className="space-y-1">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <SkeletonRow key={i} />
+            ))}
           </div>
         ) : (
-          <CallList calls={calls} emptyMessage="No calls match your filters" />
+          <CallList calls={mergedCalls} emptyMessage="No calls match your filters" />
         )}
       </div>
 

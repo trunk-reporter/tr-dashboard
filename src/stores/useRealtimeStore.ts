@@ -13,7 +13,7 @@ interface RealtimeState {
   connectionStatus: ConnectionStatus
   activeCalls: Map<number, Call>           // keyed by call_id
   unitEvents: UnitEvent[]                  // rolling buffer, max 200
-  decodeRates: Map<number, DecodeRate>     // keyed by system_id
+  decodeRates: Map<string, DecodeRate>      // keyed by sys_name (site short_name)
   recorders: Recorder[]
 
   // Actions
@@ -67,7 +67,8 @@ export const useRealtimeStore = create<RealtimeState>((set) => ({
   handleRateUpdate: (rate) =>
     set((state) => {
       const newRates = new Map(state.decodeRates)
-      newRates.set(rate.system_id, rate)
+      const key = rate.sys_name || `system-${rate.system_id}`
+      newRates.set(key, rate)
       return { decodeRates: newRates }
     }),
 
@@ -120,7 +121,12 @@ export function initializeRealtimeConnection(): () => void {
   })
 
   const unsubRate = sse.on('rate_update', (rate) => {
-    store.handleRateUpdate(rate)
+    // SSE sends sys_name (site short_name), use as display name if system_name absent
+    const normalized = {
+      ...rate,
+      system_name: rate.system_name || rate.sys_name,
+    }
+    store.handleRateUpdate(normalized)
   })
 
   const unsubRecorder = sse.on('recorder_update', (recorder) => {

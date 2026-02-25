@@ -7,6 +7,7 @@ import { useFilterStore } from '@/stores/useFilterStore'
 import { useMonitorStore } from '@/stores/useMonitorStore'
 import {
   formatDecodeRate,
+  normalizeDecodeRate,
   parseTalkgroupKey,
   getTalkgroupDisplayName,
 } from '@/lib/utils'
@@ -56,6 +57,27 @@ const navItems = [
         <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
         <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
         <line x1="12" x2="12" y1="19" y2="22" />
+      </svg>
+    ),
+  },
+  {
+    label: 'Transcriptions',
+    path: '/transcriptions',
+    icon: (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        <path d="M8 10h8" />
+        <path d="M8 14h4" />
       </svg>
     ),
   },
@@ -155,7 +177,7 @@ export function Sidebar({ collapsed }: SidebarProps) {
                 cn(
                   'flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
                   isActive
-                    ? 'bg-primary text-primary-foreground'
+                    ? 'bg-primary text-primary-foreground nav-active-glow'
                     : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                 )
               }
@@ -180,7 +202,7 @@ export function Sidebar({ collapsed }: SidebarProps) {
               cn(
                 'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
                 isActive
-                  ? 'bg-primary text-primary-foreground'
+                  ? 'bg-primary text-primary-foreground nav-active-glow'
                   : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
               )
             }
@@ -202,29 +224,32 @@ export function Sidebar({ collapsed }: SidebarProps) {
             <p className="px-2 text-xs text-muted-foreground">No systems connected</p>
           ) : (
             <div className="space-y-1">
-              {Array.from(decodeRates.values()).map((rate) => (
-                <div
-                  key={rate.system_id}
-                  className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-accent"
-                >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={cn(
-                        'h-2 w-2 rounded-full',
-                        rate.decode_rate >= 0.9
-                          ? 'bg-success'
-                          : rate.decode_rate >= 0.7
-                            ? 'bg-warning'
-                            : 'bg-destructive'
-                      )}
-                    />
-                    <span className="capitalize">{rate.system_name || `System ${rate.system_id}`}</span>
+              {Array.from(decodeRates.values()).map((rate) => {
+                const norm = normalizeDecodeRate(rate.decode_rate)
+                return (
+                  <div
+                    key={rate.sys_name || rate.system_id}
+                    className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm hover:bg-accent"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={cn(
+                          'h-2 w-2 rounded-full',
+                          norm >= 0.9
+                            ? 'bg-success'
+                            : norm >= 0.7
+                              ? 'bg-warning'
+                              : 'bg-destructive'
+                        )}
+                      />
+                      <span className="capitalize">{rate.sys_name || rate.system_name || `System ${rate.system_id}`}</span>
+                    </div>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {formatDecodeRate(rate.decode_rate)}
+                    </span>
                   </div>
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {formatDecodeRate(rate.decode_rate)}
-                  </span>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

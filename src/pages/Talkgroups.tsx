@@ -10,7 +10,8 @@ import { useMonitorStore } from '@/stores/useMonitorStore'
 import { useRealtimeStore } from '@/stores/useRealtimeStore'
 import { useTalkgroupColors } from '@/stores/useTalkgroupColors'
 import { getHexFromTailwind } from '@/components/ui/color-picker'
-import { talkgroupKey, formatRelativeTime } from '@/lib/utils'
+import { talkgroupKey, formatRelativeTime, cn } from '@/lib/utils'
+import { SkeletonCard } from '@/components/ui/skeleton'
 
 const DEFAULT_PAGE_SIZE = 30
 
@@ -330,16 +331,25 @@ export default function Talkgroups() {
       {/* Results */}
       <div>
         {loading ? (
-          <div className="flex h-64 items-center justify-center text-muted-foreground">
-            Loading...
+          <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
+            {Array.from({ length: 12 }).map((_, i) => (
+              <SkeletonCard key={i} />
+            ))}
           </div>
         ) : talkgroups.length === 0 ? (
-          <div className="flex h-64 items-center justify-center text-muted-foreground">
-            No talkgroups found
+          <div className="flex h-64 flex-col items-center justify-center gap-2 text-muted-foreground">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-40">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+            <span>No talkgroups found</span>
+            <span className="text-xs">Try adjusting your search or filters</span>
           </div>
         ) : (
           <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
-            {talkgroups.map((tg) => {
+            {talkgroups.map((tg, i) => {
               const tgKey = talkgroupKey(tg.system_id, tg.tgid)
               const monitored = isMonitored(tg.system_id, tg.tgid)
               const favorite = isFavorite(tg.system_id, tg.tgid)
@@ -375,12 +385,17 @@ export default function Talkgroups() {
               const cardStyle: React.CSSProperties = {
                 borderLeftColor: colorMatch ? resolveColor(colorMatch) : 'var(--color-muted-foreground)',
                 ...(isHighlighted && colorMatch ? { '--tw-ring-color': resolveColor(colorMatch) } as React.CSSProperties : {}),
-              }
+                '--i': i,
+              } as React.CSSProperties
 
               return (
                 <div
                   key={tgKey}
-                  className={`flex gap-2 rounded-md border border-l-4 ${bgClass} p-2 hover:bg-accent/50 transition-colors ${hasActiveCall ? 'animate-pulse' : ''}`}
+                  className={cn(
+                    'flex gap-2 rounded-md border border-l-4 p-2 card-call-hover card-fade-in',
+                    bgClass,
+                    hasActiveCall && 'animate-pulse'
+                  )}
                   style={cardStyle}
                 >
                   {/* Action buttons - vertical on left */}

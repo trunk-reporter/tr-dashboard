@@ -82,9 +82,18 @@ export function formatBytes(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
 }
 
+const P25_MAX_RATE = 40
+
+export function normalizeDecodeRate(raw: number): number {
+  // API returns messages/sec (0-40 for P25 Phase 1), normalize to 0-1
+  if (raw <= 1) return raw // already normalized
+  return Math.min(raw / P25_MAX_RATE, 1)
+}
+
 export function formatDecodeRate(rate: number): string {
-  // Decode rate is 0-1 ratio
-  return `${Math.round(rate * 100)}%`
+  // Rate may be raw messages/sec or 0-1 ratio
+  const normalized = normalizeDecodeRate(rate)
+  return `${Math.round(normalized * 100)}%`
 }
 
 // Composite key helpers (system_id:tgid format)
