@@ -30,11 +30,19 @@ export function MainLayout() {
   useEffect(() => {
     const cleanup = initializeRealtimeConnection()
 
-    getHealth()
-      .then((health) => checkForUpdate(health.version ?? null))
-      .catch(() => checkForUpdate())
+    const doUpdateCheck = () => {
+      getHealth()
+        .then((health) => checkForUpdate(health.version ?? null))
+        .catch(() => checkForUpdate())
+    }
 
-    return cleanup
+    doUpdateCheck()
+    const updateInterval = setInterval(doUpdateCheck, 60 * 60 * 1000)
+
+    return () => {
+      cleanup()
+      clearInterval(updateInterval)
+    }
   }, [checkForUpdate])
 
   const toggleSidebar = useCallback(() => {
