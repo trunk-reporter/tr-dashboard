@@ -12,6 +12,7 @@ import {
   getEventTypeColor,
   getTalkgroupDisplayName,
 } from '@/lib/utils'
+import { CopyableId } from '@/components/ui/copyable-id'
 
 export default function UnitDetail() {
   const { id } = useParams<{ id: string }>()
@@ -85,9 +86,7 @@ export default function UnitDetail() {
           <h1 className="text-2xl font-bold">
             {unit.alpha_tag || `Unit ${unit.unit_id}`}
           </h1>
-          <Badge variant="outline" className="font-mono">
-            {unit.unit_id}
-          </Badge>
+          <CopyableId value={String(unit.unit_id)} />
           {unit.alpha_tag_source && (
             <Badge variant="secondary" className="text-xs">Source: {unit.alpha_tag_source}</Badge>
           )}

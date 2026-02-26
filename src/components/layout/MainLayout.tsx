@@ -10,6 +10,9 @@ import { initializeRealtimeConnection } from '@/stores/useRealtimeStore'
 import { useUpdateStore } from '@/stores/useUpdateStore'
 import { getHealth } from '@/api/client'
 import { KEYBOARD_SHORTCUTS } from '@/lib/constants'
+import { usePageTitle } from '@/hooks/usePageTitle'
+import { useFaviconStatus } from '@/hooks/useFaviconStatus'
+import { useEmergencyNotifications } from '@/hooks/useEmergencyNotifications'
 
 export function MainLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -18,6 +21,10 @@ export function MainLayout() {
   const navigate = useNavigate()
 
   const checkForUpdate = useUpdateStore((s) => s.checkForUpdate)
+
+  usePageTitle()
+  useFaviconStatus()
+  useEmergencyNotifications()
 
   // Initialize SSE connection and check for updates
   useEffect(() => {

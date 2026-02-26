@@ -12,6 +12,8 @@ import { useRealtimeStore } from '@/stores/useRealtimeStore'
 import { useAudioStore, selectIsPlaying } from '@/stores/useAudioStore'
 import { formatDateTime, formatRelativeTime, formatDuration, formatTime, formatFrequency, getUnitColorByRid } from '@/lib/utils'
 import { TranscriptionPreview } from '@/components/calls/TranscriptionPreview'
+import { CopyableId } from '@/components/ui/copyable-id'
+import { Sparkline } from '@/components/ui/sparkline'
 
 export default function TalkgroupDetail() {
   const { id } = useParams<{ id: string }>()
@@ -258,9 +260,7 @@ export default function TalkgroupDetail() {
 
       {/* Info badges */}
       <div className="flex flex-wrap gap-2">
-        <Badge variant="outline" className="font-mono text-base">
-          TGID: {talkgroup.tgid}
-        </Badge>
+        <CopyableId value={String(talkgroup.tgid)} label="TGID" className="text-base" />
         {talkgroup.group && <Badge variant="secondary">{talkgroup.group}</Badge>}
         {talkgroup.tag && <Badge variant="secondary">{talkgroup.tag}</Badge>}
         {talkgroup.mode === 'D' && <Badge variant="outline">Digital</Badge>}
@@ -351,7 +351,19 @@ export default function TalkgroupDetail() {
       {/* Recent calls - compact list */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold">Recent Calls ({calls.length})</h2>
+          <div className="flex items-center gap-4">
+            <h2 className="text-lg font-semibold">Recent Calls ({calls.length})</h2>
+            {calls.length > 1 && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Duration</span>
+                <div className="w-32">
+                  <Sparkline
+                    data={[...calls].sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()).map((c) => c.duration ?? 0)}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
           <p className="text-xs text-muted-foreground">Click to play from that point →</p>
         </div>
 

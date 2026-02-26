@@ -16,6 +16,7 @@ import {
   cn,
 } from '@/lib/utils'
 import { useSignalThresholds, getSignalColor } from '@/stores/useSignalThresholds'
+import { CopyableId } from '@/components/ui/copyable-id'
 import { TRANSMISSION_COLORS } from '@/components/audio/TransmissionTimeline'
 
 export default function CallDetail() {
@@ -237,7 +238,7 @@ export default function CallDetail() {
 
             <div>
               <p className="text-sm text-muted-foreground">Call ID</p>
-              <p className="font-mono text-xs">{call.call_id}</p>
+              <CopyableId value={String(call.call_id)} className="text-xs" />
             </div>
           </CardContent>
         </Card>

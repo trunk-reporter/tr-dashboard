@@ -22,6 +22,8 @@ export default function Settings() {
   const setFavoriteTalkgroups = useFilterStore((s) => s.setFavoriteTalkgroups)
   const showEncrypted = useFilterStore((s) => s.showEncrypted)
   const setShowEncrypted = useFilterStore((s) => s.setShowEncrypted)
+  const emergencyNotifications = useFilterStore((s) => s.emergencyNotifications)
+  const setEmergencyNotifications = useFilterStore((s) => s.setEmergencyNotifications)
   const autoPlay = useAudioStore((s) => s.autoPlay)
   const setAutoPlay = useAudioStore((s) => s.setAutoPlay)
   const volume = useAudioStore((s) => s.volume)
@@ -173,6 +175,33 @@ export default function Settings() {
               onClick={() => setShowEncrypted(!showEncrypted)}
             >
               {showEncrypted ? 'Shown' : 'Hidden'}
+            </Button>
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium">Emergency notifications</p>
+              <p className="text-sm text-muted-foreground">
+                Show browser notification when an emergency call starts
+                {typeof Notification !== 'undefined' && Notification.permission === 'denied' && (
+                  <span className="block text-destructive">Browser notifications are blocked. Allow them in your browser settings.</span>
+                )}
+              </p>
+            </div>
+            <Button
+              variant={emergencyNotifications ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => {
+                const next = !emergencyNotifications
+                if (next && typeof Notification !== 'undefined' && Notification.permission === 'default') {
+                  Notification.requestPermission()
+                }
+                setEmergencyNotifications(next)
+              }}
+            >
+              {emergencyNotifications ? 'On' : 'Off'}
             </Button>
           </div>
         </CardContent>

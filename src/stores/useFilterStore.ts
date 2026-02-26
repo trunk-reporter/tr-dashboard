@@ -24,6 +24,7 @@ interface FilterState {
   // Display preferences
   showEncrypted: boolean
   showEmergencyOnly: boolean
+  emergencyNotifications: boolean
 
   // Actions
   setSelectedSystems: (systems: number[]) => void
@@ -48,6 +49,7 @@ interface FilterState {
 
   setShowEncrypted: (show: boolean) => void
   setShowEmergencyOnly: (show: boolean) => void
+  setEmergencyNotifications: (enabled: boolean) => void
 
   resetFilters: () => void
 }
@@ -63,6 +65,7 @@ const initialState = {
   customEndTime: null as string | null,
   showEncrypted: true,
   showEmergencyOnly: false,
+  emergencyNotifications: false,
 }
 
 export const useFilterStore = create<FilterState>()(
@@ -139,6 +142,8 @@ export const useFilterStore = create<FilterState>()(
 
       setShowEmergencyOnly: (show) => set({ showEmergencyOnly: show }),
 
+      setEmergencyNotifications: (enabled) => set({ emergencyNotifications: enabled }),
+
       resetFilters: () =>
         set({
           selectedSystems: [],
@@ -157,6 +162,7 @@ export const useFilterStore = create<FilterState>()(
       partialize: (state) => ({
         favoriteTalkgroups: state.favoriteTalkgroups,
         showEncrypted: state.showEncrypted,
+        emergencyNotifications: state.emergencyNotifications,
       }),
     }
   )
