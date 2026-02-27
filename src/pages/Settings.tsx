@@ -14,7 +14,7 @@ import { APP_VERSION } from '@/version'
 import { getSSEManager } from '@/api/eventsource'
 import { Plus, Trash2, RotateCcw } from 'lucide-react'
 import { ColorPicker, getHexFromTailwind } from '@/components/ui/color-picker'
-import { parseTalkgroupKey } from '@/lib/utils'
+import { parseTalkgroupKey, isNewerVersion } from '@/lib/utils'
 
 export default function Settings() {
   const connectionStatus = useRealtimeStore((s) => s.connectionStatus)
@@ -629,7 +629,7 @@ export default function Settings() {
             <p>Current version: <span className="font-mono text-foreground">v{APP_VERSION}</span></p>
             {latestVersion && (
               <p>Latest version: <span className="font-mono text-foreground">v{latestVersion}</span>
-                {latestVersion !== APP_VERSION && (
+                {isNewerVersion(APP_VERSION, latestVersion) && (
                   <Badge variant="warning" className="ml-2 text-[10px] px-1.5 py-0">Update available</Badge>
                 )}
               </p>

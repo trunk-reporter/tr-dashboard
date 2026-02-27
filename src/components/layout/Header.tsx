@@ -6,7 +6,7 @@ import { useRealtimeStore } from '@/stores/useRealtimeStore'
 import { useMonitorStore } from '@/stores/useMonitorStore'
 import { useAudioStore } from '@/stores/useAudioStore'
 import { getHealth } from '@/api/client'
-import { formatDecodeRate } from '@/lib/utils'
+import { formatDecodeRate, isNewerVersion } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { useUpdateStore } from '@/stores/useUpdateStore'
 import { APP_VERSION } from '@/version'
@@ -85,7 +85,7 @@ export function Header({ onToggleSidebar, onOpenCommand }: HeaderProps) {
             v{APP_VERSION}
             {apiVersion && ` / api ${apiVersion}`}
           </span>
-          {latestVersion && latestVersion !== APP_VERSION && (
+          {latestVersion && isNewerVersion(APP_VERSION, latestVersion) && (
             updateUrl ? (
               <a href={updateUrl} target="_blank" rel="noopener noreferrer">
                 <Badge variant="warning" className="text-[10px] px-1.5 py-0">

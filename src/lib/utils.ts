@@ -97,6 +97,20 @@ export function formatDecodeRate(rate: number): string {
 }
 
 // Composite key helpers (system_id:tgid format)
+/** Compare two semver strings. Returns true if `latest` is newer than `current`. */
+export function isNewerVersion(current: string, latest: string): boolean {
+  const parse = (v: string) => v.replace(/^v/, '').split('.').map(Number)
+  const c = parse(current)
+  const l = parse(latest)
+  for (let i = 0; i < Math.max(c.length, l.length); i++) {
+    const cv = c[i] ?? 0
+    const lv = l[i] ?? 0
+    if (lv > cv) return true
+    if (lv < cv) return false
+  }
+  return false
+}
+
 export function talkgroupKey(systemId: number, tgid: number): string {
   return `${systemId}:${tgid}`
 }
