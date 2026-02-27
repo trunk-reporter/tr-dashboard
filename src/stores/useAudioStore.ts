@@ -270,23 +270,29 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   },
 
   onError: () => {
-    const { queue, retryCount, currentCall } = get()
+    const { queue, retryCount, currentCall, retryTimeoutId: existingTimeout } = get()
 
     if (retryCount < AUDIO_RETRY.MAX_ATTEMPTS && currentCall) {
       const delay = AUDIO_RETRY.INITIAL_DELAY_MS * Math.pow(AUDIO_RETRY.BACKOFF_MULTIPLIER, retryCount)
       console.warn(`Audio load failed, retrying in ${delay}ms (attempt ${retryCount + 1}/${AUDIO_RETRY.MAX_ATTEMPTS})`)
 
+      if (existingTimeout) {
+        clearTimeout(existingTimeout)
+      }
+
+      // Defer both retryCount increment and loading state to the timeout
+      // so the AudioPlayer retry effect and handleCanPlay don't fire immediately
       const timeoutId = setTimeout(() => {
         set({
+          retryCount: retryCount + 1,
           playbackState: 'loading',
           retryTimeoutId: null,
         })
       }, delay)
 
       set({
-        retryCount: retryCount + 1,
         retryTimeoutId: timeoutId,
-        playbackState: 'loading',
+        playbackState: 'error',
       })
       return
     }

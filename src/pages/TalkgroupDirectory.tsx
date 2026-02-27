@@ -29,10 +29,18 @@ export default function TalkgroupDirectory() {
   // Debounce search
   const [searchInput, setSearchInput] = useState(search)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const categoriesExtractedRef = useRef(false)
 
   useEffect(() => {
     setSearchInput(search)
   }, [search])
+
+  // Clean up debounce timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [])
 
   const handleSearchChange = (value: string) => {
     setSearchInput(value)
@@ -62,8 +70,9 @@ export default function TalkgroupDirectory() {
         setEntries(res.talkgroups || [])
         setTotalCount(res.total)
 
-        // Extract unique categories from first page (imperfect but sufficient)
-        if (availableCategories.length === 0 && res.talkgroups) {
+        // Extract unique categories from first response only
+        if (!categoriesExtractedRef.current && res.talkgroups) {
+          categoriesExtractedRef.current = true
           const cats = new Set<string>()
           for (const tg of res.talkgroups) {
             if (tg.category) cats.add(tg.category)
@@ -75,7 +84,8 @@ export default function TalkgroupDirectory() {
       })
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [page, pageSize, search, systemFilter, categoryFilter, modeFilter, offset, availableCategories.length])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pageSize, search, systemFilter, categoryFilter, modeFilter, offset])
 
   const updateParam = useCallback(
     (key: string, value: string) => {

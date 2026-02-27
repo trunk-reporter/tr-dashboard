@@ -73,10 +73,17 @@ function matchKeyword(keyword: string, text: string): boolean {
   return regex.test(str)
 }
 
+// Module-level color cache — lives outside Zustand state so reads/writes
+// don't trigger React re-renders. Cleared whenever rules or overrides change.
+let colorCache = new Map<string, string | null>()
+
+export function clearColorCache() {
+  colorCache = new Map()
+}
+
 export interface TalkgroupColorsState {
   rules: ColorRule[]
   overrides: Record<string, TalkgroupOverride> // key is "system_id:tgid"
-  colorCache: Map<string, string | null> // key is "system_id:tgid", value is hex color or null
 
   // Actions for rules
   setRules: (rules: ColorRule[]) => void
@@ -115,48 +122,50 @@ export const useTalkgroupColors = create<TalkgroupColorsState>()(
     (set, get) => ({
       rules: DEFAULT_RULES,
       overrides: {},
-      colorCache: new Map(),
 
       // Rule actions - all clear the color cache
-      setRules: (rules) => set({ rules, colorCache: new Map() }),
+      setRules: (rules) => { clearColorCache(); set({ rules }) },
 
-      addRule: (rule) => set((state) => ({ rules: [...state.rules, rule], colorCache: new Map() })),
+      addRule: (rule) => { clearColorCache(); set((state) => ({ rules: [...state.rules, rule] })) },
 
-      updateRule: (index, rule) =>
+      updateRule: (index, rule) => {
+        clearColorCache()
         set((state) => ({
           rules: state.rules.map((r, i) => (i === index ? rule : r)),
-          colorCache: new Map(),
-        })),
+        }))
+      },
 
-      deleteRule: (index) =>
+      deleteRule: (index) => {
+        clearColorCache()
         set((state) => ({
           rules: state.rules.filter((_, i) => i !== index),
-          colorCache: new Map(),
-        })),
+        }))
+      },
 
-      moveRule: (fromIndex, toIndex) =>
+      moveRule: (fromIndex, toIndex) => {
+        clearColorCache()
         set((state) => {
           const rules = [...state.rules]
           const [removed] = rules.splice(fromIndex, 1)
           rules.splice(toIndex, 0, removed)
-          return { rules, colorCache: new Map() }
-        }),
+          return { rules }
+        })
+      },
 
-      resetToDefaults: () => set({ rules: DEFAULT_RULES, overrides: {}, colorCache: new Map() }),
+      resetToDefaults: () => { clearColorCache(); set({ rules: DEFAULT_RULES, overrides: {} }) },
 
       // Override actions
       setOverride: (systemId, tgid, override) => {
         const key = `${systemId}:${tgid}`
+        colorCache.delete(key)
         set((state) => {
           const newOverrides = { ...state.overrides }
-          const newColorCache = new Map(state.colorCache)
-          newColorCache.delete(key)
           if (override === null || override.mode === 'default') {
             delete newOverrides[key]
           } else {
             newOverrides[key] = override
           }
-          return { overrides: newOverrides, colorCache: newColorCache }
+          return { overrides: newOverrides }
         })
       },
 
@@ -165,7 +174,7 @@ export const useTalkgroupColors = create<TalkgroupColorsState>()(
         return get().overrides[key] || null
       },
 
-      clearAllOverrides: () => set({ overrides: {}, colorCache: new Map() }),
+      clearAllOverrides: () => { clearColorCache(); set({ overrides: {} }) },
 
       // Utility functions
       getRuleForTalkgroup: (fields) => {
@@ -225,7 +234,6 @@ export const useTalkgroupColors = create<TalkgroupColorsState>()(
 
       getCachedColor: (systemId, tgid, fields) => {
         const key = `${systemId}:${tgid}`
-        const { colorCache } = get()
 
         if (colorCache.has(key)) {
           return colorCache.get(key) ?? null
@@ -234,11 +242,8 @@ export const useTalkgroupColors = create<TalkgroupColorsState>()(
         const colorName = get().getColorForTalkgroup(fields)
         const hexColor = colorName ? getHexFromTailwind(colorName) : null
 
-        set((state) => {
-          const newCache = new Map(state.colorCache)
-          newCache.set(key, hexColor)
-          return { colorCache: newCache }
-        })
+        // Write to module-level cache — no store mutation, safe during render
+        colorCache.set(key, hexColor)
 
         return hexColor
       },
@@ -256,7 +261,6 @@ export const useTalkgroupColors = create<TalkgroupColorsState>()(
     {
       name: 'tr-dashboard-talkgroup-colors',
       version: 3,
-      // Don't persist colorCache - it's a runtime cache
       partialize: (state) => ({ rules: state.rules, overrides: state.overrides }),
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as { rules?: ColorRule[]; overrides?: Record<string, TalkgroupOverride> }

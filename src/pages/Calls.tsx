@@ -23,7 +23,7 @@ export default function Calls() {
   const page = parseInt(searchParams.get('page') || '1', 10)
   const pageSize = parseInt(searchParams.get('size') || String(DEFAULT_PAGE_SIZE), 10)
   const systemFilter = searchParams.get('system') || ''
-  const talkgroupFilter = searchParams.get('talkgroup') || ''
+  const talkgroupFilter = searchParams.get('talkgroup') || '' // composite "system_id:tgid" or bare "tgid" (legacy)
 
   const offset = (page - 1) * pageSize
 
@@ -39,12 +39,19 @@ export default function Calls() {
 
   const fetchTranscription = useTranscriptionCache((s) => s.fetchTranscription)
 
+  // Parse composite talkgroup filter "system_id:tgid" into separate params
+  const tgFilterParts = talkgroupFilter.includes(':')
+    ? talkgroupFilter.split(':')
+    : null
+  const tgFilterSystemId = tgFilterParts ? tgFilterParts[0] : undefined
+  const tgFilterTgid = tgFilterParts ? tgFilterParts[1] : (talkgroupFilter || undefined)
+
   // Fetch calls
   useEffect(() => {
     setLoading(true)
     getCalls({
-      system_id: systemFilter || undefined,
-      tgid: talkgroupFilter || undefined,
+      system_id: tgFilterSystemId || systemFilter || undefined,
+      tgid: tgFilterTgid,
       sort: '-start_time',
       deduplicate: true,
       limit: pageSize,
@@ -62,7 +69,7 @@ export default function Calls() {
       })
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [page, pageSize, systemFilter, talkgroupFilter, offset, fetchTranscription])
+  }, [page, pageSize, systemFilter, tgFilterSystemId, tgFilterTgid, offset, fetchTranscription])
 
   const updateFilter = useCallback(
     (key: string, value: string) => {
@@ -147,8 +154,8 @@ export default function Calls() {
               >
                 <option value="">All talkgroups</option>
                 {talkgroups.map((tg) => (
-                  <option key={`${tg.system_id}:${tg.tgid}`} value={tg.tgid}>
-                    {tg.alpha_tag || `TG ${tg.tgid}`}
+                  <option key={`${tg.system_id}:${tg.tgid}`} value={`${tg.system_id}:${tg.tgid}`}>
+                    {tg.alpha_tag || `TG ${tg.tgid}`}{systems.length > 1 ? ` (${tg.system_name || `Sys ${tg.system_id}`})` : ''}
                   </option>
                 ))}
               </select>

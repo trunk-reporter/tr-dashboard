@@ -37,11 +37,18 @@ export default function CallDetail() {
   useEffect(() => {
     if (isNaN(callId)) return
 
+    let cancelled = false
+
     setLoading(true)
     setError(null)
+    setCall(null)
+    setTransmissions([])
+    setFrequencies([])
+    setTranscription(null)
 
     getCall(callId)
       .then(async (callRes) => {
+        if (cancelled) return
         setCall(callRes)
 
         // Use inline src_list if present, otherwise fetch
@@ -50,11 +57,13 @@ export default function CallDetail() {
         } else {
           try {
             const txRes = await getCallTransmissions(callId)
-            setTransmissions(txRes.transmissions || [])
+            if (!cancelled) setTransmissions(txRes.transmissions || [])
           } catch {
             // No transmissions available
           }
         }
+
+        if (cancelled) return
 
         // Use inline freq_list if present, otherwise fetch
         if (callRes.freq_list && callRes.freq_list.length > 0) {
@@ -62,25 +71,32 @@ export default function CallDetail() {
         } else {
           try {
             const freqRes = await getCallFrequencies(callId)
-            setFrequencies(freqRes.frequencies || [])
+            if (!cancelled) setFrequencies(freqRes.frequencies || [])
           } catch {
             // No frequencies available
           }
         }
 
+        if (cancelled) return
+
         // Fetch transcription
         try {
           const tx = await getCallTranscription(callId)
-          setTranscription(tx)
+          if (!cancelled) setTranscription(tx)
         } catch {
           // Transcription not available
         }
       })
       .catch((err) => {
+        if (cancelled) return
         console.error(err)
         setError('Failed to load call details')
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => { cancelled = true }
   }, [callId])
 
   const tgid = call?.tgid ?? 0
