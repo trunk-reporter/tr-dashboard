@@ -344,10 +344,10 @@ export default function CallDetail() {
                   const tx = transmissions.find((t) => t.src === src)
                   const name = tx?.tag || getUnitDisplayName(src)
                   return (
-                    <span key={src} className="inline-flex items-center gap-1.5">
+                    <Link key={src} to={`/units/${call.system_id}:${src}`} className="inline-flex items-center gap-1.5 hover:underline">
                       <span className={cn('inline-block h-2 w-2 rounded-full', color)} />
                       <span>{name}</span>
-                    </span>
+                    </Link>
                   )
                 })}
               </div>
@@ -415,6 +415,7 @@ export default function CallDetail() {
                     words={transcription.words.words}
                     fullText={transcription.text}
                     uniqueUnits={uniqueUnits}
+                    systemId={call.system_id}
                   />
                 ) : (
                   <p className="text-lg leading-relaxed">{transcription.text}</p>
@@ -543,10 +544,12 @@ function TranscriptionWithSpeakers({
   words,
   fullText,
   uniqueUnits,
+  systemId,
 }: {
   words: { word: string; start: number; end: number; src: number; src_tag?: string }[]
   fullText?: string
   uniqueUnits: number[]
+  systemId: number
 }) {
   // Use punctuated words from full text when available (word objects strip punctuation)
   const punctuatedWords = fullText ? fullText.split(/\s+/) : null
@@ -572,7 +575,11 @@ function TranscriptionWithSpeakers({
         const name = seg.srcTag || (seg.src !== null ? `Unit ${seg.src}` : 'Unknown')
         return (
           <p key={i}>
-            <span className={cn("font-medium text-sm", color?.text)}>{name}:</span>{' '}
+            {seg.src !== null ? (
+              <Link to={`/units/${systemId}:${seg.src}`} className={cn("font-medium text-sm hover:underline", color?.text)}>{name}:</Link>
+            ) : (
+              <span className={cn("font-medium text-sm", color?.text)}>{name}:</span>
+            )}{' '}
             {seg.words.join(' ')}
           </p>
         )

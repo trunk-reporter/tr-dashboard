@@ -260,7 +260,7 @@ export default function Dashboard() {
           )}
         </div>
         <div className="h-6 w-px bg-border hidden sm:block" />
-        <div className="flex items-center gap-2">
+        <Link to="/calls" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
           <span className="text-sm text-muted-foreground">24h</span>
           <span className="text-xl font-bold tabular-nums">
             {stats?.calls_24h?.toLocaleString() ?? '—'}
@@ -268,7 +268,7 @@ export default function Dashboard() {
           <span className="text-xs text-muted-foreground">
             ({stats?.calls_1h?.toLocaleString() ?? '—'}/1h)
           </span>
-        </div>
+        </Link>
         <div className="h-6 w-px bg-border hidden sm:block" />
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">Systems</span>
@@ -744,9 +744,11 @@ function DashboardHoverContent({
           <p className="text-muted-foreground text-xs mb-1">Units ({call.units.length})</p>
           <div className="flex flex-wrap gap-1">
             {call.units.slice(0, 8).map((unit, i) => (
-              <Badge key={i} variant="outline" className="text-xs">
-                {unit.alpha_tag || `Unit ${unit.unit_id}`}
-              </Badge>
+              <Link key={i} to={`/units/${unit.system_id || call.system_id}:${unit.unit_id}`}>
+                <Badge variant="outline" className="text-xs hover:bg-accent cursor-pointer">
+                  {unit.alpha_tag || `Unit ${unit.unit_id}`}
+                </Badge>
+              </Link>
             ))}
             {call.units.length > 8 && (
               <Badge variant="outline" className="text-xs">

@@ -105,8 +105,13 @@ export default function UnitDetail() {
               <Badge variant="secondary" className={`text-xs ${getEventTypeColor(unit.last_event_type)}`}>
                 {getEventTypeLabel(unit.last_event_type)}
               </Badge>
-              {unit.last_event_tg_tag && (
-                <span className="text-muted-foreground">{unit.last_event_tg_tag}</span>
+              {unit.last_event_tg_tag && unit.last_event_tgid && (
+                <Link
+                  to={`/talkgroups/${unit.system_id}:${unit.last_event_tgid}`}
+                  className="text-muted-foreground hover:underline"
+                >
+                  {unit.last_event_tg_tag}
+                </Link>
               )}
             </div>
           )}

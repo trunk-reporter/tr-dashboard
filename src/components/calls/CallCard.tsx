@@ -68,7 +68,7 @@ export function CallCard({ call, showSystem = true, compact = false }: CallCardP
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <Link
-              to={`/calls/${call.call_id}`}
+              to={`/talkgroups/${call.system_id}:${call.tgid}`}
               className="truncate font-medium hover:underline"
             >
               {getTalkgroupDisplayName(call.tgid, call.tg_alpha_tag)}
@@ -80,14 +80,18 @@ export function CallCard({ call, showSystem = true, compact = false }: CallCardP
             {call.encrypted && <Badge variant="secondary">ENC</Badge>}
           </div>
           {call.transcription_text ? (
-            <p className="text-sm text-muted-foreground italic truncate">
-              {call.transcription_text.slice(0, 80)}{call.transcription_text.length > 80 ? '...' : ''}
-            </p>
+            <Link to={`/calls/${call.call_id}`} className="block">
+              <p className="text-sm text-muted-foreground italic truncate hover:text-foreground">
+                {call.transcription_text.slice(0, 80)}{call.transcription_text.length > 80 ? '...' : ''}
+              </p>
+            </Link>
           ) : call.has_transcription ? (
             <TranscriptionPreview callId={call.call_id} compact />
           ) : null}
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span>{formatTime(call.start_time)}</span>
+            <Link to={`/calls/${call.call_id}`} className="hover:underline">
+              {formatTime(call.start_time)}
+            </Link>
             {showSystem && call.system_name && (
               <>
                 <span>&bull;</span>
@@ -120,7 +124,7 @@ export function CallCard({ call, showSystem = true, compact = false }: CallCardP
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <Link
-            to={`/calls/${call.call_id}`}
+            to={`/talkgroups/${call.system_id}:${call.tgid}`}
             className="truncate font-medium hover:underline"
           >
             {getTalkgroupDisplayName(call.tgid, call.tg_alpha_tag)}
@@ -133,7 +137,9 @@ export function CallCard({ call, showSystem = true, compact = false }: CallCardP
         </div>
 
         <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-          <span>{formatTime(call.start_time)}</span>
+          <Link to={`/calls/${call.call_id}`} className="hover:underline">
+            {formatTime(call.start_time)}
+          </Link>
           {showSystem && call.system_name && <span>{call.system_name}</span>}
           {call.freq != null && call.freq > 0 && (
             <span className="font-mono">{formatFrequency(call.freq)}</span>
@@ -141,9 +147,11 @@ export function CallCard({ call, showSystem = true, compact = false }: CallCardP
         </div>
 
         {call.transcription_text ? (
-          <p className="text-sm text-muted-foreground italic truncate">
-            {call.transcription_text.slice(0, 150)}{call.transcription_text.length > 150 ? '...' : ''}
-          </p>
+          <Link to={`/calls/${call.call_id}`} className="block">
+            <p className="text-sm text-muted-foreground italic truncate hover:text-foreground">
+              {call.transcription_text.slice(0, 150)}{call.transcription_text.length > 150 ? '...' : ''}
+            </p>
+          </Link>
         ) : call.has_transcription ? (
           <TranscriptionPreview callId={call.call_id} />
         ) : null}

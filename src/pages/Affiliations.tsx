@@ -160,9 +160,11 @@ export default function Affiliations() {
           <CardContent>
             <div className="flex flex-wrap gap-2">
               {topTalkgroups.map(([tgKey, count]) => (
-                <Badge key={tgKey} variant="secondary" className="text-xs">
-                  {tgKey}: {count} unit{count !== 1 ? 's' : ''}
-                </Badge>
+                <Link key={tgKey} to={`/talkgroups/${tgKey}`}>
+                  <Badge variant="secondary" className="text-xs hover:bg-accent cursor-pointer">
+                    {tgKey}: {count} unit{count !== 1 ? 's' : ''}
+                  </Badge>
+                </Link>
               ))}
             </div>
           </CardContent>

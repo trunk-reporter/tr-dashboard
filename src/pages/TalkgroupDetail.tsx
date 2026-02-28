@@ -353,6 +353,12 @@ export default function TalkgroupDetail() {
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-4">
             <h2 className="text-lg font-semibold">Recent Calls ({calls.length})</h2>
+            <Link
+              to={`/calls?talkgroup=${talkgroup.system_id}:${talkgroup.tgid}`}
+              className="text-xs text-primary hover:underline"
+            >
+              View all →
+            </Link>
             {calls.length > 1 && (
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">Duration</span>
@@ -400,7 +406,13 @@ export default function TalkgroupDetail() {
                         </svg>
                       )}
                     </div>
-                    <span className="text-xs text-muted-foreground">{formatTime(call.start_time)}</span>
+                    <Link
+                      to={`/calls/${call.call_id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-xs text-muted-foreground hover:underline"
+                    >
+                      {formatTime(call.start_time)}
+                    </Link>
                     {call.freq != null && call.freq > 0 && (
                       <span className="font-mono text-xs text-muted-foreground">{formatFrequency(call.freq)}</span>
                     )}
@@ -424,12 +436,14 @@ export default function TalkgroupDetail() {
                       {units.map((u, i) => {
                         const color = getUnitColorByRid(u.unit_id, uniqueUnitIds)
                         return (
-                          <span
+                          <Link
                             key={i}
-                            className={`px-1.5 py-0.5 text-[10px] rounded border ${color?.bg || 'bg-muted'} ${color?.text || ''} ${color?.border || ''}`}
+                            to={`/units/${talkgroup.system_id}:${u.unit_id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className={`px-1.5 py-0.5 text-[10px] rounded border hover:opacity-80 ${color?.bg || 'bg-muted'} ${color?.text || ''} ${color?.border || ''}`}
                           >
                             {u.alpha_tag || u.unit_id}
-                          </span>
+                          </Link>
                         )
                       })}
                     </div>
