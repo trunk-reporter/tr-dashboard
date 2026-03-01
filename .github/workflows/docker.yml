@@ -78,4 +78,9 @@ jobs:
 
           **Docker image:** \`ghcr.io/${{ github.repository }}:${VERSION#v}\`"
           fi
-          gh release create "$VERSION" --title "$VERSION" --notes "$NOTES"
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "Release $VERSION already exists, updating notes"
+            gh release edit "$VERSION" --notes "$NOTES"
+          else
+            gh release create "$VERSION" --title "$VERSION" --notes "$NOTES"
+          fi
