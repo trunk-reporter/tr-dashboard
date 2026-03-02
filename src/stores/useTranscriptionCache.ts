@@ -16,6 +16,30 @@ interface TranscriptionCacheState {
   fetchTranscription: (callId: number) => Promise<void>
 }
 
+// Simple concurrency limiter to avoid 429s from the backend rate limiter
+const MAX_CONCURRENT = 6
+let activeRequests = 0
+const pendingQueue: Array<() => void> = []
+
+function acquireSlot(): Promise<void> {
+  if (activeRequests < MAX_CONCURRENT) {
+    activeRequests++
+    return Promise.resolve()
+  }
+  return new Promise<void>((resolve) => {
+    pendingQueue.push(() => {
+      activeRequests++
+      resolve()
+    })
+  })
+}
+
+function releaseSlot(): void {
+  activeRequests--
+  const next = pendingQueue.shift()
+  if (next) next()
+}
+
 export const useTranscriptionCache = create<TranscriptionCacheState>((set, get) => ({
   cache: new Map(),
 
@@ -34,6 +58,8 @@ export const useTranscriptionCache = create<TranscriptionCacheState>((set, get) 
       return { cache: newCache }
     })
 
+    await acquireSlot()
+
     try {
       const transcription = await getCallTranscription(callId)
       set((state) => {
@@ -51,6 +77,8 @@ export const useTranscriptionCache = create<TranscriptionCacheState>((set, get) 
         newCache.set(callId, { status: 'none' })
         return { cache: newCache }
       })
+    } finally {
+      releaseSlot()
     }
   },
 }))
