@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.8 (2026-03-01)
+
+### Features
+
+- **Write token authentication:** Editing talkgroups and units now requires a write token when the backend has `WRITE_TOKEN` configured. Enter the token in Settings → Write Access. If the backend has no write token, edits work for everyone without configuration.
+
+### Bug Fixes
+
+- **Transcription fetch rate limiting:** Transcription requests are now throttled (max 6 concurrent) to avoid hitting the backend's rate limiter (429 errors) when loading pages with many transcribed calls.
+- **Edit error feedback:** PATCH requests that fail with 403 now show a clear inline error directing users to configure their write token in Settings, instead of failing silently.
+
 ## 0.8.7 (2026-03-01)
 
 ### Features
