@@ -213,6 +213,9 @@ Understanding the P25 trunked radio hierarchy is essential for this codebase:
 
 ## Remaining Feature Work
 
-- Transcription search/browse UI (types exist, no page yet)
+See `docs/ROADMAP.md` for the full roadmap. Key near-term items:
+
 - Call groups browser UI (types exist, no page yet)
-- Call heat map — plot geocoded addresses from transcriptions on a map (requires backend NLP/geocoding support first)
+- Signal quality (SNR) trends per talkgroup for analog channel tuning
+- Emergency signal alerts (MDC1200 emergency activation)
+- Code splitting for bundle size reduction
