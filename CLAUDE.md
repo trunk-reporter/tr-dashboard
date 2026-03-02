@@ -210,3 +210,4 @@ Understanding the P25 trunked radio hierarchy is essential for this codebase:
 
 - Transcription search/browse UI (types exist, no page yet)
 - Call groups browser UI (types exist, no page yet)
+- Call heat map — plot geocoded addresses from transcriptions on a map (requires backend NLP/geocoding support first)

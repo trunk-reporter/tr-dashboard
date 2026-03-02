@@ -218,9 +218,16 @@ export const useAudioStore = create<AudioState>((set, get) => ({
 
   addToQueue: (call) => {
     const queued = toQueuedCall(call)
-    const { currentCall, playbackState } = get()
+    const { currentCall, playbackState, currentTime } = get()
 
-    if (!currentCall || playbackState === 'idle') {
+    // Auto-load if: no call, idle, errored out, or previous call finished naturally
+    // (paused at time 0 = call ended, vs paused mid-way = user paused)
+    const shouldAutoLoad = !currentCall
+      || playbackState === 'idle'
+      || playbackState === 'error'
+      || (playbackState === 'paused' && currentTime === 0)
+
+    if (shouldAutoLoad) {
       get().loadCall(queued)
     } else {
       set((state) => ({ queue: [...state.queue, queued] }))

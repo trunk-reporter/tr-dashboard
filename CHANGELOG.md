@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.7 (2026-03-01)
+
+### Features
+
+- **Inline metadata editing:** Edit talkgroup metadata (name, group, tag, priority, description) directly from the talkgroup detail page. Edit unit names from the unit detail page. No need to navigate to a separate admin page.
+- **Page title updates:** Browser tab title now shows the currently playing talkgroup and queue count, so you can see activity even when the tab is in the background.
+
+### Bug Fixes
+
+- **Live monitoring audio continuity:** Fixed a bug where monitored calls would silently queue up without auto-playing. When a call ended with an empty queue, the player entered a "paused" state that prevented new SSE calls from auto-loading. Now correctly auto-plays new calls when the previous one finishes.
+- **Background tab audio resume:** Added tab visibility listener that auto-resumes playback when the browser tab regains focus after being in the background (where browsers block autoplay).
+
 ## 0.8.6 (2026-02-28)
 
 ### Bug Fixes

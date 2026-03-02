@@ -3,8 +3,8 @@ import { useParams, Link } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { getTalkgroup, getTalkgroupCalls } from '@/api/client'
-import type { Talkgroup, Call } from '@/api/types'
+import { getTalkgroup, getTalkgroupCalls, updateTalkgroup } from '@/api/client'
+import type { Talkgroup, Call, TalkgroupPatch } from '@/api/types'
 import { useTranscriptionCache } from '@/stores/useTranscriptionCache'
 import { useFilterStore } from '@/stores/useFilterStore'
 import { useMonitorStore } from '@/stores/useMonitorStore'
@@ -23,6 +23,11 @@ export default function TalkgroupDetail() {
   const [error, setError] = useState<string | null>(null)
   const [unitSort, setUnitSort] = useState<'alpha_tag' | 'unit_id' | 'count'>('count')
   const [unitSortDir, setUnitSortDir] = useState<'asc' | 'desc'>('desc')
+
+  // Inline edit state
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [editForm, setEditForm] = useState<TalkgroupPatch>({})
 
   // Subscribe to state to trigger re-renders
   const favoriteTalkgroups = useFilterStore((s) => s.favoriteTalkgroups)
@@ -153,6 +158,37 @@ export default function TalkgroupDetail() {
     [calls, clearQueue, loadCall, addToQueue]
   )
 
+  const startEdit = useCallback(() => {
+    if (!talkgroup) return
+    setEditForm({
+      alpha_tag: talkgroup.alpha_tag || '',
+      description: talkgroup.description || '',
+      group: talkgroup.group || '',
+      tag: talkgroup.tag || '',
+      priority: talkgroup.priority ?? 0,
+    })
+    setEditing(true)
+  }, [talkgroup])
+
+  const cancelEdit = useCallback(() => {
+    setEditing(false)
+    setEditForm({})
+  }, [])
+
+  const saveEdit = useCallback(async () => {
+    if (!id) return
+    setSaving(true)
+    try {
+      const updated = await updateTalkgroup(id, editForm)
+      setTalkgroup(updated)
+      setEditing(false)
+    } catch (err) {
+      console.error('Failed to update talkgroup:', err)
+    } finally {
+      setSaving(false)
+    }
+  }, [id, editForm])
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center text-muted-foreground">
@@ -215,6 +251,15 @@ export default function TalkgroupDetail() {
                 Analytics
               </Button>
             </Link>
+            {!editing && (
+              <Button variant="outline" onClick={startEdit}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
+                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                  <path d="m15 5 4 4" />
+                </svg>
+                Edit
+              </Button>
+            )}
             <Button
               variant={monitored ? 'default' : 'outline'}
               onClick={() => toggleTalkgroupMonitor(talkgroup.system_id, talkgroup.tgid)}
@@ -257,6 +302,74 @@ export default function TalkgroupDetail() {
           </div>
         </div>
       </div>
+
+      {/* Inline edit form */}
+      {editing && (
+        <Card>
+          <CardContent className="pt-4 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Name</label>
+                <input
+                  type="text"
+                  value={editForm.alpha_tag ?? ''}
+                  onChange={(e) => setEditForm((f) => ({ ...f, alpha_tag: e.target.value }))}
+                  className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+                  placeholder="Alpha tag"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Group</label>
+                <input
+                  type="text"
+                  value={editForm.group ?? ''}
+                  onChange={(e) => setEditForm((f) => ({ ...f, group: e.target.value }))}
+                  className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+                  placeholder="Group"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Tag</label>
+                <input
+                  type="text"
+                  value={editForm.tag ?? ''}
+                  onChange={(e) => setEditForm((f) => ({ ...f, tag: e.target.value }))}
+                  className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+                  placeholder="Tag (e.g., Law Dispatch)"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Priority</label>
+                <input
+                  type="number"
+                  value={editForm.priority ?? 0}
+                  onChange={(e) => setEditForm((f) => ({ ...f, priority: parseInt(e.target.value, 10) || 0 }))}
+                  className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+                  min={0}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Description</label>
+              <input
+                type="text"
+                value={editForm.description ?? ''}
+                onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+                className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+                placeholder="Description"
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" size="sm" onClick={cancelEdit} disabled={saving}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={saveEdit} disabled={saving}>
+                {saving ? 'Saving...' : 'Save'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Info badges */}
       <div className="flex flex-wrap gap-2">

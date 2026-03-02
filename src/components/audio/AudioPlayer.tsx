@@ -310,6 +310,41 @@ export function AudioPlayer() {
     { enabled: !!currentCall && !isBlocked }
   )
 
+  // Update page title with queue count so user can see activity from background tab
+  useEffect(() => {
+    const base = 'TR Dashboard'
+    if (queue.length > 0 && currentCall) {
+      document.title = `(${queue.length}) ${getTalkgroupDisplayName(currentCall.tgid, currentCall.tgAlphaTag)} — ${base}`
+    } else if (currentCall && isPlaying) {
+      document.title = `▶ ${getTalkgroupDisplayName(currentCall.tgid, currentCall.tgAlphaTag)} — ${base}`
+    } else {
+      document.title = base
+    }
+  }, [queue.length, currentCall, isPlaying])
+
+  // Auto-resume when tab regains visibility (browser blocks autoplay in background tabs)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState !== 'visible') return
+      const audio = audioRef.current
+      const state = useAudioStore.getState()
+
+      if (state.playbackState === 'blocked' && audio && state.currentCall) {
+        // Tab is visible again — try to play (user gesture context may be restored)
+        playAttemptedRef.current = false
+        audio.play()
+          .then(() => { /* onPlay will update state */ })
+          .catch(() => { /* still blocked, user will see Enable Audio button */ })
+      } else if (state.playbackState === 'idle' && state.queue.length > 0) {
+        // Queue has items but nothing is playing — kick it off
+        state.skipNext()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [])
+
   // Idle state - no call loaded
   if (!currentCall) {
     return (

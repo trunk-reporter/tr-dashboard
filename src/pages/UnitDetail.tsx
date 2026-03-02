@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { CallList } from '@/components/calls/CallList'
-import { getUnit, getUnitEvents, getUnitCalls } from '@/api/client'
+import { getUnit, getUnitEvents, getUnitCalls, updateUnit } from '@/api/client'
 import type { Unit, UnitEvent, Call } from '@/api/types'
 import {
   formatDateTime,
@@ -21,6 +22,35 @@ export default function UnitDetail() {
   const [calls, setCalls] = useState<Call[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Inline edit state
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [editAlphaTag, setEditAlphaTag] = useState('')
+
+  const startEdit = useCallback(() => {
+    if (!unit) return
+    setEditAlphaTag(unit.alpha_tag || '')
+    setEditing(true)
+  }, [unit])
+
+  const cancelEdit = useCallback(() => {
+    setEditing(false)
+  }, [])
+
+  const saveEdit = useCallback(async () => {
+    if (!id) return
+    setSaving(true)
+    try {
+      const updated = await updateUnit(id, { alpha_tag: editAlphaTag })
+      setUnit(updated)
+      setEditing(false)
+    } catch (err) {
+      console.error('Failed to update unit:', err)
+    } finally {
+      setSaving(false)
+    }
+  }, [id, editAlphaTag])
 
   useEffect(() => {
     if (!id) return
@@ -90,11 +120,43 @@ export default function UnitDetail() {
           {unit.alpha_tag_source && (
             <Badge variant="secondary" className="text-xs">Source: {unit.alpha_tag_source}</Badge>
           )}
+          {!editing && (
+            <Button variant="outline" size="sm" onClick={startEdit}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
+                <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                <path d="m15 5 4 4" />
+              </svg>
+              Edit
+            </Button>
+          )}
         </div>
-        <p className="text-muted-foreground text-sm">
-          {unit.system_name && `${unit.system_name} `}
-          <span className="font-mono text-muted-foreground/70">({unit.system_id})</span>
-        </p>
+        {editing ? (
+          <div className="flex items-center gap-2 mt-1">
+            <input
+              type="text"
+              value={editAlphaTag}
+              onChange={(e) => setEditAlphaTag(e.target.value)}
+              className="rounded-md border border-input bg-background px-3 py-1.5 text-sm w-64"
+              placeholder="Unit name"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') saveEdit()
+                if (e.key === 'Escape') cancelEdit()
+              }}
+            />
+            <Button size="sm" onClick={saveEdit} disabled={saving}>
+              {saving ? 'Saving...' : 'Save'}
+            </Button>
+            <Button variant="outline" size="sm" onClick={cancelEdit} disabled={saving}>
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <p className="text-muted-foreground text-sm">
+            {unit.system_name && `${unit.system_name} `}
+            <span className="font-mono text-muted-foreground/70">({unit.system_id})</span>
+          </p>
+        )}
       </div>
 
       {/* Details — compact inline */}
