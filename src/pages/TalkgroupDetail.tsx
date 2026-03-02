@@ -3,14 +3,14 @@ import { useParams, Link } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { getTalkgroup, getTalkgroupCalls, updateTalkgroup } from '@/api/client'
+import { getTalkgroup, getTalkgroupCalls, updateTalkgroup, getCachedSystemType } from '@/api/client'
 import type { Talkgroup, Call, TalkgroupPatch } from '@/api/types'
 import { useTranscriptionCache } from '@/stores/useTranscriptionCache'
 import { useFilterStore } from '@/stores/useFilterStore'
 import { useMonitorStore } from '@/stores/useMonitorStore'
 import { useRealtimeStore } from '@/stores/useRealtimeStore'
 import { useAudioStore, selectIsPlaying } from '@/stores/useAudioStore'
-import { formatDateTime, formatRelativeTime, formatDuration, formatTime, formatFrequency, getUnitColorByRid } from '@/lib/utils'
+import { formatDateTime, formatRelativeTime, formatDuration, formatTime, formatFrequency, getUnitColorByRid, getSystemTypeLabel } from '@/lib/utils'
 import { TranscriptionPreview } from '@/components/calls/TranscriptionPreview'
 import { CopyableId } from '@/components/ui/copyable-id'
 import { Sparkline } from '@/components/ui/sparkline'
@@ -386,6 +386,9 @@ export default function TalkgroupDetail() {
       {/* Info badges */}
       <div className="flex flex-wrap gap-2">
         <CopyableId value={String(talkgroup.tgid)} label="TGID" className="text-base" />
+        {getCachedSystemType(talkgroup.system_id) && (
+          <Badge variant="outline">{getSystemTypeLabel(getCachedSystemType(talkgroup.system_id)!)}</Badge>
+        )}
         {talkgroup.group && <Badge variant="secondary">{talkgroup.group}</Badge>}
         {talkgroup.tag && <Badge variant="secondary">{talkgroup.tag}</Badge>}
         {talkgroup.mode === 'D' && <Badge variant="outline">Digital</Badge>}

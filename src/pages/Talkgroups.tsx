@@ -4,6 +4,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Pagination } from '@/components/ui/pagination'
 import { getTalkgroups, getSystems } from '@/api/client'
+import { getSystemTypeLabel } from '@/lib/utils'
 import type { Talkgroup, System } from '@/api/types'
 import { useFilterStore } from '@/stores/useFilterStore'
 import { useMonitorStore } from '@/stores/useMonitorStore'
@@ -261,7 +262,7 @@ export default function Talkgroups() {
               <option value="">All systems</option>
               {systems.map((sys) => (
                 <option key={sys.system_id} value={sys.system_id}>
-                  {sys.name || `System ${sys.system_id}`}
+                  {sys.name || `System ${sys.system_id}`}{sys.system_type ? ` (${getSystemTypeLabel(sys.system_type)})` : ''}
                 </option>
               ))}
             </select>

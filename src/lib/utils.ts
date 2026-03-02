@@ -162,6 +162,20 @@ export function getEventTypeColor(eventType: string): string {
   return colors[eventType] || 'text-foreground'
 }
 
+// System type display helpers — open-ended, falls back gracefully for unknown types
+const SYSTEM_TYPE_LABELS: Record<string, string> = {
+  p25: 'P25',
+  smartnet: 'SmartNet',
+  conventional: 'Analog',
+  conventionalP25: 'P25 Conv',
+  conventionalDMR: 'DMR',
+  conventionalSIGMF: 'SIGMF',
+}
+
+export function getSystemTypeLabel(systemType: string): string {
+  return SYSTEM_TYPE_LABELS[systemType] || systemType.replace(/([a-z])([A-Z])/g, '$1 $2')
+}
+
 // Unit color palette for distinguishing speakers in transcriptions
 // Using distinct, accessible colors that work on both light and dark backgrounds
 const UNIT_COLORS = [

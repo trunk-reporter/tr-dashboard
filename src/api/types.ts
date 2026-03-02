@@ -9,7 +9,7 @@
 // Enums
 // =============================================================================
 
-export type SystemType = 'p25' | 'smartnet' | 'conventional'
+export type SystemType = string
 
 export type TalkgroupMode = 'D' | 'A' | 'E' | 'M' | 'T'
 

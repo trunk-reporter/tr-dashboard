@@ -106,12 +106,25 @@ function buildQueryString(params: object): string {
 // Systems
 // =============================================================================
 
+// Module-level cache: system_id → system_type (populated by getSystems)
+const systemTypeCache = new Map<number, string>()
+
+export function getCachedSystemType(systemId: number): string | undefined {
+  return systemTypeCache.get(systemId)
+}
+
 export async function getSystems(): Promise<SystemListResponse> {
-  return request('/systems')
+  const result = await request<SystemListResponse>('/systems')
+  for (const sys of result.systems) {
+    if (sys.system_type) systemTypeCache.set(sys.system_id, sys.system_type)
+  }
+  return result
 }
 
 export async function getSystem(id: number): Promise<System> {
-  return request(`/systems/${id}`)
+  const result = await request<System>(`/systems/${id}`)
+  if (result.system_type) systemTypeCache.set(result.system_id, result.system_type)
+  return result
 }
 
 export async function updateSystem(id: number, patch: SystemPatch): Promise<System> {

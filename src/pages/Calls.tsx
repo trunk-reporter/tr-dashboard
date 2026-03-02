@@ -8,6 +8,7 @@ import { Pagination } from '@/components/ui/pagination'
 import { CallList } from '@/components/calls/CallList'
 import { TalkgroupMultiSelect } from '@/components/calls/TalkgroupMultiSelect'
 import { getCalls, getTalkgroups, getSystems } from '@/api/client'
+import { getSystemTypeLabel } from '@/lib/utils'
 import { useRealtimeStore } from '@/stores/useRealtimeStore'
 import { useTranscriptionCache } from '@/stores/useTranscriptionCache'
 import type { Call, Talkgroup, System } from '@/api/types'
@@ -308,7 +309,7 @@ export default function Calls() {
                 <option value="">All systems</option>
                 {systems.map((sys) => (
                   <option key={sys.system_id} value={sys.system_id}>
-                    {sys.name || `System ${sys.system_id}`}
+                    {sys.name || `System ${sys.system_id}`}{sys.system_type ? ` (${getSystemTypeLabel(sys.system_type)})` : ''}
                   </option>
                 ))}
               </select>

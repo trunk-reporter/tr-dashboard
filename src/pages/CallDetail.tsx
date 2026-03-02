@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useAudioStore, selectIsPlaying } from '@/stores/useAudioStore'
-import { getCall, getCallTransmissions, getCallFrequencies, getCallTranscription } from '@/api/client'
+import { getCall, getCallTransmissions, getCallFrequencies, getCallTranscription, getCachedSystemType } from '@/api/client'
 import type { Call, CallTransmission, CallFrequency, Transcription } from '@/api/types'
 import {
   formatDuration,
@@ -13,6 +13,7 @@ import {
   getTalkgroupDisplayName,
   getUnitDisplayName,
   getUnitColorByRid,
+  getSystemTypeLabel,
   cn,
 } from '@/lib/utils'
 import { useSignalThresholds, getSignalColor } from '@/stores/useSignalThresholds'
@@ -206,6 +207,9 @@ export default function CallDetail() {
 
       {/* Status badges */}
       <div className="flex flex-wrap gap-2">
+        {getCachedSystemType(call.system_id) && (
+          <Badge variant="outline">{getSystemTypeLabel(getCachedSystemType(call.system_id)!)}</Badge>
+        )}
         {call.emergency && <Badge variant="destructive">EMERGENCY</Badge>}
         {call.encrypted && <Badge variant="secondary">ENCRYPTED</Badge>}
         {call.analog && <Badge variant="outline">Analog</Badge>}
