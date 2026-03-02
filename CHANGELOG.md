@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.9 (2026-03-02)
+
+### Bug Fixes
+
+- **CallCard pause button:** Clicking the pause button on a call card now actually pauses playback instead of reloading the call. Previously, the pause icon appeared but the click handler always re-loaded the call.
+- **Multi-architecture Docker images:** Docker images are now built for both `linux/amd64` and `linux/arm64`, fixing "platform mismatch" errors on ARM hosts (e.g., Raspberry Pi, Apple Silicon).
+
 ## 0.8.8 (2026-03-01)
 
 ### Features

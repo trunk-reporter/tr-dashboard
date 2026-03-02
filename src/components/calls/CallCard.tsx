@@ -21,6 +21,7 @@ interface CallCardProps {
 
 export function CallCard({ call, showSystem = true, compact = false }: CallCardProps) {
   const loadCall = useAudioStore((s) => s.loadCall)
+  const requestPause = useAudioStore((s) => s.requestPause)
   const currentCall = useAudioStore((s) => s.currentCall)
   const isPlaying = useAudioStore(selectIsPlaying)
 
@@ -33,7 +34,9 @@ export function CallCard({ call, showSystem = true, compact = false }: CallCardP
   const handlePlay = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    if (hasAudio) {
+    if (isCurrentlyPlaying && isPlaying) {
+      requestPause()
+    } else if (hasAudio) {
       loadCall(call)
     }
   }

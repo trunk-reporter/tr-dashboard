@@ -171,7 +171,7 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   requestPause: () => {
     const { playbackState } = get()
     if (playbackState === 'playing') {
-      // Don't set paused here - wait for onPause event
+      set({ playbackState: 'paused' })
     }
   },
 
