@@ -12,6 +12,8 @@ import {
   getEventTypeLabel,
   getEventTypeColor,
   getTalkgroupDisplayName,
+  getSignalingTypeLabel,
+  getSignalTypeLabel,
 } from '@/lib/utils'
 import { CopyableId } from '@/components/ui/copyable-id'
 
@@ -210,13 +212,28 @@ export default function UnitDetail() {
                 {events.map((event) => (
                   <div
                     key={event.id}
-                    className="flex items-center justify-between rounded-lg border bg-card p-3"
+                    className={`flex items-center justify-between rounded-lg border bg-card p-3${
+                      event.event_type === 'signal' && (event.signaling_type || (event.metadata_json as Record<string, string>)?.signal_type) === 'emergency'
+                        ? ' border-destructive/50' : ''
+                    }`}
                   >
                     <div>
                       <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="text-xs">
-                          {getEventTypeLabel(event.event_type)}
+                        <Badge
+                          variant={event.event_type === 'signal'
+                            && ((event.signal_type || (event.metadata_json as Record<string, string>)?.signal_type) === 'emergency')
+                            ? 'destructive' : 'secondary'}
+                          className="text-xs"
+                        >
+                          {event.event_type === 'signal'
+                            ? getSignalingTypeLabel(event.signaling_type || (event.metadata_json as Record<string, string>)?.signaling_type || 'Signal')
+                            : getEventTypeLabel(event.event_type)}
                         </Badge>
+                        {event.event_type === 'signal' && (
+                          <span className="text-xs text-muted-foreground">
+                            {getSignalTypeLabel(event.signal_type || (event.metadata_json as Record<string, string>)?.signal_type || 'normal')}
+                          </span>
+                        )}
                         {event.system_id && event.tgid ? (
                           <Link
                             to={`/talkgroups/${event.system_id}:${event.tgid}`}

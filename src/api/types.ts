@@ -13,7 +13,7 @@ export type SystemType = string
 
 export type TalkgroupMode = 'D' | 'A' | 'E' | 'M' | 'T'
 
-export type EventType = 'on' | 'off' | 'join' | 'call' | 'end' | 'data' | 'ans_req' | 'location' | 'ackresp'
+export type EventType = 'on' | 'off' | 'join' | 'call' | 'end' | 'data' | 'ans_req' | 'location' | 'ackresp' | 'signal'
 
 export type CallState = 'monitoring' | 'recording' | 'stopped' | 'completed'
 
@@ -111,7 +111,7 @@ export interface Unit {
   relevance_score?: number
 }
 
-/** A unit event (registration, affiliation, call activity) */
+/** A unit event (registration, affiliation, call activity, signal decode) */
 export interface UnitEvent {
   id: number
   event_type: EventType
@@ -125,6 +125,9 @@ export interface UnitEvent {
   tg_description?: string
   instance_id?: string
   metadata_json?: Record<string, unknown>
+  // Signal event fields (SSE sends these top-level, REST puts them in metadata_json)
+  signaling_type?: string   // MDC1200, FLEETSYNC, STAR, unknown
+  signal_type?: string      // normal, emergency, radio_check, etc.
 }
 
 /** A recorded radio call */

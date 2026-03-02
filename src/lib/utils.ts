@@ -143,6 +143,7 @@ export function getEventTypeLabel(eventType: string): string {
     leave: 'Left',
     data: 'Data TX',
     status_update: 'Status',
+    signal: 'Signal',
   }
   return labels[eventType] || eventType
 }
@@ -158,8 +159,35 @@ export function getEventTypeColor(eventType: string): string {
     leave: 'text-warning',
     data: 'text-info',
     status_update: 'text-muted-foreground',
+    signal: 'text-cyan-500',
   }
   return colors[eventType] || 'text-foreground'
+}
+
+// Signal event display helpers
+export function getSignalingTypeLabel(signalingType: string): string {
+  const labels: Record<string, string> = {
+    MDC1200: 'MDC-1200',
+    FLEETSYNC: 'FleetSync',
+    STAR: 'StarCode',
+  }
+  return labels[signalingType] || signalingType
+}
+
+export function getSignalTypeLabel(signalType: string): string {
+  const labels: Record<string, string> = {
+    normal: 'PTT ID',
+    normal_pre: 'Pre-Key ID',
+    emergency: 'EMERGENCY',
+    emergency_ack: 'Emergency Ack',
+    radio_check: 'Radio Check',
+    radio_check_ack: 'Radio Check Ack',
+    radio_stun: 'Radio Stun',
+    radio_stun_ack: 'Stun Ack',
+    radio_revive: 'Radio Revive',
+    radio_revive_ack: 'Revive Ack',
+  }
+  return labels[signalType] || signalType
 }
 
 // System type display helpers — open-ended, falls back gracefully for unknown types

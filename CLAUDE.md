@@ -206,6 +206,11 @@ Understanding the P25 trunked radio hierarchy is essential for this codebase:
 
 **SSE Event Types:** `call_start`, `call_update`, `call_end`, `unit_event`, `rate_update`, `recorder_update`
 
+**System Types:** `p25`, `smartnet`, `conventional`, `conventionalP25`, `conventionalDMR`, `conventionalSIGMF`
+
+**Unit Event Types:** `on`, `off`, `join`, `call`, `end`, `data`, `ans_req`, `location`, `ackresp`, `signal`
+- Signal events (`event_type: "signal"`) carry `signaling_type` (MDC1200, FLEETSYNC, STAR) and `signal_type` (normal, emergency, radio_check, etc.) — identifies transmitting radios on analog/conventional systems via in-band signaling
+
 ## Remaining Feature Work
 
 - Transcription search/browse UI (types exist, no page yet)
