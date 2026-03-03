@@ -276,25 +276,23 @@ export default function Recorders() {
 
   // Group recorders by system_id (site)
   const systemGroups = useMemo(() => {
-    const sysMap = new Map<number | 'unassigned', Recorder[]>()
+    const sysMap = new Map<number, Recorder[]>()
     for (const rec of mergedRecorders) {
-      const key = rec.system_id ?? 'unassigned'
-      if (!sysMap.has(key)) sysMap.set(key, [])
-      sysMap.get(key)!.push(rec)
+      if (rec.system_id == null) continue // skip unassigned recorders
+      if (!sysMap.has(rec.system_id)) sysMap.set(rec.system_id, [])
+      sysMap.get(rec.system_id)!.push(rec)
     }
     return Array.from(sysMap.entries())
       .sort(([a], [b]) => {
-        if (a === 'unassigned') return 1
-        if (b === 'unassigned') return -1
-        const nameA = systemIdInfo.get(a as number)?.name ?? ''
-        const nameB = systemIdInfo.get(b as number)?.name ?? ''
+        const nameA = systemIdInfo.get(a)?.name ?? ''
+        const nameB = systemIdInfo.get(b)?.name ?? ''
         return nameA.localeCompare(nameB)
       })
       .map(([sysId, recorders]) => {
-        const info = sysId !== 'unassigned' ? systemIdInfo.get(sysId as number) : undefined
+        const info = systemIdInfo.get(sysId)
         return {
           systemId: sysId,
-          name: info?.name || (sysId === 'unassigned' ? 'Unassigned' : `System ${sysId}`),
+          name: info?.name || `System ${sysId}`,
           sites: info?.sites || [],
           recorders,
           type: recorders[0]?.type ?? 'Unknown',
