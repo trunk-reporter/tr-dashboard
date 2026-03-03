@@ -187,18 +187,25 @@ export default function Dashboard() {
 
   // Merge API recorders with realtime updates
   const mergedRecorders = useMemo(() => {
-    // Build map from realtime recorders by id
+    const recKey = (r: Recorder) => r.instance_id ? `${r.instance_id}:${r.id}` : r.id
+    // Build map from realtime recorders by instance-scoped key
     const realtimeMap = new Map<string, Recorder>()
     for (const r of realtimeRecorders) {
-      realtimeMap.set(r.id, r)
+      realtimeMap.set(recKey(r), r)
     }
 
-    // Start with API recorders, overlay realtime data
-    const activeRecorders = apiRecorders.filter(r => (r.count ?? 0) > 0)
+    // Deduplicate API recorders by instance-scoped key
+    const seen = new Set<string>()
+    const activeRecorders = apiRecorders.filter((r) => {
+      const key = recKey(r)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
 
     return activeRecorders
       .map((apiRec) => {
-        const realtime = realtimeMap.get(apiRec.id)
+        const realtime = realtimeMap.get(recKey(apiRec))
         const merged: Recorder = { ...apiRec, ...realtime, id: apiRec.id }
 
         // Track recording start/end for elapsed time

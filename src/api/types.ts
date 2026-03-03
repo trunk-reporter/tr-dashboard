@@ -293,6 +293,8 @@ export interface TranscriptionSegment {
 /** Trunk-recorder recorder (SDR channel) */
 export interface Recorder {
   id: string
+  instance_id?: string
+  system_id?: number | null
   src_num?: number
   rec_num?: number
   type?: string

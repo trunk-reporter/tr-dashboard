@@ -74,7 +74,11 @@ export const useRealtimeStore = create<RealtimeState>((set) => ({
 
   handleRecorderUpdate: (recorder) =>
     set((state) => {
-      const existing = state.recorders.findIndex((r) => r.id === recorder.id)
+      const key = recorder.instance_id ? `${recorder.instance_id}:${recorder.id}` : recorder.id
+      const existing = state.recorders.findIndex((r) => {
+        const rKey = r.instance_id ? `${r.instance_id}:${r.id}` : r.id
+        return rKey === key
+      })
       if (existing >= 0) {
         const newRecorders = [...state.recorders]
         newRecorders[existing] = recorder

@@ -15,6 +15,7 @@ const NAVIGATION_OPTIONS = [
   { key: 'T', label: 'Talkgroups', path: '/talkgroups' },
   { key: 'U', label: 'Units', path: '/units' },
   { key: 'A', label: 'Affiliations', path: '/affiliations' },
+  { key: 'E', label: 'Systems', path: '/systems' },
   { key: 'R', label: 'Directory', path: '/directory' },
   { key: 'S', label: 'Settings', path: '/settings' },
   { key: 'X', label: 'Admin', path: '/admin' },

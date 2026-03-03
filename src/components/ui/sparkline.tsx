@@ -3,9 +3,10 @@ interface SparklineProps {
   width?: number
   height?: number
   color?: string
+  colorFn?: (value: number, index: number) => string
 }
 
-export function Sparkline({ data, width, height = 32, color = '#f59e0b' }: SparklineProps) {
+export function Sparkline({ data, width, height = 32, color = '#f59e0b', colorFn }: SparklineProps) {
   if (data.length === 0) return null
 
   const max = Math.max(...data, 1)
@@ -28,7 +29,7 @@ export function Sparkline({ data, width, height = 32, color = '#f59e0b' }: Spark
             y={height - barHeight}
             width={Math.max(barWidth - 0.5, 0.5)}
             height={barHeight}
-            fill={color}
+            fill={colorFn ? colorFn(value, i) : color}
             opacity={0.8}
           />
         )
