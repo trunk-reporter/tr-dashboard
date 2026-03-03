@@ -28,6 +28,8 @@ export default function Settings() {
   const setShowEncrypted = useFilterStore((s) => s.setShowEncrypted)
   const emergencyNotifications = useFilterStore((s) => s.emergencyNotifications)
   const setEmergencyNotifications = useFilterStore((s) => s.setEmergencyNotifications)
+  const unitIdHex = useFilterStore((s) => s.unitIdHex)
+  const setUnitIdHex = useFilterStore((s) => s.setUnitIdHex)
   const autoPlay = useAudioStore((s) => s.autoPlay)
   const setAutoPlay = useAudioStore((s) => s.setAutoPlay)
   const volume = useAudioStore((s) => s.volume)
@@ -266,6 +268,24 @@ export default function Settings() {
               }}
             >
               {emergencyNotifications ? 'On' : 'Off'}
+            </Button>
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium">Unit IDs as hexadecimal</p>
+              <p className="text-sm text-muted-foreground">
+                Display unit radio IDs in hex (for MDC1200/FleetSync systems)
+              </p>
+            </div>
+            <Button
+              variant={unitIdHex ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setUnitIdHex(!unitIdHex)}
+            >
+              {unitIdHex ? 'Hex' : 'Decimal'}
             </Button>
           </div>
         </CardContent>

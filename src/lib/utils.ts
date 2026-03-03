@@ -128,8 +128,12 @@ export function getTalkgroupDisplayName(tgid: number, alphaTag?: string): string
   return alphaTag || `TG ${tgid}`
 }
 
-export function getUnitDisplayName(unitId: number, alphaTag?: string): string {
-  return alphaTag || `Unit ${unitId}`
+export function formatUnitId(id: number, asHex: boolean): string {
+  return asHex ? id.toString(16).toUpperCase() : String(id)
+}
+
+export function getUnitDisplayName(unitId: number, alphaTag?: string, asHex?: boolean): string {
+  return alphaTag || `Unit ${formatUnitId(unitId, asHex ?? false)}`
 }
 
 export function getEventTypeLabel(eventType: string): string {

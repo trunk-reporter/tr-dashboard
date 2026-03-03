@@ -25,6 +25,7 @@ interface FilterState {
   showEncrypted: boolean
   showEmergencyOnly: boolean
   emergencyNotifications: boolean
+  unitIdHex: boolean
 
   // Actions
   setSelectedSystems: (systems: number[]) => void
@@ -50,6 +51,7 @@ interface FilterState {
   setShowEncrypted: (show: boolean) => void
   setShowEmergencyOnly: (show: boolean) => void
   setEmergencyNotifications: (enabled: boolean) => void
+  setUnitIdHex: (hex: boolean) => void
 
   resetFilters: () => void
 }
@@ -66,6 +68,7 @@ const initialState = {
   showEncrypted: true,
   showEmergencyOnly: false,
   emergencyNotifications: false,
+  unitIdHex: false,
 }
 
 export const useFilterStore = create<FilterState>()(
@@ -144,6 +147,8 @@ export const useFilterStore = create<FilterState>()(
 
       setEmergencyNotifications: (enabled) => set({ emergencyNotifications: enabled }),
 
+      setUnitIdHex: (hex) => set({ unitIdHex: hex }),
+
       resetFilters: () =>
         set({
           selectedSystems: [],
@@ -163,6 +168,7 @@ export const useFilterStore = create<FilterState>()(
         favoriteTalkgroups: state.favoriteTalkgroups,
         showEncrypted: state.showEncrypted,
         emergencyNotifications: state.emergencyNotifications,
+        unitIdHex: state.unitIdHex,
       }),
     }
   )

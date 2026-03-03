@@ -9,16 +9,19 @@ import type { Unit, UnitEvent, Call } from '@/api/types'
 import {
   formatDateTime,
   formatRelativeTime,
+  formatUnitId,
   getEventTypeLabel,
   getEventTypeColor,
   getTalkgroupDisplayName,
   getSignalingTypeLabel,
   getSignalTypeLabel,
 } from '@/lib/utils'
+import { useFilterStore } from '@/stores/useFilterStore'
 import { CopyableId } from '@/components/ui/copyable-id'
 
 export default function UnitDetail() {
   const { id } = useParams<{ id: string }>()
+  const unitIdHex = useFilterStore((s) => s.unitIdHex)
   const [unit, setUnit] = useState<Unit | null>(null)
   const [events, setEvents] = useState<UnitEvent[]>([])
   const [calls, setCalls] = useState<Call[]>([])
@@ -125,9 +128,9 @@ export default function UnitDetail() {
         </div>
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold">
-            {unit.alpha_tag || `Unit ${unit.unit_id}`}
+            {unit.alpha_tag || `Unit ${formatUnitId(unit.unit_id, unitIdHex)}`}
           </h1>
-          <CopyableId value={String(unit.unit_id)} />
+          <CopyableId value={formatUnitId(unit.unit_id, unitIdHex)} />
           {unit.alpha_tag_source && (
             <Badge variant="secondary" className="text-xs">Source: {unit.alpha_tag_source}</Badge>
           )}

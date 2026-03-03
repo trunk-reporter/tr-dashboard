@@ -9,6 +9,7 @@ import {
   getTalkgroupDisplayName,
   getUnitDisplayName,
 } from '@/lib/utils'
+import { useFilterStore } from '@/stores/useFilterStore'
 
 interface ActiveCallBadgeProps {
   call: Call
@@ -17,6 +18,7 @@ interface ActiveCallBadgeProps {
 }
 
 export function ActiveCallBadge({ call, onClick, compact = false }: ActiveCallBadgeProps) {
+  const unitIdHex = useFilterStore((s) => s.unitIdHex)
   const elapsed = call.duration ?? 0
   // Get first transmitting unit from units list
   const lastUnit = call.units?.[call.units.length - 1]
@@ -71,7 +73,7 @@ export function ActiveCallBadge({ call, onClick, compact = false }: ActiveCallBa
                     className="font-medium hover:underline"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    {lastUnit.alpha_tag || getUnitDisplayName(lastUnit.unit_id)}
+                    {lastUnit.alpha_tag || getUnitDisplayName(lastUnit.unit_id, undefined, unitIdHex)}
                   </Link>
                 </div>
               )}
@@ -122,7 +124,7 @@ export function ActiveCallBadge({ call, onClick, compact = false }: ActiveCallBa
                   className="text-sm font-medium hover:underline"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {lastUnit.alpha_tag || getUnitDisplayName(lastUnit.unit_id)}
+                  {lastUnit.alpha_tag || getUnitDisplayName(lastUnit.unit_id, undefined, unitIdHex)}
                 </Link>
               </div>
             )}

@@ -10,12 +10,14 @@ import {
   formatDuration,
   formatDateTime,
   formatFrequency,
+  formatUnitId,
   getTalkgroupDisplayName,
   getUnitDisplayName,
   getUnitColorByRid,
   getSystemTypeLabel,
   cn,
 } from '@/lib/utils'
+import { useFilterStore } from '@/stores/useFilterStore'
 import { useSignalThresholds, getSignalColor } from '@/stores/useSignalThresholds'
 import { CopyableId } from '@/components/ui/copyable-id'
 import { TRANSMISSION_COLORS } from '@/components/audio/TransmissionTimeline'
@@ -29,6 +31,7 @@ export default function CallDetail() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const unitIdHex = useFilterStore((s) => s.unitIdHex)
   const loadCall = useAudioStore((s) => s.loadCall)
   const currentCall = useAudioStore((s) => s.currentCall)
   const isPlaying = useAudioStore(selectIsPlaying)
@@ -327,7 +330,7 @@ export default function CallDetail() {
                     const color = TRANSMISSION_COLORS[unitIndex % TRANSMISSION_COLORS.length] || 'bg-muted'
                     const left = (tx.pos / (call.duration ?? 1)) * 100
                     const width = (tx.duration / (call.duration ?? 1)) * 100
-                    const unitName = tx.tag || getUnitDisplayName(tx.src)
+                    const unitName = tx.tag || getUnitDisplayName(tx.src, undefined, unitIdHex)
                     return (
                       <div
                         key={i}
@@ -346,7 +349,7 @@ export default function CallDetail() {
                 {uniqueUnits.map((src, i) => {
                   const color = TRANSMISSION_COLORS[i % TRANSMISSION_COLORS.length]
                   const tx = transmissions.find((t) => t.src === src)
-                  const name = tx?.tag || getUnitDisplayName(src)
+                  const name = tx?.tag || getUnitDisplayName(src, undefined, unitIdHex)
                   return (
                     <Link key={src} to={`/units/${call.system_id}:${src}`} className="inline-flex items-center gap-1.5 hover:underline">
                       <span className={cn('inline-block h-2 w-2 rounded-full', color)} />
@@ -420,6 +423,7 @@ export default function CallDetail() {
                     fullText={transcription.text}
                     uniqueUnits={uniqueUnits}
                     systemId={call.system_id}
+                    unitIdHex={unitIdHex}
                   />
                 ) : (
                   <p className="text-lg leading-relaxed">{transcription.text}</p>
@@ -481,7 +485,7 @@ export default function CallDetail() {
             <div className="space-y-2">
               {transmissions.map((tx, i) => {
                 const unitColor = hasUnits ? getUnitColorByRid(tx.src, uniqueUnits) : null
-                const unitName = tx.tag || getUnitDisplayName(tx.src)
+                const unitName = tx.tag || getUnitDisplayName(tx.src, undefined, unitIdHex)
 
                 // Find frequency active during this transmission
                 const freq = frequencies.find(f => {
@@ -549,11 +553,13 @@ function TranscriptionWithSpeakers({
   fullText,
   uniqueUnits,
   systemId,
+  unitIdHex,
 }: {
   words: { word: string; start: number; end: number; src: number; src_tag?: string }[]
   fullText?: string
   uniqueUnits: number[]
   systemId: number
+  unitIdHex: boolean
 }) {
   // Use punctuated words from full text when available (word objects strip punctuation)
   const punctuatedWords = fullText ? fullText.split(/\s+/) : null
@@ -576,7 +582,7 @@ function TranscriptionWithSpeakers({
     <div className="text-lg leading-relaxed space-y-1">
       {segments.map((seg, i) => {
         const color = seg.src !== null ? getUnitColorByRid(seg.src, uniqueUnits) : null
-        const name = seg.srcTag || (seg.src !== null ? `Unit ${seg.src}` : 'Unknown')
+        const name = seg.srcTag || (seg.src !== null ? `Unit ${formatUnitId(seg.src, unitIdHex)}` : 'Unknown')
         return (
           <p key={i}>
             {seg.src !== null ? (

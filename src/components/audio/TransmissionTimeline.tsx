@@ -1,5 +1,6 @@
 import type { CallTransmission } from '@/api/types'
-import { cn } from '@/lib/utils'
+import { cn, formatUnitId } from '@/lib/utils'
+import { useFilterStore } from '@/stores/useFilterStore'
 
 interface TransmissionTimelineProps {
   transmissions: CallTransmission[]
@@ -41,6 +42,7 @@ function getUnitColorsMap(transmissions: CallTransmission[]): Map<number, string
 
 // Legend component to show unit names with colors
 export function TransmissionLegend({ transmissions, unitTags }: TransmissionLegendProps) {
+  const unitIdHex = useFilterStore((s) => s.unitIdHex)
   if (transmissions.length === 0) return null
 
   const unitColors = getUnitColorsMap(transmissions)
@@ -48,7 +50,7 @@ export function TransmissionLegend({ transmissions, unitTags }: TransmissionLege
 
   const getUnitLabel = (src: number): string => {
     const tag = unitTags.get(src)
-    return tag || String(src)
+    return tag || formatUnitId(src, unitIdHex)
   }
 
   return (
@@ -73,6 +75,7 @@ export function TransmissionTimeline({
   currentTime,
   onSeek,
 }: TransmissionTimelineProps) {
+  const unitIdHex = useFilterStore((s) => s.unitIdHex)
   if (duration === 0 || transmissions.length === 0) return null
 
   // Process transmissions - use pos field, fallback to running position
@@ -91,7 +94,7 @@ export function TransmissionTimeline({
 
   const getUnitLabel = (src: number): string => {
     const tag = unitTags.get(src)
-    return tag || String(src)
+    return tag || formatUnitId(src, unitIdHex)
   }
 
   return (

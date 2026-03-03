@@ -7,7 +7,8 @@ import { Pagination } from '@/components/ui/pagination'
 import { getUnits, getSystems, getUnitAffiliations } from '@/api/client'
 import type { Unit, System, Affiliation } from '@/api/types'
 import { useRealtimeStore } from '@/stores/useRealtimeStore'
-import { cn, getUnitDisplayName, formatRelativeTime, getEventTypeLabel, getEventTypeColor } from '@/lib/utils'
+import { cn, getUnitDisplayName, formatUnitId, formatRelativeTime, getEventTypeLabel, getEventTypeColor } from '@/lib/utils'
+import { useFilterStore } from '@/stores/useFilterStore'
 import { SkeletonRow } from '@/components/ui/skeleton'
 
 const DEFAULT_PAGE_SIZE = 100
@@ -29,6 +30,8 @@ export default function Units() {
   const sortDir = (searchParams.get('dir') as 'asc' | 'desc') || 'desc'
 
   const offset = (page - 1) * pageSize
+
+  const unitIdHex = useFilterStore((s) => s.unitIdHex)
 
   // Realtime enrichment
   const unitEvents = useRealtimeStore((s) => s.unitEvents)
@@ -248,10 +251,10 @@ export default function Units() {
 
                   {/* Name + ID inline */}
                   <span className="font-medium text-sm truncate min-w-0 max-w-[180px]">
-                    {getUnitDisplayName(unit.unit_id, unit.alpha_tag)}
+                    {getUnitDisplayName(unit.unit_id, unit.alpha_tag, unitIdHex)}
                   </span>
                   <span className="text-[11px] font-mono text-muted-foreground/60 shrink-0">
-                    {unit.unit_id}
+                    {formatUnitId(unit.unit_id, unitIdHex)}
                   </span>
                   {unit.system_name && (
                     <span className="text-[11px] text-muted-foreground/50 shrink-0 hidden lg:inline">

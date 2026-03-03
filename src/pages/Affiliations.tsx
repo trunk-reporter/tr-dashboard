@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Pagination } from '@/components/ui/pagination'
 import { getUnitAffiliations, getSystems } from '@/api/client'
 import type { Affiliation, System } from '@/api/types'
-import { formatRelativeTime } from '@/lib/utils'
+import { formatRelativeTime, formatUnitId } from '@/lib/utils'
+import { useFilterStore } from '@/stores/useFilterStore'
 
 const DEFAULT_PAGE_SIZE = 50
 const POLL_INTERVAL = 10000
@@ -17,6 +18,7 @@ export default function Affiliations() {
   const [systems, setSystems] = useState<System[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  const unitIdHex = useFilterStore((s) => s.unitIdHex)
   const [talkgroupCounts, setTalkgroupCounts] = useState<Record<string, number>>({})
 
   const page = parseInt(searchParams.get('page') || '1', 10)
@@ -215,9 +217,9 @@ export default function Affiliations() {
                         to={`/units/${aff.system_id}:${aff.unit_id}`}
                         className="hover:underline font-medium"
                       >
-                        {aff.unit_alpha_tag || `Unit ${aff.unit_id}`}
+                        {aff.unit_alpha_tag || `Unit ${formatUnitId(aff.unit_id, unitIdHex)}`}
                       </Link>
-                      <span className="ml-1.5 font-mono text-xs text-muted-foreground">{aff.unit_id}</span>
+                      <span className="ml-1.5 font-mono text-xs text-muted-foreground">{formatUnitId(aff.unit_id, unitIdHex)}</span>
                     </td>
                     <td className="py-2 pr-4">
                       <Link
