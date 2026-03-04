@@ -4,6 +4,8 @@ Modern, responsive frontend for [tr-engine](https://github.com/LumenPrima/tr-eng
 
 **[Live Demo](https://tr-dashboard.luxprimatech.com)** — connected to a live MARCS (Ohio) trunk-recorder system.
 
+> Built with significant assistance from [Claude Code](https://claude.ai/code) (Anthropic). See commit history for details.
+
 ## Screenshots
 
 ### Dashboard — Live Monitoring
