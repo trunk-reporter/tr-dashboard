@@ -68,7 +68,7 @@ Full call metadata, signal quality, transcription with word-level timing, and tr
 
 ## Quick Start (Docker)
 
-The easiest way to run tr-dashboard alongside [tr-engine](https://github.com/LumenPrima/tr-engine).
+The easiest way to run tr-dashboard alongside [tr-engine](https://github.com/LumenPrima/tr-engine). The Docker image uses [Caddy](https://github.com/caddyserver/caddy) to serve static files, reverse proxy API requests to tr-engine, and optionally handle automatic HTTPS.
 
 ### 1. Add to your Docker Compose
 
