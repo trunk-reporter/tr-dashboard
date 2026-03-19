@@ -227,7 +227,9 @@ export default function Users() {
                           variant="outline"
                           onClick={() => {
                             setEditingId(null)
+                            setEditRole('')
                             setEditPassword('')
+                            setEditEnabled(true)
                           }}
                         >
                           Cancel

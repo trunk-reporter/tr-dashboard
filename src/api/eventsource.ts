@@ -174,10 +174,21 @@ export class SSEManager {
 
 // Singleton instance
 let sseManager: SSEManager | null = null
-
 export function getSSEManager(filters?: SSEFilters): SSEManager {
   if (!sseManager) {
     sseManager = new SSEManager(filters)
+
+    // Reconnect SSE when access token changes (e.g. after refresh)
+    // so the new token is used in the ?token= query param.
+    let prevToken = useAuthStore.getState().accessToken
+    useAuthStore.subscribe((state) => {
+      if (state.accessToken !== prevToken) {
+        prevToken = state.accessToken
+        if (sseManager && sseManager.status !== 'disconnected') {
+          sseManager.reconnect()
+        }
+      }
+    })
   }
   return sseManager
 }

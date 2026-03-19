@@ -50,6 +50,19 @@ class ApiError extends Error {
   }
 }
 
+// Decode JWT expiry without a library — just base64-decode the payload
+function isTokenExpiringSoon(token: string, thresholdMs = 5 * 60 * 1000): boolean {
+  try {
+    const payload = token.split('.')[1]
+    if (!payload) return false
+    const decoded = JSON.parse(atob(payload))
+    if (!decoded.exp) return false
+    return decoded.exp * 1000 - Date.now() < thresholdMs
+  } catch {
+    return false
+  }
+}
+
 // Flag to prevent infinite refresh loops
 let isRefreshing = false
 let refreshPromise: Promise<boolean> | null = null
@@ -63,8 +76,15 @@ async function request<T>(
     'Content-Type': 'application/json',
   }
 
-  // Inject JWT for ALL requests when available
-  const { accessToken, writeToken } = useAuthStore.getState()
+  // Proactively refresh token if it expires within 5 minutes
+  let { accessToken, writeToken } = useAuthStore.getState()
+  if (accessToken && isTokenExpiringSoon(accessToken)) {
+    const refreshed = await attemptRefresh()
+    if (refreshed) {
+      accessToken = useAuthStore.getState().accessToken
+    }
+  }
+
   const method = (options?.method || 'GET').toUpperCase()
 
   if (accessToken) {
