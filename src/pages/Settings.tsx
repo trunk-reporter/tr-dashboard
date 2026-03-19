@@ -20,6 +20,7 @@ import { parseTalkgroupKey, isNewerVersion } from '@/lib/utils'
 export default function Settings() {
   const writeToken = useAuthStore((s) => s.writeToken)
   const setWriteToken = useAuthStore((s) => s.setWriteToken)
+  const user = useAuthStore((s) => s.user)
   const [tokenInput, setTokenInput] = useState('')
   const connectionStatus = useRealtimeStore((s) => s.connectionStatus)
   const favoriteTalkgroups = useFilterStore((s) => s.favoriteTalkgroups)
@@ -117,16 +118,38 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      {/* Write Token */}
+      {/* Write Access */}
       <Card>
         <CardHeader>
           <CardTitle>Write Access</CardTitle>
           <CardDescription>
-            Enter the WRITE_TOKEN from your tr-engine config to enable editing talkgroups and units
+            {user ? (
+              <>Write access is determined by your user role. You are logged in as <strong>{user.username}</strong> with role <strong>{user.role}</strong>.</>
+            ) : (
+              <>Enter the WRITE_TOKEN from your tr-engine config to enable editing talkgroups and units</>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {writeToken ? (
+          {user ? (
+            <div className="flex items-center gap-2">
+              <Badge
+                variant="default"
+                className={
+                  user.role === 'admin' || user.role === 'editor'
+                    ? 'bg-success/20 text-success'
+                    : 'bg-muted text-muted-foreground'
+                }
+              >
+                {user.role === 'admin' || user.role === 'editor' ? 'Write Enabled' : 'Read Only'}
+              </Badge>
+              <span className="text-sm text-muted-foreground">
+                {user.role === 'viewer'
+                  ? 'Contact an admin to upgrade your role for write access.'
+                  : `${user.role} role grants write access to the API.`}
+              </span>
+            </div>
+          ) : writeToken ? (
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Badge variant="default" className="bg-success/20 text-success">Configured</Badge>

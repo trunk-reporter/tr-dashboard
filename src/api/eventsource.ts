@@ -6,6 +6,8 @@ import type {
   DecodeRate,
 } from './types'
 
+import { useAuthStore } from '@/stores/useAuthStore'
+
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
 
 export interface SSEFilters {
@@ -151,6 +153,12 @@ export class SSEManager {
     if (this.filters.units) params.set('units', this.filters.units)
     if (this.filters.types) params.set('types', this.filters.types)
     if (this.filters.emergency_only) params.set('emergency_only', 'true')
+
+    // EventSource can't send Authorization headers, so pass JWT as query param
+    const { accessToken } = useAuthStore.getState()
+    if (accessToken) {
+      params.set('token', accessToken)
+    }
 
     const query = params.toString()
     return `/api/v1/events/stream${query ? `?${query}` : ''}`

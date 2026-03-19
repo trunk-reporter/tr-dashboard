@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom'
 import { MainLayout } from '@/components/layout/MainLayout'
+import { RequireAuth } from '@/components/auth/RequireAuth'
 import Dashboard from '@/pages/Dashboard'
 import Calls from '@/pages/Calls'
 import CallDetail from '@/pages/CallDetail'
@@ -14,11 +15,14 @@ import Admin from '@/pages/Admin'
 import Transcriptions from '@/pages/Transcriptions'
 import TalkgroupAnalytics from '@/pages/TalkgroupAnalytics'
 import Recorders from '@/pages/Recorders'
+import Login from '@/pages/Login'
+import Users from '@/pages/Users'
 
 export default function App() {
   return (
     <Routes>
-      <Route element={<MainLayout />}>
+      <Route path="/login" element={<Login />} />
+      <Route element={<RequireAuth><MainLayout /></RequireAuth>}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/calls" element={<Calls />} />
         <Route path="/calls/:id" element={<CallDetail />} />
@@ -33,6 +37,7 @@ export default function App() {
         <Route path="/directory" element={<TalkgroupDirectory />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/admin" element={<Admin />} />
+        <Route path="/users" element={<Users />} />
       </Route>
     </Routes>
   )

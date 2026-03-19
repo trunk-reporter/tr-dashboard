@@ -6,8 +6,8 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# Stage 2: Serve with Caddy
-FROM caddy:2-alpine
-COPY --from=build /app/dist /var/www/html
-COPY Caddyfile /etc/caddy/Caddyfile
-EXPOSE 80 443
+# Stage 2: Serve with nginx
+FROM nginx:alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+EXPOSE 80

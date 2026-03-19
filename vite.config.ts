@@ -8,6 +8,13 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const authToken = env.TR_AUTH_TOKEN || process.env.TR_AUTH_TOKEN || ''
 
+  // When JWT auth is active, the browser sends its own Authorization header.
+  // Only inject the static auth token if TR_AUTH_TOKEN is set (legacy dev mode).
+  const proxyHeaders: Record<string, string> = {}
+  if (authToken) {
+    proxyHeaders['Authorization'] = `Bearer ${authToken}`
+  }
+
   return {
     plugins: [react(), tailwindcss()],
     define: {
@@ -25,16 +32,12 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: 'https://tr-engine.luxprimatech.com',
           changeOrigin: true,
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-          },
+          ...(authToken ? { headers: proxyHeaders } : {}),
         },
         '/health': {
           target: 'https://tr-engine.luxprimatech.com',
           changeOrigin: true,
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-          },
+          ...(authToken ? { headers: proxyHeaders } : {}),
         },
       },
     },
