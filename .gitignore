@@ -36,3 +36,13 @@ yarn-error.log*
 
 # Local docs
 docs/ROADMAP.md
+
+# Playwright MCP
+.playwright-mcp/
+
+# Loose screenshots (keep screenshots/ dir for curated ones)
+*.png
+!/screenshots/*.png
+
+# OpenAPI spec (regenerated, not committed)
+openapi.yaml
