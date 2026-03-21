@@ -52,6 +52,15 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Set package visibility to public
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_OWNER: ${{ github.repository_owner }}
+        run: |
+          gh api --method PUT \
+            "/orgs/${REPO_OWNER}/packages/container/tr-dashboard/visibility" \
+            -f visibility=public || true
+
   create-release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build-and-push

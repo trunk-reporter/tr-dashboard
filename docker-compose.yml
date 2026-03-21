@@ -1,6 +1,6 @@
 services:
   tr-dashboard:
-    image: ghcr.io/lumenprima/tr-dashboard:latest
+    image: ghcr.io/trunk-reporter/tr-dashboard:latest
     # Or build from source:
     # build: .
     ports:

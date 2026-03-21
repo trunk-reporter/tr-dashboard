@@ -1,6 +1,6 @@
 # tr-dashboard
 
-Modern, responsive frontend for [tr-engine](https://github.com/LumenPrima/tr-engine) radio scanning backend.
+Modern, responsive frontend for [tr-engine](https://github.com/trunk-reporter/tr-engine) radio scanning backend.
 
 **[Live Demo](https://tr-dashboard.luxprimatech.com)** — connected to a live MARCS (Ohio) trunk-recorder system.
 
@@ -68,7 +68,7 @@ Full call metadata, signal quality, transcription with word-level timing, and tr
 
 ## Quick Start (Docker)
 
-The easiest way to run tr-dashboard alongside [tr-engine](https://github.com/LumenPrima/tr-engine). The Docker image uses [Caddy](https://github.com/caddyserver/caddy) to serve static files, reverse proxy API requests to tr-engine, and optionally handle automatic HTTPS.
+The easiest way to run tr-dashboard alongside [tr-engine](https://github.com/trunk-reporter/tr-engine). The Docker image uses [Caddy](https://github.com/caddyserver/caddy) to serve static files, reverse proxy API requests to tr-engine, and optionally handle automatic HTTPS.
 
 ### 1. Add to your Docker Compose
 
@@ -77,7 +77,7 @@ Add this service to your existing `docker-compose.yml` (or use the included one)
 ```yaml
 services:
   tr-dashboard:
-    image: ghcr.io/lumenprima/tr-dashboard:latest
+    image: ghcr.io/trunk-reporter/tr-dashboard:latest
     ports:
       - "80:80"
     environment:
@@ -109,7 +109,7 @@ To enable automatic Let's Encrypt certificates, set `SITE_ADDRESS` to your domai
 ```yaml
 services:
   tr-dashboard:
-    image: ghcr.io/lumenprima/tr-dashboard:latest
+    image: ghcr.io/trunk-reporter/tr-dashboard:latest
     ports:
       - "80:80"
       - "443:443"
@@ -129,7 +129,7 @@ Caddy automatically provisions and renews TLS certificates. Ports 80 and 443 mus
 ### Build from Source
 
 ```bash
-git clone https://github.com/LumenPrima/tr-dashboard.git
+git clone https://github.com/trunk-reporter/tr-dashboard.git
 cd tr-dashboard
 docker build -t tr-dashboard .
 ```
@@ -141,12 +141,12 @@ For contributing or local development.
 ### Prerequisites
 
 - Node.js 18+
-- A running [tr-engine](https://github.com/LumenPrima/tr-engine) backend
+- A running [tr-engine](https://github.com/trunk-reporter/tr-engine) backend
 
 ### Install
 
 ```bash
-git clone https://github.com/LumenPrima/tr-dashboard.git
+git clone https://github.com/trunk-reporter/tr-dashboard.git
 cd tr-dashboard
 npm install
 ```
