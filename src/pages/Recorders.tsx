@@ -585,7 +585,13 @@ function RecorderCard({
           )}
         </div>
         <div className="truncate text-sm text-amber-400" title={rec.unit_alpha_tag || (rec.unit_id ? `Unit ${rec.unit_id}` : '')}>
-          {rec.unit_alpha_tag || (rec.unit_id ? `Unit ${rec.unit_id}` : <span className="text-muted-foreground/50">—</span>)}
+          {rec.unit_id ? (
+            <Link to={`/units/${rec.system_id ?? 0}:${rec.unit_id}`} className="hover:underline">
+              {rec.unit_alpha_tag || `Unit ${rec.unit_id}`}
+            </Link>
+          ) : (
+            <span className="text-muted-foreground/50">—</span>
+          )}
         </div>
       </div>
 

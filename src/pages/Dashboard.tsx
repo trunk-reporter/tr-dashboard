@@ -412,13 +412,14 @@ export default function Dashboard() {
                       <div className="border-t border-border/30 pt-1 mt-0.5 space-y-0.5 flex-1">
                         <div className="flex items-center gap-1.5">
                           {rec.tgid ? (
-                            <span
-                              className={cn("truncate text-sm", !tgColor && "text-sky-400")}
+                            <Link
+                              to={`/talkgroups/${rec.system_id ?? 0}:${rec.tgid}`}
+                              className={cn("truncate text-sm hover:underline", !tgColor && "text-sky-400")}
                               style={tgColor ? { color: tgColor } : undefined}
                               title={rec.tg_alpha_tag || `TG ${rec.tgid}`}
                             >
                               {rec.tg_alpha_tag || `TG ${rec.tgid}`}
-                            </span>
+                            </Link>
                           ) : (
                             <span className="text-sm text-muted-foreground/50">—</span>
                           )}
@@ -429,7 +430,13 @@ export default function Dashboard() {
                           )}
                         </div>
                         <div className="truncate text-sm text-amber-400" title={rec.unit_alpha_tag || (rec.unit_id ? `Unit ${rec.unit_id}` : '')}>
-                          {rec.unit_alpha_tag || (rec.unit_id ? `Unit ${rec.unit_id}` : <span className="text-muted-foreground/50">—</span>)}
+                          {rec.unit_id ? (
+                            <Link to={`/units/${rec.system_id ?? 0}:${rec.unit_id}`} className="hover:underline">
+                              {rec.unit_alpha_tag || `Unit ${rec.unit_id}`}
+                            </Link>
+                          ) : (
+                            <span className="text-muted-foreground/50">—</span>
+                          )}
                         </div>
                       </div>
 

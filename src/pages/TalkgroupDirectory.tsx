@@ -249,7 +249,16 @@ export default function TalkgroupDirectory() {
                       )}
                     </td>
                     <td className="py-2 pr-4 font-medium">
-                      {entry.alpha_tag || '—'}
+                      {entry.alpha_tag && entry.system_id && entry.tgid ? (
+                        <Link
+                          to={`/talkgroups/${entry.system_id}:${entry.tgid}`}
+                          className="hover:underline text-primary"
+                        >
+                          {entry.alpha_tag}
+                        </Link>
+                      ) : (
+                        entry.alpha_tag || '—'
+                      )}
                     </td>
                     <td className="py-2 pr-4">
                       {entry.mode ? (
