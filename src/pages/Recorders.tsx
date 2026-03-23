@@ -420,7 +420,7 @@ export default function Recorders() {
                 >
                   {/* System header */}
                   <div className="flex flex-wrap items-center gap-2 px-2.5 py-1.5 bg-zinc-900/40 border-b border-border/30">
-                    <h3 className="font-bold text-sm">{name}</h3>
+                    <Link to={`/systems/${systemId}`} className="font-bold text-sm hover:underline">{name}</Link>
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground">
                       {type}
                     </Badge>

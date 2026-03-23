@@ -15,6 +15,7 @@ import Admin from '@/pages/Admin'
 import Transcriptions from '@/pages/Transcriptions'
 import TalkgroupAnalytics from '@/pages/TalkgroupAnalytics'
 import Recorders from '@/pages/Recorders'
+import SystemDetail from '@/pages/SystemDetail'
 import Login from '@/pages/Login'
 import Users from '@/pages/Users'
 
@@ -33,6 +34,7 @@ export default function App() {
         <Route path="/units" element={<Units />} />
         <Route path="/units/:id" element={<UnitDetail />} />
         <Route path="/systems" element={<Recorders />} />
+        <Route path="/systems/:id" element={<SystemDetail />} />
         <Route path="/affiliations" element={<Affiliations />} />
         <Route path="/directory" element={<TalkgroupDirectory />} />
         <Route path="/settings" element={<Settings />} />

@@ -98,7 +98,7 @@ export function CallCard({ call, showSystem = true, compact = false }: CallCardP
             {showSystem && call.system_name && (
               <>
                 <span>&bull;</span>
-                <span>{call.system_name}</span>
+                <Link to={`/systems/${call.system_id}`} className="hover:underline">{call.system_name}</Link>
               </>
             )}
           </div>
