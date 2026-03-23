@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.0-pre2 (2026-03-22)
+
+### Bug Fixes
+
+- **Transmission timeline blank on playback** — The audio store was discarding inline `src_list` data from the call object and re-fetching it via a separate API call. If that fetch failed, the timeline stayed blank even though the data was already available. Now uses inline data directly and only fetches separately as a fallback.
+
 ## 1.0.0-pre1 (2026-03-22)
 
 ### Breaking Changes

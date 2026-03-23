@@ -146,9 +146,14 @@ export const useAudioStore = create<AudioState>((set, get) => ({
       ? [state.currentCall, ...state.history].slice(0, 20)
       : state.history
 
+    // Use inline src_list if available, otherwise fetch separately
+    const inlineTransmissions = 'src_list' in call && Array.isArray(call.src_list)
+      ? call.src_list
+      : []
+
     set({
       currentCall: queued,
-      transmissions: [],
+      transmissions: inlineTransmissions,
       unitTags,
       playbackState: 'loading',
       currentTime: 0,
@@ -158,7 +163,10 @@ export const useAudioStore = create<AudioState>((set, get) => ({
       retryTimeoutId: null,
     })
 
-    get().loadTransmissions(queued.callId)
+    // Only fetch separately if no inline data
+    if (inlineTransmissions.length === 0) {
+      get().loadTransmissions(queued.callId)
+    }
   },
 
   requestPlay: () => {
