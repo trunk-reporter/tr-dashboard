@@ -42,8 +42,12 @@ export default function Users() {
   }
 
   useEffect(() => {
-    fetchUsers()
-  }, [])
+    if (currentUser?.role === 'admin') {
+      fetchUsers()
+    } else {
+      setLoading(false)
+    }
+  }, [currentUser?.role])
 
   if (currentUser?.role !== 'admin') {
     return (

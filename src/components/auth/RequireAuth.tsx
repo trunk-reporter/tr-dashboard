@@ -34,7 +34,8 @@ export function RequireAuth({ children }: RequireAuthProps) {
           setChecking(false)
         }).catch(() => {
           if (!cancelled) {
-            setAuthDisabled(true)
+            // Network error — can't determine auth state.
+            // Don't bypass auth; let the !isAuthenticated check redirect to /login.
             setChecking(false)
           }
         })

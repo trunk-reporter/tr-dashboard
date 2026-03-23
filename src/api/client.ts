@@ -123,9 +123,8 @@ async function request<T>(
       }
       return retryResponse.json()
     }
-    // Refresh failed — redirect to login
+    // Refresh failed — clear auth and let RequireAuth handle the redirect
     useAuthStore.getState().clearAuth()
-    window.location.href = '/login'
     throw new ApiError(401, 'session expired')
   }
 
@@ -178,9 +177,19 @@ export async function refreshAuth(): Promise<{ access_token: string; user: AuthU
       method: 'POST',
       credentials: 'include',
     })
-    if (!response.ok) return null
+    if (!response.ok) {
+      // Expected statuses: session expired / revoked / not found
+      if (response.status === 401 || response.status === 403 || response.status === 404) {
+        return null
+      }
+      // Unexpected server error — log it
+      console.error(`refreshAuth: unexpected ${response.status} ${response.statusText}`)
+      return null
+    }
     return response.json()
-  } catch {
+  } catch (err) {
+    // Network error (offline, DNS failure, etc.)
+    console.error('refreshAuth: network error', err)
     return null
   }
 }
@@ -348,8 +357,14 @@ export async function importTalkgroupDirectory(
     ? `system_id=${systemIdOrName}`
     : `system_name=${encodeURIComponent(systemIdOrName)}`
   const url = `${API_BASE}/talkgroup-directory/import?${param}`
+  const headers: Record<string, string> = {}
+  const { accessToken } = useAuthStore.getState()
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`
+  }
   const response = await fetch(url, {
     method: 'POST',
+    headers,
     body: formData,
   })
   if (!response.ok) {
@@ -493,8 +508,12 @@ export async function getCall(id: number): Promise<Call> {
   return request(`/calls/${id}`)
 }
 
+// Security tradeoff: <audio> elements cannot send Authorization headers, so
+// we pass the JWT as a query parameter. This exposes the token in server logs,
+// browser history, and Referrer headers. Mitigated by: read-only scope and
+// 1-hour JWT expiry. Long-term: consider opaque blob URLs or a server-side
+// audio proxy to avoid token-in-URL entirely.
 export function getCallAudioUrl(id: number): string {
-  // Append JWT token for audio elements that can't send headers
   const { accessToken } = useAuthStore.getState()
   const base = `${API_BASE}/calls/${id}/audio`
   if (accessToken) {

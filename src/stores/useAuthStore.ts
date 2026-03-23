@@ -55,6 +55,10 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'tr-dashboard-auth',
+      partialize: (state) => ({
+        writeToken: state.writeToken,
+        user: state.user,
+      }),
       // Migrate from old store shape (writeToken only)
       migrate: (persisted: any, version: number) => {
         if (version === 0 && persisted && typeof persisted === 'object') {

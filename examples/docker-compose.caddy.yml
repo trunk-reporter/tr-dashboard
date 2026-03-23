@@ -47,7 +47,7 @@ services:
       - backend
 
   tr-engine:
-    image: ghcr.io/lumenprima/tr-engine:latest
+    image: ghcr.io/trunk-reporter/tr-engine:latest
     # build: /path/to/tr-engine
     container_name: tr-engine
     restart: unless-stopped
@@ -64,7 +64,7 @@ services:
       - backend
 
   tr-dashboard:
-    image: ghcr.io/lumenprima/tr-dashboard:latest
+    image: ghcr.io/trunk-reporter/tr-dashboard:latest
     # build: /path/to/tr-dashboard
     container_name: tr-dashboard
     restart: unless-stopped

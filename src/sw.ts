@@ -39,7 +39,10 @@ self.addEventListener('fetch', (event: FetchEvent) => {
     event.respondWith(
       caches.match('/index.html').then((cached) => {
         return cached || fetch(event.request)
-      })
+      }).catch(() =>
+        new Response('<h1>Offline</h1><p>TR Dashboard requires a network connection.</p>',
+          { status: 503, headers: { 'Content-Type': 'text/html' } })
+      )
     )
     return
   }
@@ -48,7 +51,9 @@ self.addEventListener('fetch', (event: FetchEvent) => {
   event.respondWith(
     caches.match(event.request).then((cached) => {
       return cached || fetch(event.request)
-    })
+    }).catch(() =>
+      new Response('', { status: 503 })
+    )
   )
 })
 
