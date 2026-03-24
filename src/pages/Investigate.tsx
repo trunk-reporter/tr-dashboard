@@ -1,10 +1,12 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useHotkeys } from 'react-hotkeys-hook'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { getCalls, searchTranscriptions } from '@/api/client'
 import type { Call } from '@/api/types'
 import { useAudioStore } from '@/stores/useAudioStore'
+import { useRealtimeStore } from '@/stores/useRealtimeStore'
 import { Timeline } from '@/components/investigate/Timeline'
 import { DetailPanel } from '@/components/investigate/DetailPanel'
 
@@ -90,10 +92,27 @@ export default function Investigate() {
     return calls.filter(c => matchingCallIds.has(c.call_id))
   }, [calls, matchingCallIds])
 
+  const activeCalls = useRealtimeStore((s) => s.activeCalls)
+
+  // Merge live calls into the timeline when window includes "now"
+  const allCalls = useMemo(() => {
+    const nowMs = Date.now()
+    const startMs = new Date(windowStart).getTime()
+    const endMs = new Date(windowEnd).getTime()
+
+    if (nowMs < startMs || nowMs > endMs) return filteredCalls
+
+    const fetchedIds = new Set(filteredCalls.map(c => c.call_id))
+    const liveCalls = Array.from(activeCalls.values()).filter(
+      c => !fetchedIds.has(c.call_id) && new Date(c.start_time).getTime() >= startMs
+    )
+    return [...filteredCalls, ...liveCalls]
+  }, [filteredCalls, activeCalls, windowStart, windowEnd])
+
   // Group by talkgroup, sorted by count desc
   const talkgroupGroups = useMemo(() => {
     const groups = new Map<string, { tgKey: string; tgName: string; systemId: number; tgid: number; calls: Call[] }>()
-    for (const call of filteredCalls) {
+    for (const call of allCalls) {
       const key = `${call.system_id}:${call.tgid}`
       if (!groups.has(key)) {
         groups.set(key, {
@@ -107,7 +126,7 @@ export default function Investigate() {
       groups.get(key)!.calls.push(call)
     }
     return [...groups.values()].sort((a, b) => b.calls.length - a.calls.length)
-  }, [filteredCalls])
+  }, [allCalls])
 
   const isTruncated = totalCount > calls.length
 
@@ -125,6 +144,42 @@ export default function Investigate() {
   const handleCallExpand = useCallback((call: Call) => {
     setExpandedCallId(prev => prev === call.call_id ? null : call.call_id)
   }, [])
+
+  // Keyboard handlers
+  const handlePanLeft = useCallback(() => {
+    const shift = windowMin * 60 * 1000 * 0.5
+    setTargetTime(new Date(new Date(targetTime).getTime() - shift).toISOString())
+  }, [targetTime, windowMin, setTargetTime])
+
+  const handlePanRight = useCallback(() => {
+    const shift = windowMin * 60 * 1000 * 0.5
+    setTargetTime(new Date(new Date(targetTime).getTime() + shift).toISOString())
+  }, [targetTime, windowMin, setTargetTime])
+
+  const handleZoomIn = useCallback(() => {
+    const idx = WINDOW_PRESETS.indexOf(windowMin as typeof WINDOW_PRESETS[number])
+    if (idx > 0) setWindow(WINDOW_PRESETS[idx - 1])
+  }, [windowMin, setWindow])
+
+  const handleZoomOut = useCallback(() => {
+    const idx = WINDOW_PRESETS.indexOf(windowMin as typeof WINDOW_PRESETS[number])
+    if (idx < WINDOW_PRESETS.length - 1) setWindow(WINDOW_PRESETS[idx + 1])
+  }, [windowMin, setWindow])
+
+  const handlePlaySelected = useCallback(() => {
+    if (selectedCallId !== null) {
+      const call = allCalls.find(c => c.call_id === selectedCallId)
+      if (call) loadCall(call)
+    }
+  }, [selectedCallId, allCalls, loadCall])
+
+  useHotkeys('left', handlePanLeft, { preventDefault: true })
+  useHotkeys('right', handlePanRight, { preventDefault: true })
+  useHotkeys('equal', handleZoomIn)
+  useHotkeys('minus', handleZoomOut)
+  useHotkeys('enter', handlePlaySelected)
+  useHotkeys('n', jumpToNow)
+  useHotkeys('escape', () => setExpandedCallId(null))
 
   return (
     <div className="space-y-4">
