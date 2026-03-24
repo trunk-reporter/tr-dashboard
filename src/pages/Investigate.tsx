@@ -185,12 +185,16 @@ export default function Investigate() {
     <div className="space-y-4">
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3">
-        <input
-          type="datetime-local"
-          value={targetTime.slice(0, 16)}
-          onChange={(e) => setTargetTime(new Date(e.target.value).toISOString())}
-          className="bg-background border border-border rounded px-2 py-1 text-sm font-mono"
-        />
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" onClick={handlePanLeft} title="Pan left">←</Button>
+          <input
+            type="datetime-local"
+            value={targetTime.slice(0, 16)}
+            onChange={(e) => setTargetTime(new Date(e.target.value).toISOString())}
+            className="bg-background border border-border rounded px-2 py-1 text-sm font-mono"
+          />
+          <Button variant="ghost" size="sm" onClick={handlePanRight} title="Pan right">→</Button>
+        </div>
         <Button variant="outline" size="sm" onClick={jumpToNow}>Now</Button>
 
         <div className="flex gap-1">
