@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { getCalls, searchTranscriptions } from '@/api/client'
 import type { Call } from '@/api/types'
+import { useAudioStore } from '@/stores/useAudioStore'
+import { Timeline } from '@/components/investigate/Timeline'
 
 const WINDOW_PRESETS = [5, 15, 30, 60] as const
 
@@ -108,6 +110,21 @@ export default function Investigate() {
 
   const isTruncated = totalCount > calls.length
 
+  const [selectedCallId, setSelectedCallId] = useState<number | null>(null)
+  const [expandedCallId, setExpandedCallId] = useState<number | null>(null)
+
+  const loadCall = useAudioStore((s) => s.loadCall)
+  const currentCall = useAudioStore((s) => s.currentCall)
+
+  const handleCallClick = useCallback((call: Call) => {
+    setSelectedCallId(call.call_id)
+    if (call.audio_url) loadCall(call)
+  }, [loadCall])
+
+  const handleCallExpand = useCallback((call: Call) => {
+    setExpandedCallId(prev => prev === call.call_id ? null : call.call_id)
+  }, [])
+
   return (
     <div className="space-y-4">
       {/* Controls */}
@@ -153,13 +170,25 @@ export default function Investigate() {
         </div>
       )}
 
-      {/* Timeline placeholder */}
-      <div className="text-muted-foreground text-sm">
-        {talkgroupGroups.length === 0 && !loading
-          ? (keyword ? `No calls matching "${keyword}" in this window` : 'No calls in this window')
-          : `${talkgroupGroups.length} talkgroup rows ready for timeline`
-        }
-      </div>
+      {loading && talkgroupGroups.length === 0 && (
+        <div className="flex items-center justify-center h-32 text-muted-foreground">
+          Loading calls...
+        </div>
+      )}
+      {!loading && talkgroupGroups.length === 0 && (
+        <div className="flex items-center justify-center h-32 text-muted-foreground">
+          {keyword ? `No calls matching "${keyword}" in this window` : 'No calls in this window'}
+        </div>
+      )}
+      <Timeline
+        groups={talkgroupGroups}
+        windowStart={windowStart}
+        windowEnd={windowEnd}
+        selectedCallId={currentCall?.callId ?? selectedCallId}
+        expandedCallId={expandedCallId}
+        onCallClick={handleCallClick}
+        onCallExpand={handleCallExpand}
+      />
     </div>
   )
 }
