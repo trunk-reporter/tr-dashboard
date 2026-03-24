@@ -88,9 +88,19 @@ async function request<T>(
   const method = (options?.method || 'GET').toUpperCase()
 
   if (accessToken) {
-    headers['Authorization'] = `Bearer ${accessToken}`
+    // For write operations, prefer the write token if the JWT user is a viewer
+    // (viewers can't write via JWT, but the legacy write token grants admin access)
+    const userRole = useAuthStore.getState().user?.role
+    if (WRITE_METHODS.has(method) && writeToken && userRole === 'viewer') {
+      headers['Authorization'] = `Bearer ${writeToken}`
+    } else {
+      headers['Authorization'] = `Bearer ${accessToken}`
+    }
   } else if (WRITE_METHODS.has(method) && writeToken) {
-    // Fall back to legacy write token for mutations
+    // No JWT — fall back to legacy write token for mutations
+    headers['Authorization'] = `Bearer ${writeToken}`
+  } else if (writeToken) {
+    // No JWT, read operation — still use write token (it has read access too)
     headers['Authorization'] = `Bearer ${writeToken}`
   }
 
