@@ -146,7 +146,7 @@ function TalkgroupEditSection() {
   const [loading, setLoading] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValues, setEditValues] = useState<Record<string, string>>({})
-  const [saveStatus, setSaveStatus] = useState<Record<string, 'saving' | 'saved' | 'error'>>({})
+  const [saveStatus, setSaveStatus] = useState<Record<string, 'saving' | 'saved' | 'error' | 'forbidden'>>({})
 
   const handleSearch = () => {
     if (!search.trim()) return
@@ -184,8 +184,12 @@ function TalkgroupEditSection() {
       setEditingId(null)
       // Refresh
       handleSearch()
-    } catch {
-      setSaveStatus((prev) => ({ ...prev, [key]: 'error' }))
+    } catch (err) {
+      if (err instanceof Error && 'status' in err && (err as { status: number }).status === 403) {
+        setSaveStatus((prev) => ({ ...prev, [key]: 'forbidden' }))
+      } else {
+        setSaveStatus((prev) => ({ ...prev, [key]: 'error' }))
+      }
     }
   }
 
@@ -228,6 +232,7 @@ function TalkgroupEditSection() {
                     </div>
                     <div className="flex items-center gap-2">
                       {status === 'saved' && <span className="text-xs text-success">Saved</span>}
+                      {status === 'forbidden' && <span className="text-xs text-destructive">Write token required. Add it in Settings → Write Access.</span>}
                       {status === 'error' && <span className="text-xs text-destructive">Error</span>}
                       {isEditing ? (
                         <div className="flex gap-1">
@@ -315,7 +320,7 @@ function UnitEditSection() {
   const [loading, setLoading] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editAlphaTag, setEditAlphaTag] = useState('')
-  const [saveStatus, setSaveStatus] = useState<Record<string, 'saving' | 'saved' | 'error'>>({})
+  const [saveStatus, setSaveStatus] = useState<Record<string, 'saving' | 'saved' | 'error' | 'forbidden'>>({})
 
   const handleSearch = () => {
     if (!search.trim()) return
@@ -334,8 +339,12 @@ function UnitEditSection() {
       setSaveStatus((prev) => ({ ...prev, [key]: 'saved' }))
       setEditingId(null)
       handleSearch()
-    } catch {
-      setSaveStatus((prev) => ({ ...prev, [key]: 'error' }))
+    } catch (err) {
+      if (err instanceof Error && 'status' in err && (err as { status: number }).status === 403) {
+        setSaveStatus((prev) => ({ ...prev, [key]: 'forbidden' }))
+      } else {
+        setSaveStatus((prev) => ({ ...prev, [key]: 'error' }))
+      }
     }
   }
 
@@ -386,6 +395,7 @@ function UnitEditSection() {
                   </div>
                   <div className="flex items-center gap-2">
                     {status === 'saved' && <span className="text-xs text-success">Saved</span>}
+                    {status === 'forbidden' && <span className="text-xs text-destructive">Write token required. Add it in Settings → Write Access.</span>}
                     {status === 'error' && <span className="text-xs text-destructive">Error</span>}
                     {isEditing ? (
                       <div className="flex gap-1">
