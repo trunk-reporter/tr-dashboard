@@ -24,6 +24,299 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth-init": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Web auth bootstrap
+         * @description Returns the API auth token for web UI pages. No authentication required.
+         *     Used by `auth.js` to transparently authenticate browser-side API calls.
+         *     The URL has no file extension so CDNs (Cloudflare) skip caching it.
+         *
+         *     When a valid JWT is present in the request, the response includes a `user`
+         *     field with the authenticated user's info. The `user` field is absent (not null)
+         *     when no JWT session is present, preserving backward compatibility.
+         */
+        get: operations["getAuthInit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * First-run admin creation
+         * @description Creates the first admin user. Only works when zero users exist in the
+         *     database. Rate-limited to 5 attempts per minute per IP. Only available
+         *     when JWT auth is configured (JWT_SECRET or ADMIN_PASSWORD set).
+         *
+         *     Uses an atomic INSERT to prevent race conditions where two concurrent
+         *     requests could both create admin users.
+         */
+        post: operations["authSetup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * User login
+         * @description Validates credentials and returns a JWT access token. Also sets an
+         *     httpOnly refresh cookie (`tr_refresh_token`). Rate-limited to 5
+         *     attempts per minute per IP.
+         */
+        post: operations["authLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh access token
+         * @description Validates the httpOnly refresh cookie and returns a new JWT access token.
+         *     The refresh token has a 7-day expiry.
+         */
+        post: operations["authRefresh"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Logout
+         * @description Clears the refresh cookie. Returns 200 regardless of session state.
+         */
+        post: operations["authLogout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Current user info
+         * @description Returns the authenticated user's profile from the database.
+         */
+        get: operations["authMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List own API keys
+         * @description Returns API keys owned by the authenticated user. Requires editor or admin role.
+         */
+        get: operations["listOwnKeys"];
+        put?: never;
+        /**
+         * Create API key
+         * @description Creates a new API key. The plaintext key is returned once in the response
+         *     and cannot be retrieved again. The key's role is capped at the caller's
+         *     own role level — an editor cannot create an admin key.
+         *     Requires editor or admin role.
+         */
+        post: operations["createKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/keys/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke own API key
+         * @description Deletes an API key owned by the authenticated user. Requires editor or admin role.
+         */
+        delete: operations["deleteOwnKey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/keys/all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List all API keys
+         * @description Returns all API keys across all users and service accounts. Admin only.
+         */
+        get: operations["listAllKeys"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/keys/service": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create service account key
+         * @description Creates an API key that acts as its own identity, not linked to any user.
+         *     Used for frontend apps, bots, and integrations. Admin only.
+         */
+        post: operations["createServiceAccountKey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/keys/{id}/any": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke any API key
+         * @description Deletes any API key by ID regardless of ownership. Admin only.
+         */
+        delete: operations["deleteAnyKey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List all users
+         * @description Returns all user accounts. Admin only.
+         */
+        get: operations["listUsers"];
+        put?: never;
+        /**
+         * Create user
+         * @description Creates a new user account. Admin only.
+         */
+        post: operations["createUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete user
+         * @description Deletes a user and cascades to their sessions and API keys.
+         *     Admin only. Cannot delete yourself or the last admin user.
+         */
+        delete: operations["deleteUser"];
+        options?: never;
+        head?: never;
+        /**
+         * Update user
+         * @description Partially update a user account (role, password, enabled status).
+         *     Admin only. Cannot demote or disable the last admin user.
+         *     Cannot demote or disable your own account.
+         */
+        patch: operations["updateUser"];
+        trace?: never;
+    };
     "/systems": {
         parameters: {
             query?: never;
@@ -133,8 +426,10 @@ export interface paths {
         };
         /**
          * List talkgroups
-         * @description Returns talkgroups with embedded stats (call_count, calls_1h, calls_24h,
-         *     unit_count). Supports filtering by system (database ID or P25 SYSID),
+         * @description Returns talkgroups with cached stats (call_count, calls_1h, calls_24h,
+         *     unit_count). Stats are refreshed every 5 minutes by a background task.
+         *     For real-time stats, use the single-talkgroup endpoint.
+         *     Supports filtering by system (database ID or P25 SYSID),
          *     group category, and free-text search. Search results include a
          *     relevance_score (100=exact, 50=prefix, 10=contains).
          */
@@ -156,9 +451,9 @@ export interface paths {
         };
         /**
          * Get a talkgroup
-         * @description Returns a single talkgroup with stats. Accepts composite `system_id:tgid`
-         *     format (e.g., "1:9178") or plain `tgid`. Returns 409 if a plain tgid
-         *     is ambiguous across systems.
+         * @description Returns a single talkgroup with real-time stats computed at request time.
+         *     Accepts composite `system_id:tgid` format (e.g., "1:9178") or plain `tgid`.
+         *     Returns 409 if a plain tgid is ambiguous across systems.
          */
         get: operations["getTalkgroup"];
         put?: never;
@@ -382,6 +677,9 @@ export interface paths {
          * @description Returns unit events across an entire system with JOINs for display
          *     names. Supports multi-type filtering and optional emergency filter.
          *     Default lookback is 1 hour; max time range is 24 hours.
+         *
+         *     **At least one of `system_id` or `sysid` is required.** Returns 400
+         *     if neither is provided.
          */
         get: operations["listUnitEventsGlobal"];
         put?: never;
@@ -402,8 +700,9 @@ export interface paths {
         /**
          * List live talkgroup affiliations
          * @description Returns current talkgroup affiliation state for units, derived from
-         *     live MQTT `join` and `off` events. The map starts empty on boot and
-         *     populates from live traffic.
+         *     live MQTT `join` and `off` events. This is a live endpoint — data
+         *     is served from memory, not the database. The map starts empty on
+         *     boot and populates from live traffic.
          *
          *     Each entry shows which talkgroup a unit is currently affiliated with,
          *     when the affiliation started, and the unit's status (`affiliated` or `off`).
@@ -454,7 +753,9 @@ export interface paths {
         /**
          * List active calls (real-time)
          * @description Returns currently active calls from the in-memory MQTT tracker.
-         *     This is the real-time data source — use it for live dashboards.
+         *     This is a live endpoint — it returns a point-in-time snapshot of
+         *     all active calls from memory. There is no pagination; the full
+         *     list is returned in a single response.
          *
          *     Active calls may have incomplete fields (no stop_time, no audio_url,
          *     duration is elapsed-so-far). The response uses the same Call schema
@@ -702,6 +1003,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/transcriptions/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Batch-fetch primary transcriptions for multiple calls
+         * @description Returns the primary transcription text and segments for up to 500 call IDs
+         *     in a single request. Designed for frontends that need to hydrate transcriptions
+         *     for a list of calls (e.g., chat-style views). Returns only call_id, text, and
+         *     segments (from words->'segments') — use GET /calls/{id}/transcription for
+         *     full transcription details.
+         */
+        get: operations["getBatchTranscriptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/transcriptions/queue": {
         parameters: {
             query?: never;
@@ -716,6 +1041,81 @@ export interface paths {
         get: operations["getTranscriptionQueueStatus"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/call-upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload a call recording
+         * @description Accepts multipart/form-data uploads compatible with trunk-recorder's
+         *     rdio-scanner and OpenMHz upload plugins. Auto-detects format from form
+         *     field names.
+         *
+         *     This provides a third ingest path alongside MQTT and file-watch. Point
+         *     trunk-recorder's upload plugin at `POST /api/v1/call-upload` and it
+         *     works out of the box.
+         *
+         *     **Authentication:** When `WRITE_TOKEN` is configured, this endpoint
+         *     requires the write token (uploads are write operations). Otherwise,
+         *     `AUTH_TOKEN` is accepted. In addition to the standard
+         *     `Authorization: Bearer` header and `?token=` query parameter, this
+         *     endpoint also accepts auth via the `key` (rdio-scanner) or `api_key`
+         *     (OpenMHz) multipart form fields. This allows trunk-recorder upload
+         *     plugins to authenticate without custom header configuration.
+         *
+         *     **Format detection:** The endpoint inspects form field names to
+         *     determine the upload format:
+         *     - Fields `audio`, `audioName`, or `systemLabel` → **rdio-scanner** format
+         *     - Fields `call`, `talkgroup_num`, or `start_time` → **OpenMHz** format
+         *
+         *     **rdio-scanner format fields:**
+         *
+         *     | Field | Type | Required | Description |
+         *     |-------|------|----------|-------------|
+         *     | `audio` | file | Yes | Audio file (m4a, wav, mp3) |
+         *     | `talkgroup` | integer | Yes | Talkgroup ID |
+         *     | `dateTime` | integer | Yes | Unix epoch timestamp |
+         *     | `systemLabel` | string | Yes | System short name (used for identity resolution) |
+         *     | `frequency` | integer | No | Frequency in Hz |
+         *     | `sources` | JSON string | No | Array of `[{pos, src, tag}]` source items |
+         *     | `frequencies` | JSON string | No | Array of `[{freq, time, pos, len, errors, spikes}]` |
+         *     | `talkgroupLabel` | string | No | Talkgroup alpha tag |
+         *     | `talkgroupName` | string | No | Talkgroup description |
+         *     | `talkgroupTag` | string | No | Talkgroup service tag |
+         *     | `talkgroupGroup` | string | No | Talkgroup group/category |
+         *     | `audioType` | string | No | MIME type (e.g., `audio/mp4`) |
+         *     | `audioName` | string | No | Original filename |
+         *     | `emergency` | boolean | No | Emergency flag |
+         *     | `encrypted` | boolean | No | Encrypted flag |
+         *     | `key` | string | No | Auth token (alternative to Bearer header) |
+         *
+         *     **OpenMHz format fields:**
+         *
+         *     | Field | Type | Required | Description |
+         *     |-------|------|----------|-------------|
+         *     | `call` | file | Yes | Audio file |
+         *     | `talkgroup_num` | integer | Yes | Talkgroup ID |
+         *     | `start_time` | integer | Yes | Unix epoch start time |
+         *     | `freq` | integer | No | Frequency in Hz |
+         *     | `stop_time` | integer | No | Unix epoch stop time |
+         *     | `call_length` | number | No | Call duration in seconds |
+         *     | `source_list` | JSON string | No | Array of source items |
+         *     | `emergency` | integer | No | Emergency flag (0/1) |
+         *     | `error_count` | integer | No | Decode error count |
+         *     | `api_key` | string | No | Auth token (alternative to Bearer header) |
+         */
+        post: operations["uploadCall"];
         delete?: never;
         options?: never;
         head?: never;
@@ -827,6 +1227,132 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stats/call-volume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Hourly or daily call volume
+         * @description Returns call counts bucketed by hour or day over a time range.
+         */
+        get: operations["getCallVolume"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stats/daily-overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Daily call overview
+         * @description Returns daily call aggregates with distinct talkgroup counts.
+         */
+        get: operations["getDailyOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stats/category-breakdown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Calls by talkgroup tag
+         * @description Returns call counts grouped by talkgroup tag (category).
+         */
+        get: operations["getCategoryBreakdown"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stats/call-heatmap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Activity heatmap
+         * @description Returns day-of-week × hour-of-day call counts for building
+         *     an activity heatmap. The timezone parameter controls which
+         *     IANA timezone the bucketing is performed in.
+         */
+        get: operations["getCallHeatmap"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/analytics/recorder-utilization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recorder utilization over time
+         * @description Returns recorder state percentages (recording, idle, available, ignore)
+         *     bucketed by hour or day. Based on the `recorder_snapshots` table which
+         *     stores one row per recorder per minute.
+         */
+        get: operations["getRecorderUtilization"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/analytics/decode-rates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Decode rates over time (bucketed)
+         * @description Returns decode rates aggregated into time buckets with avg/min/max.
+         *     Useful for showing control channel health trends. For raw decode rate
+         *     points, use GET /stats/rates instead.
+         */
+        get: operations["getDecodeRateBuckets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/recorders": {
         parameters: {
             query?: never;
@@ -839,6 +1365,10 @@ export interface paths {
          * @description Returns all known recorder states from in-memory cache (populated
          *     by MQTT recorder messages). Includes embedded system and talkgroup
          *     display names.
+         *
+         *     This is a live endpoint — it returns a point-in-time snapshot of
+         *     all recorders from memory. There is no pagination; the full list
+         *     is returned in a single response.
          */
         get: operations["listRecorders"];
         put?: never;
@@ -954,6 +1484,84 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/audio/live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Live audio stream (WebSocket)
+         * @description WebSocket upgrade endpoint for real-time audio streaming. Clients
+         *     receive live radio audio as binary frames with a compact header.
+         *
+         *     > **Note:** This feature is only available when `STREAM_LISTEN` is
+         *     > configured to point at a trunk-recorder audio stream source.
+         *     > Returns 404 when not enabled.
+         *
+         *     **Connection lifecycle:**
+         *     1. Client opens a WebSocket connection to this endpoint.
+         *     2. Client sends a JSON text frame to subscribe to specific talkgroups:
+         *        `{"type": "subscribe", "tgids": [1001, 1002], "systems": [1]}`
+         *     3. Server pushes binary audio frames and JSON control frames.
+         *     4. Client sends `{"type": "unsubscribe"}` to stop receiving audio.
+         *
+         *     **Binary audio frames (server → client):**
+         *     Each binary frame contains a 12-byte header followed by audio data:
+         *
+         *     | Offset | Size | Type | Field |
+         *     |--------|------|------|-------|
+         *     | 0–1 | 2 | uint16 BE | system_id |
+         *     | 2–5 | 4 | uint32 BE | tgid |
+         *     | 6–9 | 4 | uint32 BE | timestamp (ms since connection) |
+         *     | 10–11 | 2 | uint16 BE | seq (per-connection sequence number) |
+         *     | 12+ | variable | bytes | audio data (PCM int16 LE or Opus) |
+         *
+         *     **JSON text frames (server → client):**
+         *     - Keepalive (every 15s): `{"type": "keepalive", "active_streams": 2}`
+         *     - Call start: `{"type": "call_start", "system_id": 1, "tgid": 9178, ...}`
+         *     - Call end: `{"type": "call_end", "system_id": 1, "tgid": 9178, ...}`
+         *
+         *     **JSON text frames (client → server):**
+         *     - Subscribe: `{"type": "subscribe", "tgids": [1001, 1002], "systems": [1]}`
+         *     - Unsubscribe: `{"type": "unsubscribe"}`
+         */
+        get: operations["streamAudioLive"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/audio/jitter": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get audio jitter stats
+         * @description Returns per-stream inter-packet arrival jitter statistics for all
+         *     active audio streams. Jitter is measured using Welford's online
+         *     algorithm on inter-chunk arrival deltas at the server's UDP receive
+         *     layer.
+         *
+         *     > **Note:** This feature is only available when `STREAM_LISTEN` is
+         *     > configured. Returns 404 when not enabled.
+         */
+        get: operations["getAudioJitter"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/pages": {
         parameters: {
             query?: never;
@@ -968,6 +1576,35 @@ export interface paths {
          *     `card-title` are excluded.
          */
         get: operations["listPages"];
+        put?: never;
+        /**
+         * Save an HTML page to the web directory
+         * @description Writes an HTML file to the server's disk `web/` directory, where
+         *     the page discovery system picks it up immediately. Requires the
+         *     HTML to contain a `card-title` meta tag. Protected core files
+         *     (index.html, auth.js, theme-config.js, theme-engine.js,
+         *     playground.html) cannot be overwritten. Returns 503 if the server
+         *     is using embedded web files with no disk directory.
+         */
+        post: operations["savePage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/openapi.yaml": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * OpenAPI specification
+         * @description Returns the OpenAPI 3.0.3 YAML specification for this API. No authentication required.
+         */
+        get: operations["getOpenAPISpec"];
         put?: never;
         post?: never;
         delete?: never;
@@ -996,7 +1633,7 @@ export interface paths {
          *       DELETE, DROP, and all other write operations are rejected by
          *       PostgreSQL.
          *     - A 30-second statement timeout prevents runaway queries.
-         *     - Results are capped at `limit` rows (default 1000, max 10000).
+         *     - Results are capped at `limit` rows (default 1000, max 50000).
          *     - Semicolons are rejected to prevent multi-statement injection.
          *
          *     Use `$1`, `$2`, etc. as parameter placeholders with the `params`
@@ -1053,15 +1690,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/maintenance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get maintenance status and config
+         * @description Returns the current maintenance configuration (retention periods)
+         *     and the results of the last maintenance run. Maintenance runs
+         *     automatically every 24 hours on startup.
+         */
+        get: operations["getMaintenanceStatus"];
+        put?: never;
+        /**
+         * Trigger immediate maintenance run
+         * @description Triggers an immediate maintenance run (partition creation,
+         *     decimation, data purging). Returns the results when complete.
+         *     Returns 409 if a maintenance run is already in progress.
+         */
+        post: operations["runMaintenance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/transcribe-backfill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get transcription backfill status
+         * @description Returns the active and queued backfill jobs. The `active` field
+         *     is null when no job is currently running. The `queued` array
+         *     contains jobs waiting to start, in submission order.
+         */
+        get: operations["getTranscribeBackfillStatus"];
+        put?: never;
+        /**
+         * Submit transcription backfill job
+         * @description Queues a background job to find untranscribed calls matching the
+         *     provided filters and drip-feed them into the transcription queue.
+         *     Jobs are processed sequentially — if a job is already active, the
+         *     new job is queued. All filter fields are optional; omitting all
+         *     filters backfills every untranscribed call.
+         */
+        post: operations["submitTranscribeBackfill"];
+        /**
+         * Cancel all backfill jobs
+         * @description Cancels the active backfill job (if any) and all queued jobs.
+         */
+        delete: operations["cancelAllTranscribeBackfill"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/transcribe-backfill/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Cancel a specific backfill job
+         * @description Cancels a specific backfill job by ID. If the job is currently
+         *     active, it is stopped. If it is queued, it is removed from the queue.
+         */
+        delete: operations["cancelTranscribeBackfill"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
-         * @description Radio system protocol type
+         * @description Radio system protocol type. The conventional variants indicate
+         *     conventional monitoring of digital channels (P25, DMR) or SigMF
+         *     recording sources, as opposed to pure analog conventional.
          * @enum {string}
          */
-        SystemType: "p25" | "smartnet" | "conventional";
+        SystemType: "p25" | "smartnet" | "conventional" | "conventionalP25" | "conventionalDMR" | "conventionalSIGMF";
         /**
          * @description Talkgroup mode: D=Digital, A=Analog, E=Encrypted,
          *     M=Mixed (digital+analog), T=TDMA
@@ -1079,9 +1801,10 @@ export interface components {
          *     - **ans_req**: answer request
          *     - **location**: unit location update
          *     - **ackresp**: acknowledge response
+         *     - **signal**: in-band signaling decode (MDC1200, FleetSync, STAR)
          * @enum {string}
          */
-        EventType: "on" | "off" | "join" | "call" | "end" | "data" | "ans_req" | "location" | "ackresp";
+        EventType: "on" | "off" | "join" | "call" | "end" | "data" | "ans_req" | "location" | "ackresp" | "signal";
         /**
          * @description Call recording state (mapped from trunk-recorder integer values):
          *     - **monitoring**: control channel activity seen, no audio capture yet
@@ -1108,13 +1831,63 @@ export interface components {
          * @enum {string}
          */
         RecState: "available" | "recording" | "idle" | "stopped";
+        UserSummary: {
+            id?: number;
+            username?: string;
+            /** @enum {string} */
+            role?: "viewer" | "editor" | "admin";
+        };
+        User: {
+            id?: number;
+            username?: string;
+            /** @enum {string} */
+            role?: "viewer" | "editor" | "admin";
+            enabled?: boolean;
+            display_name?: string;
+            /** Format: date-time */
+            last_login?: string | null;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        APIKey: {
+            id?: number;
+            /** @description First 12 characters of the key for identification */
+            key_prefix?: string;
+            /** @description Null for service accounts */
+            user_id?: number | null;
+            /** @enum {string} */
+            role?: "viewer" | "editor" | "admin";
+            label?: string;
+            is_service_account?: boolean;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            last_used_at?: string | null;
+        };
+        APIKeyWithPlaintext: components["schemas"]["APIKey"] & {
+            /**
+             * @description The full API key plaintext. Shown exactly once at creation —
+             *     cannot be retrieved again. Store it securely.
+             */
+            key?: string;
+        };
         Error: {
+            /**
+             * @description Machine-readable error code for programmatic handling
+             * @example not_found
+             * @enum {string}
+             */
+            code: "bad_request" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "rate_limited" | "internal_error" | "service_unavailable" | "invalid_body" | "invalid_parameter" | "invalid_time_range" | "query_failed" | "ambiguous_id" | "duplicate" | "request_timeout";
             /** @example Resource not found */
             error: string;
             /** @description Additional context when available */
             detail?: string;
         };
         AmbiguousError: {
+            /** @example ambiguous_id */
+            code: string;
             /** @example Ambiguous ID 9178: exists in multiple systems */
             error: string;
             /**
@@ -1293,7 +2066,7 @@ export interface components {
             /** Format: date-time */
             last_seen?: string;
             /**
-             * @description Total calls recorded on this talkgroup
+             * @description Calls in the last 30 days
              * @example 1547
              */
             call_count?: number;
@@ -1308,7 +2081,7 @@ export interface components {
              */
             calls_24h?: number;
             /**
-             * @description Distinct units seen on this talkgroup
+             * @description Distinct units with any activity (calls, joins, locations, etc.) in the last 30 days
              * @example 45
              */
             unit_count?: number;
@@ -1358,6 +2131,11 @@ export interface components {
              * @example 09-8L Main
              */
             last_event_tg_tag?: string;
+            /**
+             * @description Number of calls within the requested time window (only present on /talkgroups/{id}/units)
+             * @example 42
+             */
+            call_count?: number;
             /**
              * @description Search relevance: 100=exact, 50=prefix, 10=contains. Only present in search results.
              * @example 100
@@ -1576,8 +2354,16 @@ export interface components {
              * @example Butler/Warren P25
              */
             system_name?: string;
-            /** @example 1234567 */
+            /**
+             * @description P25 Radio ID (legacy name; prefer unit_id for consistency)
+             * @example 1234567
+             */
             unit_rid: number;
+            /**
+             * @description Radio unit ID (alias for unit_rid, consistent with other endpoints)
+             * @example 1234567
+             */
+            unit_id: number;
             /**
              * @description Unit display name (embedded to avoid lookup)
              * @example Engine 1
@@ -1600,9 +2386,27 @@ export interface components {
              * @example trunk-recorder
              */
             instance_id?: string;
+            /**
+             * @description Signal events store `signaling_type` and `signal_type` here.
+             *     Example: `{"signaling_type": "MDC1200", "signal_type": "normal"}`
+             */
             metadata_json?: {
                 [key: string]: unknown;
             };
+            /**
+             * @description Decoder type for signal events: `MDC1200`, `FLEETSYNC`, `STAR`,
+             *     or `unknown` (P25 systems where TR passes null).
+             *     Only present in SSE payloads for `unit_event:signal` events.
+             * @example MDC1200
+             */
+            signaling_type?: string;
+            /**
+             * @description Signal meaning: `normal` (PTT ID), `emergency`, `emergency_ack`,
+             *     `radio_check`, `radio_stun`, `radio_revive`, and their `_ack`/`_pre` variants.
+             *     Only present in SSE payloads for `unit_event:signal` events.
+             * @example normal
+             */
+            signal_type?: string;
         };
         /**
          * @description A frequency segment from trunk-recorder's freqList. Each entry
@@ -1615,10 +2419,11 @@ export interface components {
              */
             freq?: number;
             /**
-             * @description Unix timestamp of when this frequency segment started
-             * @example 1713207802
+             * Format: date-time
+             * @description When this frequency segment started (RFC 3339)
+             * @example 2024-04-15T19:03:22Z
              */
-            time?: number;
+            time?: string;
             /**
              * @description Position in the audio file in seconds
              * @example 0
@@ -1651,10 +2456,11 @@ export interface components {
              */
             tag?: string;
             /**
-             * @description Unix timestamp of when this unit keyed up
-             * @example 1713207802
+             * Format: date-time
+             * @description When this unit keyed up (RFC 3339)
+             * @example 2024-04-15T19:03:22Z
              */
-            time?: number;
+            time?: string;
             /**
              * @description Position in audio file in seconds
              * @example 0
@@ -1750,9 +2556,10 @@ export interface components {
          *     - **reviewed**: passed quality checks
          *     - **verified**: human-verified correct
          *     - **excluded**: permanently excluded from dataset
+         *     - **empty**: STT provider returned no text (no legible audio)
          * @enum {string}
          */
-        TranscriptionStatus: "none" | "auto" | "reviewed" | "verified" | "excluded";
+        TranscriptionStatus: "none" | "auto" | "reviewed" | "verified" | "excluded" | "empty";
         /**
          * @description - **auto**: automated transcription (e.g., Whisper)
          *     - **human**: human correction/transcription
@@ -1786,6 +2593,16 @@ export interface components {
              * @example 1500
              */
             duration_ms?: number;
+            /**
+             * @description Time spent in the STT provider call in milliseconds (excludes file I/O, preprocessing, DB writes)
+             * @example 1200
+             */
+            provider_ms?: number | null;
+            /**
+             * @description Ratio of provider processing time to call audio duration. Values < 1.0 mean faster than real-time. Computed as provider_ms / (call_duration * 1000).
+             * @example 0.42
+             */
+            real_time_ratio?: number | null;
             /** Format: date-time */
             created_at?: string;
             /**
@@ -1866,6 +2683,27 @@ export interface components {
             limit: number;
             offset: number;
         };
+        BatchTranscriptionResponse: {
+            transcriptions: components["schemas"]["BatchTranscriptionItem"][];
+        };
+        BatchTranscriptionItem: {
+            /** Format: int64 */
+            call_id: number;
+            text: string;
+            /** @description Word segments with unit attribution (from words->'segments'). */
+            segments?: {
+                /** @description Unit/radio ID. */
+                src?: number;
+                /** @description Unit alpha tag. */
+                src_tag?: string;
+                /** @description Segment start in seconds. */
+                start?: number;
+                /** @description Segment end in seconds. */
+                end?: number;
+                /** @description Transcribed text for this segment. */
+                text?: string;
+            }[] | null;
+        };
         TranscriptionQueueStats: {
             /** @enum {string} */
             status?: "ok" | "not_configured";
@@ -1875,6 +2713,25 @@ export interface components {
             completed?: number;
             /** @example 12 */
             failed?: number;
+            /** @description Aggregate STT performance from the last 100 completions */
+            performance?: {
+                /** @example 100 */
+                sample_size?: number;
+                /** @example 0.38 */
+                avg_real_time_ratio?: number | null;
+                /** @example 1150 */
+                avg_provider_ms?: number | null;
+                by_provider?: {
+                    [key: string]: {
+                        /** @example 85 */
+                        count?: number;
+                        /** @example 0.35 */
+                        avg_real_time_ratio?: number | null;
+                        /** @example 1050 */
+                        avg_provider_ms?: number | null;
+                    };
+                };
+            } | null;
         };
         StatusChangeResponse: {
             /** @example 48531 */
@@ -2077,9 +2934,14 @@ export interface components {
                 /** @enum {string} */
                 database?: "ok" | "error";
                 /** @enum {string} */
-                mqtt?: "ok" | "error" | "disconnected";
+                mqtt?: "ok" | "error" | "disconnected" | "not_configured";
+                /**
+                 * @description File watcher ingest status. Only present when WATCH_DIR is configured.
+                 * @enum {string}
+                 */
+                file_watcher?: "watching" | "backfilling" | "stopped";
                 /** @enum {string} */
-                transcription?: "ok" | "not_configured";
+                transcription?: "ok" | "unavailable" | "not_configured";
             };
             /** @description Status of connected trunk-recorder instances */
             trunk_recorders?: {
@@ -2090,6 +2952,47 @@ export interface components {
                 /** Format: date-time */
                 last_seen?: string;
             }[];
+            /** @description Whether a newer version is available. Only present when UPDATE_CHECK_URL is configured. */
+            update_available?: boolean;
+            /**
+             * @description Latest available version string. Only present when an update is available.
+             * @example v0.9.0
+             */
+            latest_version?: string;
+            /**
+             * @description URL to the release page. Only present when an update is available.
+             * @example https://github.com/LumenPrima/tr-engine/releases/tag/v0.9.0
+             */
+            release_url?: string;
+            /** @description Live audio streaming status. Only present when STREAM_LISTEN is configured. */
+            audio_stream?: {
+                /**
+                 * @description Whether live audio streaming is enabled
+                 * @example true
+                 */
+                enabled?: boolean;
+                /**
+                 * @description The audio stream source address
+                 * @example localhost:9123
+                 */
+                listen?: string;
+                /**
+                 * @description Number of active audio encoders (one per talkgroup with active audio)
+                 * @example 3
+                 */
+                active_encoders?: number;
+                /**
+                 * @description Number of connected WebSocket clients
+                 * @example 5
+                 */
+                connected_clients?: number;
+                /**
+                 * Format: date-time
+                 * @description ISO 8601 timestamp of the last audio chunk received from the stream source. Null if no chunks have been received yet.
+                 * @example 2026-03-05T14:30:00Z
+                 */
+                last_chunk_received?: string | null;
+            };
         };
         SystemListResponse: {
             systems: components["schemas"]["System"][];
@@ -2315,15 +3218,20 @@ export interface components {
             /** @example 348 */
             sysid?: string;
             /**
-             * @description Decode success rate (0.0 - 1.0)
+             * @description Cumulative decode success rate (0.0 - 1.0)
              * @example 0.98
              */
             decode_rate?: number;
             /**
-             * @description Total messages in this measurement period
-             * @example 5000
+             * @description Decode success rate for this measurement interval
+             * @example 0.95
              */
-            total_messages?: number;
+            decode_rate_interval?: number;
+            /**
+             * @description Control channel frequency (Hz)
+             * @example 859562500
+             */
+            control_channel?: number;
         };
         TalkgroupActivity: {
             /** @example 3 */
@@ -2353,6 +3261,110 @@ export interface components {
             first_call?: string;
             /** Format: date-time */
             last_call?: string;
+        };
+        CallVolumeBucket: {
+            /** Format: date-time */
+            time?: string;
+            /** @example 42 */
+            calls?: number;
+            /**
+             * @description Average call duration in seconds
+             * @example 8.3
+             */
+            avg_duration?: number;
+        };
+        DailyOverviewRow: {
+            /**
+             * Format: date
+             * @example 2026-03-01
+             */
+            date?: string;
+            /** @example 1250 */
+            calls?: number;
+            /**
+             * @description Total call duration in hours
+             * @example 4.2
+             */
+            total_hours?: number;
+            /** @example 87 */
+            active_talkgroups?: number;
+        };
+        CategoryBreakdownRow: {
+            /** @example Law Dispatch */
+            tag?: string;
+            /** @example 523 */
+            calls?: number;
+            /**
+             * @description Total call duration in hours
+             * @example 1.8
+             */
+            hours?: number;
+        };
+        CallHeatmapCell: {
+            /** @description Day of week (0=Sunday, 6=Saturday) */
+            dow?: number;
+            /** @description Hour of day (0–23) */
+            hour?: number;
+            /** @example 15 */
+            calls?: number;
+        };
+        RecorderUtilizationBucket: {
+            /** Format: date-time */
+            time?: string;
+            /** @description SDR device number */
+            src_num?: number;
+            /**
+             * @description Percentage of time in RECORDING state
+             * @example 3.2
+             */
+            pct_recording?: number;
+            /**
+             * @description Percentage of time in IDLE state
+             * @example 4.8
+             */
+            pct_idle?: number;
+            /**
+             * @description Percentage of time in AVAILABLE state
+             * @example 92
+             */
+            pct_available?: number;
+            /**
+             * @description Percentage of time in IGNORE state
+             * @example 0
+             */
+            pct_ignore?: number;
+            /**
+             * @description Number of snapshot samples in this bucket
+             * @example 58
+             */
+            sample_count?: number;
+        };
+        DecodeRateBucket: {
+            /** Format: date-time */
+            time?: string;
+            /** @example 1 */
+            system_id?: number;
+            system_name?: string;
+            /**
+             * @description Average decode rate in this bucket
+             * @example 98.5
+             */
+            avg_rate?: number;
+            /**
+             * @description Minimum decode rate in this bucket
+             * @example 85
+             */
+            min_rate?: number;
+            /**
+             * @description Maximum decode rate in this bucket
+             * @example 100
+             */
+            max_rate?: number;
+            /**
+             * @description Number of rate samples in this bucket
+             * @example 60
+             */
+            sample_count?: number;
         };
         EncryptionStatsResponse: {
             stats: components["schemas"]["TalkgroupEncryptionStat"][];
@@ -2441,7 +3453,7 @@ export interface components {
          *     - **call_start**: new call recording began
          *     - **call_update**: call updated (new transmission, freq change)
          *     - **call_end**: call recording completed, audio available
-         *     - **unit_event**: unit lifecycle event (on/off/join/call/end/etc.)
+         *     - **unit_event**: unit lifecycle event (on/off/join/call/end/signal/etc.)
          *     - **recorder_update**: recorder hardware state changed
          *     - **rate_update**: decode rate update from a system
          *     - **trunking_message**: P25 control channel message
@@ -2587,6 +3599,215 @@ export interface components {
              */
             row_count: number;
         };
+        MaintenanceStatus: {
+            config?: components["schemas"]["MaintenanceConfig"];
+            /** @description Results of the last maintenance run. Null if no run has completed since startup. */
+            last_run?: components["schemas"]["MaintenanceRun"] | null;
+        };
+        /** @description Active retention settings for automatic maintenance. */
+        MaintenanceConfig: {
+            /**
+             * @description Raw MQTT message retention (Go duration, e.g. 168h = 7 days)
+             * @example 168h0m0s
+             */
+            retention_raw_messages?: string;
+            /**
+             * @description Console log retention (Go duration, e.g. 720h = 30 days)
+             * @example 720h0m0s
+             */
+            retention_console_logs?: string;
+            /**
+             * @description Plugin status retention (Go duration)
+             * @example 720h0m0s
+             */
+            retention_plugin_status?: string;
+            /**
+             * @description Active call checkpoint retention (Go duration)
+             * @example 168h0m0s
+             */
+            retention_checkpoints?: string;
+            /**
+             * @description Stale incomplete call retention (Go duration)
+             * @example 1h0m0s
+             */
+            retention_stale_calls?: string;
+            /**
+             * @description Maintenance run schedule
+             * @example every 24h
+             */
+            schedule?: string;
+        };
+        /** @description Results of a single maintenance run. */
+        MaintenanceRun: {
+            /**
+             * Format: date-time
+             * @description When the maintenance run started
+             */
+            started_at?: string;
+            /**
+             * @description Total run duration in milliseconds
+             * @example 1234
+             */
+            duration_ms?: number;
+            /**
+             * @description Number of new partitions created
+             * @example 0
+             */
+            partitions_created?: number;
+            /**
+             * @description Names of old partitions that were dropped
+             * @example [
+             *       "mqtt_raw_messages_w2026_07"
+             *     ]
+             */
+            partitions_dropped?: string[];
+            /**
+             * @description Per-table decimation results
+             * @example {
+             *       "recorder_snapshots": {
+             *         "phase1_deleted": 500,
+             *         "phase2_deleted": 120
+             *       },
+             *       "decode_rates": {
+             *         "phase1_deleted": 300,
+             *         "phase2_deleted": 80
+             *       }
+             *     }
+             */
+            decimation?: {
+                [key: string]: components["schemas"]["DecimationResult"];
+            };
+            /**
+             * @description Per-table purge row counts
+             * @example {
+             *       "console_messages": 42,
+             *       "plugin_statuses": 0,
+             *       "call_active_checkpoints": 15,
+             *       "stale_calls": 3,
+             *       "orphan_call_groups": 1
+             *     }
+             */
+            purged?: {
+                [key: string]: number;
+            };
+        };
+        DecimationResult: {
+            /**
+             * @description Rows deleted in phase 1 (1 week – 1 month old: keep 1 per minute)
+             * @example 500
+             */
+            phase1_deleted?: number;
+            /**
+             * @description Rows deleted in phase 2 (>1 month old: keep 1 per hour)
+             * @example 120
+             */
+            phase2_deleted?: number;
+        };
+        /** @description Optional filters for a transcription backfill job. All fields are optional — omitting all filters targets every untranscribed call. */
+        BackfillFilters: {
+            /**
+             * @description Restrict to calls from this system
+             * @example 1
+             */
+            system_id?: number;
+            /**
+             * @description Restrict to calls on these talkgroup IDs
+             * @example [
+             *       9178,
+             *       9112
+             *     ]
+             */
+            tgids?: number[];
+            /**
+             * Format: date-time
+             * @description Only include calls after this time (RFC 3339)
+             */
+            start_time?: string;
+            /**
+             * Format: date-time
+             * @description Only include calls before this time (RFC 3339)
+             */
+            end_time?: string;
+        };
+        /** @description State of a single transcription backfill job. */
+        BackfillJob: {
+            /**
+             * @description Unique job identifier
+             * @example 1
+             */
+            job_id?: number;
+            filters?: components["schemas"]["BackfillFilters"];
+            /**
+             * @description Total calls to process in this job
+             * @example 342
+             */
+            total?: number;
+            /**
+             * @description Number of calls successfully transcribed so far
+             * @example 57
+             */
+            completed?: number;
+            /**
+             * @description Number of calls that failed transcription
+             * @example 2
+             */
+            failed?: number;
+            /**
+             * Format: date-time
+             * @description When processing started (null if still queued)
+             */
+            started_at?: string | null;
+            /**
+             * Format: date-time
+             * @description When the job was submitted
+             */
+            created_at?: string;
+        };
+        /** @description Current state of the transcription backfill system. */
+        BackfillStatus: {
+            /** @description Currently running backfill job, or null if idle */
+            active?: components["schemas"]["BackfillJob"] | null;
+            /** @description Jobs waiting to start, in submission order */
+            queued?: components["schemas"]["BackfillJob"][];
+        };
+        StreamJitterSnapshot: {
+            /** @description System ID */
+            system_id?: number;
+            /** @description Talkgroup ID */
+            tgid?: number;
+            /** @description Number of inter-packet deltas recorded */
+            count?: number;
+            /**
+             * Format: double
+             * @description Minimum inter-packet delta in milliseconds
+             */
+            min_ms?: number;
+            /**
+             * Format: double
+             * @description Maximum inter-packet delta in milliseconds
+             */
+            max_ms?: number;
+            /**
+             * Format: double
+             * @description Mean inter-packet delta in milliseconds
+             */
+            mean_ms?: number;
+            /**
+             * Format: double
+             * @description Standard deviation of inter-packet deltas in milliseconds
+             */
+            stddev_ms?: number;
+            /**
+             * Format: double
+             * @description Most recent inter-packet delta in milliseconds
+             */
+            last_delta_ms?: number;
+            /**
+             * Format: date-time
+             * @description When this stream became active
+             */
+            started_at?: string;
+        };
     };
     responses: {
         /** @description Bad Request */
@@ -2622,6 +3843,24 @@ export interface components {
         };
         /** @description Unauthorized — missing or invalid auth token */
         Unauthorized: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Forbidden — valid read token but write token required for this operation */
+        Forbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Too many requests — rate limit exceeded */
+        RateLimited: {
             headers: {
                 [name: string]: unknown;
             };
@@ -2692,6 +3931,551 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
                 };
+            };
+        };
+    };
+    getAuthInit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Token payload */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Bearer token for API authentication */
+                        token: string;
+                        /** @description Present only when a valid JWT session exists */
+                        user?: {
+                            username?: string;
+                            /** @enum {string} */
+                            role?: "viewer" | "editor" | "admin";
+                        };
+                    };
+                };
+            };
+            /** @description Auth not configured (AUTH_TOKEN not set and auto-generation failed) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    authSetup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Admin username (normalized to lowercase) */
+                    username: string;
+                    password: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Admin user created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        message?: string;
+                        user?: components["schemas"]["UserSummary"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Setup already completed — users exist */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    authLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    username: string;
+                    password: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Login successful */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description JWT access token (1 hour expiry) */
+                        access_token?: string;
+                        user?: components["schemas"]["UserSummary"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Invalid credentials or account disabled */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    authRefresh: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description New access token */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        access_token?: string;
+                        user?: components["schemas"]["UserSummary"];
+                    };
+                };
+            };
+            /** @description No refresh token or invalid/expired token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    authLogout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Logged out */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status?: string;
+                    };
+                };
+            };
+        };
+    };
+    authMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current user */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listOwnKeys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List of API keys */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIKey"][];
+                };
+            };
+            /** @description User authentication required (API keys cannot list keys) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Human-readable name for the key */
+                    label: string;
+                    /**
+                     * @default viewer
+                     * @enum {string}
+                     */
+                    role?: "viewer" | "editor" | "admin";
+                };
+            };
+        };
+        responses: {
+            /** @description API key created (plaintext shown once) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIKeyWithPlaintext"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Cannot create key with higher role than your own */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    deleteOwnKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Key revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Key not found or not owned by you */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listAllKeys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List of all API keys */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIKey"][];
+                };
+            };
+            /** @description Admin access required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createServiceAccountKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    label: string;
+                    /**
+                     * @default viewer
+                     * @enum {string}
+                     */
+                    role?: "viewer" | "editor" | "admin";
+                };
+            };
+        };
+        responses: {
+            /** @description Service account key created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIKeyWithPlaintext"];
+                };
+            };
+            /** @description Admin access required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    deleteAnyKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Key revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admin access required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Key not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listUsers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description User list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        users?: components["schemas"]["User"][];
+                        total?: number;
+                    };
+                };
+            };
+            /** @description Admin access required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    username: string;
+                    password: string;
+                    /**
+                     * @default viewer
+                     * @enum {string}
+                     */
+                    role?: "viewer" | "editor" | "admin";
+                };
+            };
+        };
+        responses: {
+            /** @description User created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Admin access required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Username already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    deleteUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description User deleted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admin access required, or last admin / self-delete protection */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    role?: "viewer" | "editor" | "admin";
+                    password?: string;
+                    enabled?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description User updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Admin access required, or last admin protection */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -2768,6 +4552,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
@@ -2823,6 +4608,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             /** @description short_name + instance_id conflicts with an existing site */
             409: {
@@ -2869,6 +4655,11 @@ export interface operations {
                 group?: string;
                 /** @description Search by alpha_tag, tgid, group, tag, or description */
                 search?: string;
+                /**
+                 * @deprecated
+                 * @description No longer supported — returns 400 if provided. Use GET /talkgroups/{id} for real-time stats.
+                 */
+                stats_days?: number;
                 /** @description Sort field. Prefix with `-` for descending (e.g., `-last_seen`) */
                 sort?: components["parameters"]["sort"];
                 /** @description Sort direction (ignored if sort field uses `-` prefix) */
@@ -2949,6 +4740,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Ambiguous"];
             500: components["responses"]["InternalError"];
@@ -3130,6 +4922,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
@@ -3229,6 +5022,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Ambiguous"];
             500: components["responses"]["InternalError"];
@@ -3311,9 +5105,15 @@ export interface operations {
     listUnitEventsGlobal: {
         parameters: {
             query?: {
-                /** @description Filter by internal system ID (comma-separated for multiple). Alias "systems" also accepted. */
+                /**
+                 * @description Filter by internal system ID (comma-separated for multiple).
+                 *     Alias "systems" also accepted. **Required** unless `sysid` is provided.
+                 */
                 system_id?: string;
-                /** @description Filter by P25 sysid hex (comma-separated for multiple). Alias "sysids" also accepted. */
+                /**
+                 * @description Filter by P25 sysid hex (comma-separated for multiple).
+                 *     Alias "sysids" also accepted. **Required** unless `system_id` is provided.
+                 */
                 sysid?: string;
                 /** @description Filter by unit radio ID (comma-separated for multiple). Aliases "units", "unit_ids" also accepted. */
                 unit_id?: string;
@@ -3683,6 +5483,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -3738,6 +5539,7 @@ export interface operations {
                     };
                 };
             };
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             /** @description Transcription queue full or not configured */
             503: {
@@ -3771,6 +5573,7 @@ export interface operations {
                     "application/json": components["schemas"]["StatusChangeResponse"];
                 };
             };
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -3795,6 +5598,7 @@ export interface operations {
                     "application/json": components["schemas"]["StatusChangeResponse"];
                 };
             };
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -3819,6 +5623,7 @@ export interface operations {
                     "application/json": components["schemas"]["StatusChangeResponse"];
                 };
             };
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -3837,6 +5642,8 @@ export interface operations {
                 start_time?: string;
                 /** @description End of time range (RFC 3339) */
                 end_time?: string;
+                /** @description When true, only return the primary transcription for each call */
+                primary_only?: boolean;
                 /** @description Results per page */
                 limit?: components["parameters"]["limit"];
                 /** @description Page offset (number of results to skip) */
@@ -3855,6 +5662,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TranscriptionSearchResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+        };
+    };
+    getBatchTranscriptions: {
+        parameters: {
+            query: {
+                /** @description Comma-separated list of call IDs (max 500). */
+                call_ids: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Batch transcription results. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchTranscriptionResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -3879,6 +5710,144 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+        };
+    };
+    uploadCall: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description Audio file (rdio-scanner format)
+                     */
+                    audio?: string;
+                    /**
+                     * Format: binary
+                     * @description Audio file (OpenMHz format)
+                     */
+                    call?: string;
+                    /** @description Talkgroup ID (rdio-scanner format) */
+                    talkgroup?: number;
+                    /** @description Talkgroup ID (OpenMHz format) */
+                    talkgroup_num?: number;
+                    /**
+                     * Format: int64
+                     * @description Unix epoch timestamp (rdio-scanner format)
+                     */
+                    dateTime?: number;
+                    /**
+                     * Format: int64
+                     * @description Unix epoch start time (OpenMHz format)
+                     */
+                    start_time?: number;
+                    /** @description System short name (rdio-scanner format) */
+                    systemLabel?: string;
+                    /** @description Frequency in Hz (rdio-scanner format) */
+                    frequency?: number;
+                    /** @description Frequency in Hz (OpenMHz format) */
+                    freq?: number;
+                    /**
+                     * Format: int64
+                     * @description Unix epoch stop time (OpenMHz format)
+                     */
+                    stop_time?: number;
+                    /** @description JSON array of source items (rdio-scanner format) */
+                    sources?: string;
+                    /** @description JSON array of source items (OpenMHz format) */
+                    source_list?: string;
+                    /** @description JSON array of frequency items (rdio-scanner format) */
+                    frequencies?: string;
+                    /** @description Talkgroup alpha tag */
+                    talkgroupLabel?: string;
+                    /** @description Talkgroup description */
+                    talkgroupName?: string;
+                    /** @description Talkgroup service tag */
+                    talkgroupTag?: string;
+                    /** @description Talkgroup group/category */
+                    talkgroupGroup?: string;
+                    /** @description Audio MIME type (e.g., audio/mp4) */
+                    audioType?: string;
+                    /** @description Original audio filename */
+                    audioName?: string;
+                    /** @description Emergency flag (boolean or 0/1) */
+                    emergency?: string;
+                    /** @description Encrypted flag (boolean or 0/1) */
+                    encrypted?: string;
+                    /** @description Decode error count (OpenMHz format) */
+                    error_count?: number;
+                    /** @description Call duration in seconds (OpenMHz format) */
+                    call_length?: number;
+                    /** @description Auth token (rdio-scanner format, alternative to Bearer header) */
+                    key?: string;
+                    /** @description Auth token (OpenMHz format, alternative to Bearer header) */
+                    api_key?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Created — call record created and audio saved */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /**
+                         * Format: int64
+                         * @description Database ID of the created call
+                         * @example 48531
+                         */
+                        call_id?: number;
+                        /**
+                         * @description System the call was assigned to
+                         * @example 1
+                         */
+                        system_id?: number;
+                        /**
+                         * @description Talkgroup ID
+                         * @example 9044
+                         */
+                        tgid?: number;
+                        /**
+                         * Format: date-time
+                         * @description Call start time (RFC 3339)
+                         */
+                        start_time?: string;
+                        /**
+                         * @description Relative path to saved audio file
+                         * @example butco/2024/02/25/1708881234.m4a
+                         */
+                        audio_file_path?: string;
+                    };
+                };
+            };
+            /** @description Bad Request — invalid multipart form, missing required fields, or unrecognized format */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Conflict — duplicate call (same system, talkgroup, and start time) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
         };
     };
     listCallGroups: {
@@ -3970,6 +5939,10 @@ export interface operations {
                 start_time?: components["parameters"]["startTime"];
                 /** @description End of time range (RFC 3339) */
                 end_time?: components["parameters"]["endTime"];
+                /** @description Filter by system ID(s). Comma-separated for multiple. */
+                system_id?: string;
+                /** @description Maximum number of rate entries to return (1-10000) */
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -4003,6 +5976,11 @@ export interface operations {
                 after?: string;
                 /** @description End of time range (RFC 3339). Defaults to now. */
                 before?: string;
+                /**
+                 * @description Filter by call state. Defaults to `COMPLETED` (only finished calls).
+                 *     Set to a specific state to filter, or pass an empty string to include all states.
+                 */
+                call_state?: string;
                 /** @description Sort field — "calls" (default), "duration", "tgid" */
                 sort?: "calls" | "duration" | "tgid";
                 /** @description Results per page */
@@ -4026,6 +6004,196 @@ export interface operations {
                         activity?: components["schemas"]["TalkgroupActivity"][];
                         /** @description Total number of distinct talkgroups matching the filter */
                         total?: number;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getCallVolume: {
+        parameters: {
+            query?: {
+                /** @description Bucket size — "hour" (default) or "day". */
+                interval?: "hour" | "day";
+                /** @description Lookback period in days (1–90). Default 7. */
+                days?: number;
+                /** @description Filter by system ID(s), comma-separated. */
+                system_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        buckets?: components["schemas"]["CallVolumeBucket"][];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getDailyOverview: {
+        parameters: {
+            query?: {
+                /** @description Lookback period in days (1–90). Default 14. */
+                days?: number;
+                /** @description Filter by system ID(s), comma-separated. */
+                system_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        days?: components["schemas"]["DailyOverviewRow"][];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getCategoryBreakdown: {
+        parameters: {
+            query?: {
+                /** @description Lookback period in hours (1–720). Default 24. */
+                hours?: number;
+                /** @description Maximum categories to return (1–100). Default 10. */
+                limit?: number;
+                /** @description Filter by system ID(s), comma-separated. */
+                system_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        categories?: components["schemas"]["CategoryBreakdownRow"][];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getCallHeatmap: {
+        parameters: {
+            query?: {
+                /** @description Lookback period in days (1–90). Default 7. */
+                days?: number;
+                /** @description IANA timezone name for bucketing. Default "UTC". */
+                tz?: string;
+                /** @description Filter by system ID(s), comma-separated. */
+                system_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        cells?: components["schemas"]["CallHeatmapCell"][];
+                        /** @description The timezone used for bucketing. */
+                        timezone?: string;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getRecorderUtilization: {
+        parameters: {
+            query?: {
+                /** @description Time bucket size. Default "hour". */
+                bucket?: "hour" | "day";
+                /** @description Lookback period in days (1–90). Default 7. */
+                days?: number;
+                /** @description Filter to a specific SDR device number. */
+                src_num?: number;
+                /** @description Filter to a specific trunk-recorder instance. */
+                instance_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        buckets: components["schemas"]["RecorderUtilizationBucket"][];
+                        total: number;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getDecodeRateBuckets: {
+        parameters: {
+            query?: {
+                /** @description Time bucket size. Default "hour". */
+                bucket?: "hour" | "day";
+                /** @description Lookback period in days (1–90). Default 7. */
+                days?: number;
+                /** @description Filter by system ID(s), comma-separated. */
+                system_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        buckets: components["schemas"]["DecodeRateBucket"][];
+                        total: number;
                     };
                 };
             };
@@ -4157,7 +6325,7 @@ export interface operations {
                  *     Supports compound syntax with `:` to filter on event
                  *     subtypes. For example, `unit_event:call` matches only unit
                  *     call events, while plain `unit_event` matches all unit event
-                 *     subtypes (on, off, call, end, join, location, ackresp, data).
+                 *     subtypes (on, off, call, end, join, location, ackresp, data, signal).
                  *     Compound and plain values can be mixed:
                  *     `unit_event:call,unit_event:end,call_start`.
                  */
@@ -4194,6 +6362,91 @@ export interface operations {
                 };
             };
             500: components["responses"]["InternalError"];
+        };
+    };
+    streamAudioLive: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Authentication token. Alternative to the `Authorization: Bearer`
+                 *     header for WebSocket connections where custom headers are not
+                 *     supported.
+                 */
+                token?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description WebSocket upgrade successful */
+            101: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Live audio streaming not enabled (STREAM_LISTEN not configured) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Maximum audio stream clients reached */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getAudioJitter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Per-stream jitter statistics */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        streams?: {
+                            [key: string]: components["schemas"]["StreamJitterSnapshot"];
+                        };
+                    };
+                };
+            };
+            /** @description Live audio streaming is not enabled */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     listPages: {
@@ -4239,6 +6492,106 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
+    savePage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * @description Target filename (sanitized server-side; .html appended if missing)
+                     * @example my-dashboard.html
+                     */
+                    filename: string;
+                    /** @description Full HTML content of the page (max 1 MB) */
+                    html: string;
+                    /**
+                     * @description If true, overwrite an existing file with the same name
+                     * @default false
+                     */
+                    overwrite?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Page saved successfully */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example /my-dashboard.html */
+                        path?: string;
+                        /** @example My Dashboard */
+                        title?: string;
+                        /** @example Page saved */
+                        message?: string;
+                    };
+                };
+            };
+            /** @description Invalid request (empty filename, missing card-title, HTML too large) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Attempted to overwrite a protected core file */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description File already exists and overwrite was not set */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Server is using embedded web files (no disk web/ directory) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getOpenAPISpec: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OpenAPI specification in YAML format */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/yaml": string;
+                };
+            };
+        };
+    };
     executeQuery: {
         parameters: {
             query?: never;
@@ -4271,6 +6624,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -4297,6 +6651,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
             /** @description Source or target system not found */
             404: {
                 headers: {
@@ -4316,6 +6671,249 @@ export interface operations {
                 };
             };
             500: components["responses"]["InternalError"];
+        };
+    };
+    getMaintenanceStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Maintenance status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaintenanceStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Pipeline not running */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    runMaintenance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Maintenance run completed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaintenanceRun"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Maintenance already running */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Pipeline not running */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getTranscribeBackfillStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Backfill status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackfillStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Pipeline not running */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    submitTranscribeBackfill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["BackfillFilters"];
+            };
+        };
+        responses: {
+            /** @description Backfill job accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /**
+                         * @description Unique identifier for this backfill job
+                         * @example 1
+                         */
+                        job_id?: number;
+                        /**
+                         * @description Position in the queue (0 = active, 1+ = queued)
+                         * @example 0
+                         */
+                        position?: number;
+                        /**
+                         * @description Number of untranscribed calls matching filters
+                         * @example 342
+                         */
+                        total?: number;
+                        filters?: components["schemas"]["BackfillFilters"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Transcription not configured or pipeline not running */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    cancelAllTranscribeBackfill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description All backfill jobs cancelled */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example true */
+                        cancelled?: boolean;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description No backfill jobs found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Pipeline not running */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    cancelTranscribeBackfill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Backfill job ID */
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Backfill job cancelled */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example true */
+                        cancelled?: boolean;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Job not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Pipeline not running */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
 }
