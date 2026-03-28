@@ -245,6 +245,10 @@ location /api/ {
 | `R` | Replay current call |
 | `M` | Mute/unmute |
 
+## Roadmap
+
+See the [Trunk Reporter Roadmap](https://github.com/orgs/trunk-reporter/projects/1) for the cross-repo project tracker with priorities and phases.
+
 ## License
 
 MIT
