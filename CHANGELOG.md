@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.0-pre4 (2026-03-27)
+
+### Features
+
+- **Sequential talkgroup playback** — Clicking a call on the investigate timeline now queues remaining calls from that talkgroup chronologically. Next/previous player buttons navigate the sequence, and earlier calls are seeded into history for backward navigation.
+- **Timeline mouse interactions** — Scroll to zoom and drag to pan on the investigate timeline, with keyboard shortcut hints displayed below.
+
+### Bug Fixes
+
+- **Timeline 'now' positioning** — The investigate timeline no longer shows empty future time. When viewing near the current time, the window shifts so 'now' sits at the right edge.
+- **Users page admin access** — Removed client-side role guard that blocked access in legacy token mode. The page now lets the API determine authorization, showing "Admin access required" only on a 403/401 response.
+- **Timeline drag/click conflict** — Added missing `data-call-block` attribute so drag-to-pan doesn't fire when clicking a call block.
+
 ## 1.0.0-pre3 (2026-03-23)
 
 ### Features

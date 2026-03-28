@@ -1,6 +1,6 @@
 {
   "name": "tr-dashboard",
-  "version": "1.0.0-pre3",
+  "version": "1.0.0-pre4",
   "private": true,
   "type": "module",
   "scripts": {
