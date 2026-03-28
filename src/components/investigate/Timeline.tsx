@@ -183,6 +183,7 @@ export function Timeline({
                   return (
                     <div
                       key={call.call_id}
+                      data-call-block
                       className={cn(
                         "absolute top-1 bottom-1 rounded-sm cursor-pointer transition-all",
                         "hover:brightness-125 hover:z-10",

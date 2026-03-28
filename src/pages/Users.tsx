@@ -38,7 +38,7 @@ export default function Users() {
       setError('')
       setAccessDenied(false)
     } catch (err: any) {
-      if (err?.status === 403) {
+      if (err?.status === 403 || err?.status === 401) {
         setAccessDenied(true)
       } else {
         setError(err?.data?.error || err?.message || 'Failed to load users')
@@ -52,6 +52,15 @@ export default function Users() {
   useEffect(() => {
     fetchUsers()
   }, [isAuthenticated, currentUser?.role])
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold">Users</h1>
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    )
+  }
 
   if (accessDenied) {
     return (

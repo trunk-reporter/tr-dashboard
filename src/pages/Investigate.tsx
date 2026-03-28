@@ -167,6 +167,8 @@ export default function Investigate() {
         addToQueue(sorted[i])
       }
       // Seed history with earlier calls (most recent first) for previous button
+      // Intentionally overwrites the history that loadCall just set — we want
+      // talkgroup sequence history, not the previously-playing call
       setHistory(sorted.slice(0, idx).reverse().map(c => ({
         id: c.call_id,
         callId: c.call_id,
