@@ -17,7 +17,17 @@
 
 ### Features
 
+- **Investigate timeline** — New page for visual timeline exploration of radio calls. Talkgroup rows with color-coded call blocks, expandable detail panels with transcription and unit info, keyboard shortcuts, live SSE updates, and pan/zoom controls.
+- **System detail page** — Live recorder status, top talkgroups, and recent calls for each system.
 - **First-time setup flow** — Login page auto-detects when no users exist and shows a "First-Time Setup" form to create the initial admin account. Calls the `POST /auth/setup` endpoint, validates password length and confirmation, and auto-logs in on success. Gracefully switches to login mode if setup is already completed.
+- **CI improvements** — OpenAPI type staleness check in build pipeline, Telegram notifications on workflow failure.
+
+### Bug Fixes
+
+- **Talkgroup alpha_tag in sidebar** — Favorites and Monitored sections now show the talkgroup display name.
+- **Missing navigation links** — Added links for talkgroups, units, and directory entries.
+- **Viewer write token** — Viewer users with a write token can now save talkgroup edits; Admin page shows proper 403 message instead of silent failure.
+- **OpenAPI types regenerated** — Updated generated types from current backend spec.
 
 ## 1.0.0-pre2 (2026-03-22)
 
