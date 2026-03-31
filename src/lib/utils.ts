@@ -91,9 +91,7 @@ export function normalizeDecodeRate(raw: number): number {
 }
 
 export function formatDecodeRate(rate: number): string {
-  // Rate may be raw messages/sec or 0-1 ratio
-  const normalized = normalizeDecodeRate(rate)
-  return `${Math.round(normalized * 100)}%`
+  return `${rate.toFixed(1)} msg/s`
 }
 
 // Composite key helpers (system_id:tgid format)
