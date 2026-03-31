@@ -72,8 +72,12 @@ async function request<T>(
   options?: RequestInit
 ): Promise<T> {
   const url = `${API_BASE}${endpoint}`
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+  const headers: Record<string, string> = {}
+
+  // Let the browser set Content-Type for FormData (multipart boundary);
+  // otherwise default to JSON.
+  if (!(options?.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json'
   }
 
   // Proactively refresh token if it expires within 5 minutes
@@ -404,23 +408,10 @@ export async function importTalkgroupDirectory(
   const param = typeof systemIdOrName === 'number'
     ? `system_id=${systemIdOrName}`
     : `system_name=${encodeURIComponent(systemIdOrName)}`
-  const url = `${API_BASE}/talkgroup-directory/import?${param}`
-  const headers: Record<string, string> = {}
-  const { accessToken } = useAuthStore.getState()
-  if (accessToken) {
-    headers['Authorization'] = `Bearer ${accessToken}`
-  }
-  const response = await fetch(url, {
+  return request(`/talkgroup-directory/import?${param}`, {
     method: 'POST',
-    headers,
     body: formData,
   })
-  if (!response.ok) {
-    let data: unknown
-    try { data = await response.json() } catch { /* ignore */ }
-    throw new ApiError(response.status, `API error: ${response.statusText}`, data)
-  }
-  return response.json()
 }
 
 // =============================================================================

@@ -224,8 +224,11 @@ export default function Dashboard() {
   }, [apiRecorders, realtimeRecorders])
 
   const systemsArray = Array.from(decodeRates.values())
-  const avgDecodeRate = systemsArray.length > 0
+  const avgDecodeRateNorm = systemsArray.length > 0
     ? systemsArray.reduce((acc, s) => acc + normalizeDecodeRate(s.decode_rate), 0) / systemsArray.length
+    : 0
+  const avgDecodeRateRaw = systemsArray.length > 0
+    ? systemsArray.reduce((acc, s) => acc + s.decode_rate, 0) / systemsArray.length
     : 0
 
   const recordingCount = mergedRecorders.filter(r => (r.rec_state ?? '').toLowerCase() === 'recording').length
@@ -292,9 +295,9 @@ export default function Dashboard() {
           <span className="text-sm text-muted-foreground">Decode</span>
           <span className={cn(
             "text-xl font-bold tabular-nums",
-            avgDecodeRate >= 0.9 ? 'text-success' : avgDecodeRate >= 0.7 ? 'text-warning' : avgDecodeRate > 0 ? 'text-destructive' : ''
+            avgDecodeRateNorm >= 0.9 ? 'text-success' : avgDecodeRateNorm >= 0.7 ? 'text-warning' : avgDecodeRateNorm > 0 ? 'text-destructive' : ''
           )}>
-            {avgDecodeRate > 0 ? formatDecodeRate(avgDecodeRate) : '—'}
+            {avgDecodeRateRaw > 0 ? formatDecodeRate(avgDecodeRateRaw) : '—'}
           </span>
         </div>
         {stats?.total_duration_hours != null && (
