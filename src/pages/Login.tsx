@@ -9,6 +9,8 @@ import { login, setupFirstUser, checkNeedsSetup } from '@/api/client'
 export default function Login() {
   const navigate = useNavigate()
   const setAuth = useAuthStore((s) => s.setAuth)
+  const authMode = useAuthStore((s) => s.authMode)
+  const jwtEnabled = useAuthStore((s) => s.jwtEnabled)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -17,12 +19,35 @@ export default function Login() {
   const [setupMode, setSetupMode] = useState(false)
   const [checkingSetup, setCheckingSetup] = useState(true)
 
+  const needsLogin = authMode === 'full' && jwtEnabled
+
   useEffect(() => {
+    // Auth mode not yet determined — wait for RequireAuth to fetch auth-init
+    if (authMode === null) return
+
+    // No JWT login available — redirect to home
+    if (!needsLogin) {
+      navigate('/', { replace: true })
+      return
+    }
+
     checkNeedsSetup().then((needs) => {
       setSetupMode(needs)
       setCheckingSetup(false)
+    }).catch(() => {
+      setError('Could not determine setup status. Check your connection and reload.')
+      setCheckingSetup(false)
     })
-  }, [])
+  }, [authMode, needsLogin, navigate])
+
+  // Show loading while auth mode is being determined
+  if (authMode === null) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="text-muted-foreground">Loading...</div>
+      </div>
+    )
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()

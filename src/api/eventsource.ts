@@ -154,11 +154,9 @@ export class SSEManager {
     if (this.filters.types) params.set('types', this.filters.types)
     if (this.filters.emergency_only) params.set('emergency_only', 'true')
 
-    // Security tradeoff: the EventSource API cannot send custom headers, so
-    // we pass the JWT as a query parameter. This has the same exposure risk as
-    // getCallAudioUrl (server logs, browser history, Referrer). Mitigated by:
-    // short token lifetime (1 hr) and same-origin requests. Long-term: consider
-    // a fetch-based SSE wrapper (ReadableStream) that can send Auth headers.
+    // Only embed short-lived JWT in URL; readToken may be long-lived/static and
+    // should not be leaked in query strings (browser history, Referrer, server logs).
+    // When no JWT is present, the proxy (Caddy) injects the read token via header.
     const { accessToken } = useAuthStore.getState()
     if (accessToken) {
       params.set('token', accessToken)
@@ -195,7 +193,7 @@ export function getSSEManager(filters?: SSEFilters): SSEManager {
               sseManager.reconnect()
             }
           } else {
-            // Token cleared (logout) — disconnect instead of reconnecting
+            // Token cleared (logout) — disconnect
             sseManager.disconnect()
           }
         }

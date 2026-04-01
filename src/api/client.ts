@@ -54,12 +54,13 @@ class ApiError extends Error {
 function isTokenExpiringSoon(token: string, thresholdMs = 5 * 60 * 1000): boolean {
   try {
     const payload = token.split('.')[1]
-    if (!payload) return false
+    if (!payload) return true
     const decoded = JSON.parse(atob(payload))
     if (!decoded.exp) return false
     return decoded.exp * 1000 - Date.now() < thresholdMs
   } catch {
-    return false
+    // Malformed token — treat as expiring to force a refresh attempt
+    return true
   }
 }
 
@@ -81,7 +82,7 @@ async function request<T>(
   }
 
   // Proactively refresh token if it expires within 5 minutes
-  let { accessToken, writeToken } = useAuthStore.getState()
+  let { accessToken, writeToken, readToken } = useAuthStore.getState()
   if (accessToken && isTokenExpiringSoon(accessToken)) {
     const refreshed = await attemptRefresh()
     if (refreshed) {
@@ -100,12 +101,12 @@ async function request<T>(
     } else {
       headers['Authorization'] = `Bearer ${accessToken}`
     }
-  } else if (WRITE_METHODS.has(method) && writeToken) {
-    // No JWT — fall back to legacy write token for mutations
-    headers['Authorization'] = `Bearer ${writeToken}`
   } else if (writeToken) {
-    // No JWT, read operation — still use write token (it has read access too)
+    // No JWT — write token has both read and write access
     headers['Authorization'] = `Bearer ${writeToken}`
+  } else if (!WRITE_METHODS.has(method) && readToken) {
+    // No JWT, no write token, read operation — use read token from auth-init (guest access)
+    headers['Authorization'] = `Bearer ${readToken}`
   }
 
   const response = await fetch(url, {
@@ -553,6 +554,9 @@ export async function getCall(id: number): Promise<Call> {
 // 1-hour JWT expiry. Long-term: consider opaque blob URLs or a server-side
 // audio proxy to avoid token-in-URL entirely.
 export function getCallAudioUrl(id: number): string {
+  // Only embed short-lived JWT in URL; readToken may be long-lived/static and
+  // should not be leaked in query strings (browser history, Referrer, server logs).
+  // When no JWT is present, Caddy or the proxy injects the read token via header.
   const { accessToken } = useAuthStore.getState()
   const base = `${API_BASE}/calls/${id}/audio`
   if (accessToken) {

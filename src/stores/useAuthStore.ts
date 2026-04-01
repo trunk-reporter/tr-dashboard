@@ -7,16 +7,24 @@ export interface AuthUser {
   role: string
 }
 
+export type AuthMode = 'open' | 'token' | 'full'
+
 interface AuthState {
+  // Auth mode from auth-init endpoint
+  authMode: AuthMode | null
+  jwtEnabled: boolean
+  readToken: string
+
   // JWT auth
   accessToken: string
   user: AuthUser | null
   isAuthenticated: boolean
 
-  // Legacy write token (backward compat)
+  // Legacy write token (backward compat / token mode)
   writeToken: string
 
   // Actions
+  setAuthInit: (mode: AuthMode, readToken: string, jwtEnabled: boolean) => void
   setAuth: (accessToken: string, user: AuthUser) => void
   clearAuth: () => void
   setAccessToken: (token: string) => void
@@ -31,16 +39,23 @@ interface AuthState {
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
+      authMode: null,
+      jwtEnabled: false,
+      readToken: '',
       accessToken: '',
       user: null,
       isAuthenticated: false,
       writeToken: '',
 
+      setAuthInit: (mode, readToken, jwtEnabled) =>
+        set({ authMode: mode, readToken, jwtEnabled }),
+
       setAuth: (accessToken, user) =>
         set({ accessToken, user, isAuthenticated: true }),
 
+      // Full reset: clears JWT session and auth-init state, forcing re-detection
       clearAuth: () =>
-        set({ accessToken: '', user: null, isAuthenticated: false }),
+        set({ accessToken: '', user: null, isAuthenticated: false, authMode: null, readToken: '', jwtEnabled: false }),
 
       setAccessToken: (token) => set({ accessToken: token }),
 
@@ -49,6 +64,7 @@ export const useAuthStore = create<AuthState>()(
 
       isAdmin: () => get().user?.role === 'admin',
       canWrite: () => {
+        if (get().authMode === 'open') return true
         const role = get().user?.role
         return role === 'admin' || role === 'editor' || !!get().writeToken
       },
