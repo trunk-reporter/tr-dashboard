@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.0.0-pre6 (2026-04-01)
+
+### Features
+
+- **Mode-based auth detection** — Dashboard now uses tr-engine's new `auth-init` endpoint which returns `{mode, read_token, jwt_enabled}`. Supports three modes: `open` (no auth), `token` (shared API token), and `full` (JWT login with optional guest read token). Backward compatible with legacy `{token, guest_access}` response format.
+- **Auth error screen** — When `auth-init` fails (network error, server down), the dashboard shows an actionable error screen with a retry button instead of silently granting open access.
+
+### Bug Fixes
+
+- **Auth bypass on network failure** — Previously, a failed `auth-init` fetch silently defaulted to open mode, bypassing authentication. Now fails safe by requiring auth.
+- **Read token security** — Static/long-lived read tokens are no longer embedded in URL query strings for audio or SSE endpoints. Only short-lived JWTs are used in URLs; proxy handles read token injection via headers.
+- **Malformed JWT handling** — `isTokenExpiringSoon` now returns `true` on malformed tokens, forcing a refresh attempt instead of silently sending a broken token.
+- **`canWrite()` in open mode** — Now correctly returns `true` when backend is in open mode, preventing edit UI from being incorrectly hidden.
+- **Stale auth state on logout** — `clearAuth()` now resets `authMode`, `readToken`, and `jwtEnabled` to force re-detection on next login.
+- **Decode rate display** — Shows msg/s instead of nonsensical percentage (fixes #14).
+- **importTalkgroupDirectory auth** — Now uses `request()` wrapper for proper token refresh and 401 retry (fixes #6).
+
 ## 1.0.0-pre4 (2026-03-27)
 
 ### Features
