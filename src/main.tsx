@@ -17,11 +17,11 @@ const updateSW = registerSW({
   },
 })
 
-// Check for SW updates every hour
+// Check for SW updates every 5 minutes
 if ('serviceWorker' in navigator) {
   setInterval(() => {
     navigator.serviceWorker.getRegistration().then((r) => r?.update())
-  }, 60 * 60 * 1000)
+  }, 5 * 60 * 1000)
 }
 
 createRoot(document.getElementById('root')!).render(

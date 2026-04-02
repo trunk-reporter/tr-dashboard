@@ -34,14 +34,25 @@ self.addEventListener('fetch', (event: FetchEvent) => {
     return
   }
 
-  // For navigation requests, serve cached index.html (SPA fallback)
+  // For navigation requests, use network-first strategy so users always get
+  // the latest index.html (and thus the latest JS bundle references).
+  // Falls back to cached index.html only when offline.
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      caches.match('/index.html').then((cached) => {
-        return cached || fetch(event.request)
+      fetch(event.request).then((response) => {
+        // Update the cache with the fresh response
+        if (response.ok) {
+          const clone = response.clone()
+          caches.open('navigation').then((cache) => cache.put('/index.html', clone))
+        }
+        return response
       }).catch(() =>
-        new Response('<h1>Offline</h1><p>TR Dashboard requires a network connection.</p>',
-          { status: 503, headers: { 'Content-Type': 'text/html' } })
+        caches.match('/index.html').then((cached) => {
+          return cached || new Response(
+            '<h1>Offline</h1><p>TR Dashboard requires a network connection.</p>',
+            { status: 503, headers: { 'Content-Type': 'text/html' } }
+          )
+        })
       )
     )
     return
