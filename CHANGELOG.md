@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.0-pre8 (2026-04-15)
+
+### Features
+
+- **Configurable API base URL** — `VITE_API_BASE` env var sets the frontend API base URL (default: `/api/v1`). Set to an absolute URL (e.g. `http://localhost:3000/api/v1`) to run without a reverse proxy.
+- **Configurable dev proxy** — `TR_ENGINE_URL` sets the Vite dev proxy target. Proxy is omitted entirely when unset; no hardcoded production URL.
+- **Disableable update check** — `VITE_DISABLE_UPDATE_CHECK=true` hard-disables the update check service at build time, overriding any persisted user preference.
+
 ## 1.0.0-pre7 (2026-04-02)
 
 ### Bug Fixes
