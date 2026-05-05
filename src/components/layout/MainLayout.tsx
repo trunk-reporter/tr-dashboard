@@ -14,6 +14,7 @@ import { KEYBOARD_SHORTCUTS } from '@/lib/constants'
 import { usePageTitle } from '@/hooks/usePageTitle'
 import { useFaviconStatus } from '@/hooks/useFaviconStatus'
 import { useEmergencyNotifications } from '@/hooks/useEmergencyNotifications'
+import { useAlertEngine } from '@/hooks/useAlertEngine'
 import { PWAUpdateBanner } from './PWAUpdateBanner'
 import { OfflineBanner } from './OfflineBanner'
 
@@ -29,6 +30,7 @@ export function MainLayout() {
   usePageTitle()
   useFaviconStatus()
   useEmergencyNotifications()
+  useAlertEngine()
 
   // Apply persisted theme on mount
   const theme = useThemeStore((s) => s.theme)

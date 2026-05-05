@@ -11,10 +11,11 @@ import { useAudioStore } from '@/stores/useAudioStore'
 import { useTalkgroupColors, ColorRule, RuleMode } from '@/stores/useTalkgroupColors'
 import { useSignalThresholds, type SignalThresholds } from '@/stores/useSignalThresholds'
 import { useUpdateStore } from '@/stores/useUpdateStore'
+import { useAlertStore, type AlertRule, type AlertTriggerType } from '@/stores/useAlertStore'
 import { useThemeStore, type ThemeId } from '@/stores/useThemeStore'
 import { APP_VERSION } from '@/version'
 import { getSSEManager } from '@/api/eventsource'
-import { Plus, Trash2, RotateCcw } from 'lucide-react'
+import { Plus, Trash2, RotateCcw, Bell } from 'lucide-react'
 import { ColorPicker, getHexFromTailwind } from '@/components/ui/color-picker'
 import { parseTalkgroupKey, isNewerVersion } from '@/lib/utils'
 
@@ -46,6 +47,14 @@ export default function Settings() {
   const signalThresholds = useSignalThresholds()
   const setThreshold = useSignalThresholds((s) => s.setThreshold)
   const resetSignalThresholds = useSignalThresholds((s) => s.resetToDefaults)
+
+  // Alert rules
+  const alertRules = useAlertStore((s) => s.rules)
+  const alertHistory = useAlertStore((s) => s.history)
+  const addAlertRule = useAlertStore((s) => s.addRule)
+  const updateAlertRule = useAlertStore((s) => s.updateRule)
+  const removeAlertRule = useAlertStore((s) => s.removeRule)
+  const clearAlertHistory = useAlertStore((s) => s.clearHistory)
 
   // Update check
   const updateCheckEnabled = useUpdateStore((s) => s.updateCheckEnabled)
@@ -787,6 +796,85 @@ export default function Settings() {
         </CardContent>
       </Card>
 
+      {/* Alert Rules */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Alert Rules</CardTitle>
+              <CardDescription>Browser notifications for radio activity</CardDescription>
+            </div>
+            <Bell className="h-5 w-5 text-muted-foreground" />
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {alertRules.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No alert rules configured.</p>
+          ) : (
+            <div className="space-y-2">
+              {alertRules.map((rule) => (
+                <div key={rule.id} className="flex items-center justify-between rounded-lg border px-3 py-2">
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">{rule.label}</span>
+                      <Badge variant="outline" className="text-[10px]">{rule.trigger}</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">{rule.value}</p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      variant={rule.enabled ? 'default' : 'outline'}
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => updateAlertRule(rule.id, { enabled: !rule.enabled })}
+                    >
+                      {rule.enabled ? 'On' : 'Off'}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => removeAlertRule(rule.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <Separator />
+          <AlertRuleForm onAdd={addAlertRule} />
+        </CardContent>
+      </Card>
+
+      {/* Alert History */}
+      {alertHistory.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Alert History</CardTitle>
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={clearAlertHistory}>
+                Clear
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-1 max-h-64 overflow-y-auto">
+              {alertHistory.map((event, i) => (
+                <div key={`${event.timestamp}-${i}`} className="flex items-start gap-2 text-sm py-1 border-b border-border/30 last:border-0">
+                  <span className="text-[10px] text-muted-foreground shrink-0 mt-0.5 font-mono">
+                    {new Date(event.timestamp).toLocaleTimeString()}
+                  </span>
+                  <span className="font-medium text-xs shrink-0 text-primary">{event.label}</span>
+                  <span className="text-xs text-muted-foreground">{event.message}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* About */}
       <Card>
         <CardHeader>
@@ -805,6 +893,77 @@ export default function Settings() {
           </div>
         </CardContent>
       </Card>
+    </div>
+  )
+}
+
+function AlertRuleForm({ onAdd }: { onAdd: (rule: Omit<AlertRule, 'id'>) => void }) {
+  const [label, setLabel] = useState('')
+  const [trigger, setTrigger] = useState<AlertTriggerType>('keyword')
+  const [value, setValue] = useState('')
+  const [cooldownMs, setCooldownMs] = useState(60000)
+
+  const handleSubmit = () => {
+    if (!label.trim() || !value.trim()) return
+    onAdd({
+      label: label.trim(),
+      enabled: true,
+      trigger,
+      value: value.trim(),
+      cooldownMs,
+    })
+    setLabel('')
+    setValue('')
+  }
+
+  const placeholderMap: Record<AlertTriggerType, string> = {
+    keyword: 'e.g. "fire" or "OSP"',
+    talkgroup: 'e.g. "9178" or "1:9178"',
+    unit: 'e.g. "943001"',
+    emergency: '(no value needed)',
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm font-medium">Add Rule</p>
+      <div className="flex flex-wrap gap-2">
+        <Input
+          placeholder="Label"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          className="w-28"
+        />
+        <select
+          value={trigger}
+          onChange={(e) => setTrigger(e.target.value as AlertTriggerType)}
+          className="rounded-md border border-input bg-background px-2 py-1 text-sm"
+        >
+          <option value="keyword">Keyword</option>
+          <option value="talkgroup">Talkgroup</option>
+          <option value="unit">Unit</option>
+          <option value="emergency">Emergency</option>
+        </select>
+        <Input
+          placeholder={placeholderMap[trigger]}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="w-40"
+          disabled={trigger === 'emergency'}
+        />
+        <select
+          value={cooldownMs}
+          onChange={(e) => setCooldownMs(Number(e.target.value))}
+          className="rounded-md border border-input bg-background px-2 py-1 text-sm"
+        >
+          <option value={0}>No cooldown</option>
+          <option value={30000}>30s cooldown</option>
+          <option value={60000}>1m cooldown</option>
+          <option value={300000}>5m cooldown</option>
+        </select>
+        <Button size="sm" onClick={handleSubmit} disabled={!label.trim() || (!value.trim() && trigger !== 'emergency')}>
+          <Plus className="h-4 w-4 mr-1" /> Add
+        </Button>
+      </div>
     </div>
   )
 }
