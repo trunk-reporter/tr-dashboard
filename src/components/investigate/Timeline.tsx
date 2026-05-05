@@ -39,44 +39,53 @@ export function Timeline({
 }: TimelineProps) {
   const getCachedColor = useTalkgroupColors((s) => s.getCachedColor)
   const containerRef = useRef<HTMLDivElement>(null)
-  const dragRef = useRef<{ startX: number; startMs: number } | null>(null)
+  const dragRef = useRef<{ startX: number; accumulatedMs: number } | null>(null)
+  const zoomThrottleRef = useRef<number>(0)
   const startMs = new Date(windowStart).getTime()
   const endMs = new Date(windowEnd).getTime()
   const durationMs = endMs - startMs
   const windowMinutes = durationMs / 60000
 
-  // Wheel to zoom
+  // Wheel to zoom — throttled to 300ms
   const handleWheel = useCallback((e: React.WheelEvent) => {
     if (!onZoom) return
     e.preventDefault()
+    const now = Date.now()
+    if (now - zoomThrottleRef.current < 300) return
+    zoomThrottleRef.current = now
     onZoom(e.deltaY < 0 ? 'in' : 'out')
   }, [onZoom])
 
-  // Drag to pan
+  // Drag to pan — accumulate delta, apply on mouseUp
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (!onPan || !containerRef.current) return
-    // Only initiate drag on the timeline area background, not on call blocks
     if ((e.target as HTMLElement).closest('[data-call-block]')) return
-    dragRef.current = { startX: e.clientX, startMs }
+    dragRef.current = { startX: e.clientX, accumulatedMs: 0 }
     e.preventDefault()
-  }, [onPan, startMs])
+  }, [onPan])
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!dragRef.current || !onPan || !containerRef.current) return
     const rect = containerRef.current.getBoundingClientRect()
-    // Subtract the 180px label column
     const timelineWidth = rect.width - 180
     if (timelineWidth <= 0) return
     const deltaX = e.clientX - dragRef.current.startX
     const deltaPct = deltaX / timelineWidth
     const deltaMs = -deltaPct * durationMs
     dragRef.current.startX = e.clientX
-    onPan(deltaMs)
-  }, [onPan, durationMs])
+    dragRef.current.accumulatedMs += deltaMs
+  }, [durationMs])
 
   const handleMouseUp = useCallback(() => {
+    if (!dragRef.current || !onPan) {
+      dragRef.current = null
+      return
+    }
+    if (dragRef.current.accumulatedMs !== 0) {
+      onPan(dragRef.current.accumulatedMs)
+    }
     dragRef.current = null
-  }, [])
+  }, [onPan])
 
   // Time axis ticks
   const ticks = useMemo(() => {
