@@ -10,9 +10,9 @@ import { useTranscriptionCache } from '@/stores/useTranscriptionCache'
 import { useMonitorStore } from '@/stores/useMonitorStore'
 import { useFilterStore } from '@/stores/useFilterStore'
 import { TranscriptionPreview } from '@/components/calls/TranscriptionPreview'
-import { getStats, getCalls, getRecorders } from '@/api/client'
+import { getStats, getCalls, getRecorders, getHealth } from '@/api/client'
 import { useTalkgroupColors } from '@/stores/useTalkgroupColors'
-import type { StatsResponse, Call, Recorder } from '@/api/types'
+import type { StatsResponse, Call, Recorder, HealthResponse } from '@/api/types'
 import {
   formatDecodeRate,
   normalizeDecodeRate,
@@ -64,6 +64,7 @@ export default function Dashboard() {
   const [recentCalls, setRecentCalls] = useState<Call[]>([])
   const [apiRecorders, setApiRecorders] = useState<Recorder[]>([])
   const [loading, setLoading] = useState(true)
+  const [health, setHealth] = useState<HealthResponse | null>(null)
 
   // Filter state for recent calls
   const [filterFavorites, setFilterFavorites] = useState(false)
@@ -122,11 +123,13 @@ export default function Dashboard() {
       getStats(),
       getCalls({ sort: '-stop_time', deduplicate: true, limit: TARGET_CALLS }),
       getRecorders(),
+      getHealth(),
     ])
-      .then(([statsRes, callsRes, recordersRes]) => {
+      .then(([statsRes, callsRes, recordersRes, healthRes]) => {
         setStats(statsRes)
         setRecentCalls(dedupCalls(callsRes.calls || []))
         setApiRecorders(recordersRes.recorders || [])
+        setHealth(healthRes)
         fetchTranscriptionsForCalls(callsRes.calls || [])
       })
       .catch(console.error)
@@ -309,6 +312,40 @@ export default function Dashboard() {
           </>
         )}
       </div>
+
+      {/* System Health — trunk-recorder instance status */}
+      {health?.trunk_recorders && health.trunk_recorders.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Nodes</span>
+          {health.trunk_recorders.map((tr) => {
+            const lastSeen = tr.last_seen ? new Date(tr.last_seen).getTime() : 0
+            const now = Date.now()
+            const staleSeconds = lastSeen ? (now - lastSeen) / 1000 : Infinity
+            const isHealthy = staleSeconds < 300
+            const isWarning = staleSeconds >= 300 && staleSeconds < 900
+            const isCritical = staleSeconds >= 900
+            return (
+              <div
+                key={tr.instance_id}
+                className="flex items-center gap-2 rounded-lg border border-border/40 bg-card/50 px-3 py-1.5"
+                title={tr.last_seen ? `Last seen: ${new Date(tr.last_seen).toLocaleString()}` : 'Never seen'}
+              >
+                <span className={cn(
+                  "h-2 w-2 rounded-full shrink-0",
+                  isCritical ? 'bg-destructive' : isWarning ? 'bg-warning' : isHealthy ? 'bg-success' : 'bg-muted-foreground'
+                )} />
+                <span className="text-xs font-mono">{tr.instance_id}</span>
+                <span className={cn(
+                  "text-[10px]",
+                  isCritical ? 'text-destructive' : isWarning ? 'text-warning' : 'text-muted-foreground'
+                )}>
+                  {isCritical ? 'OFFLINE' : isWarning ? 'WARNING' : tr.status === 'connected' ? 'OK' : tr.status}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* Recorders grid — collapsible */}
       {mergedRecorders.length > 0 && (
