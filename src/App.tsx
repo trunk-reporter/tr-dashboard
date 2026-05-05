@@ -11,6 +11,8 @@ import UnitDetail from '@/pages/UnitDetail'
 import Settings from '@/pages/Settings'
 import Affiliations from '@/pages/Affiliations'
 import TalkgroupDirectory from '@/pages/TalkgroupDirectory'
+import CallGroups from '@/pages/CallGroups'
+import CallGroupDetail from '@/pages/CallGroupDetail'
 import Admin from '@/pages/Admin'
 import Transcriptions from '@/pages/Transcriptions'
 import TalkgroupAnalytics from '@/pages/TalkgroupAnalytics'
@@ -38,6 +40,8 @@ export default function App() {
         <Route path="/systems/:id" element={<SystemDetail />} />
         <Route path="/affiliations" element={<Affiliations />} />
         <Route path="/directory" element={<TalkgroupDirectory />} />
+        <Route path="/call-groups" element={<CallGroups />} />
+        <Route path="/call-groups/:id" element={<CallGroupDetail />} />
         <Route path="/investigate" element={<Investigate />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/admin" element={<Admin />} />
