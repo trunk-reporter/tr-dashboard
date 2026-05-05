@@ -128,6 +128,29 @@
     animation-delay: calc(var(--i, 0) * 40ms);
   }
 
+  /* Smooth card hover lift — applied via card-call-hover */
+  .card-hover-lift {
+    transition: transform 200ms ease-in-out, box-shadow 200ms ease-in-out;
+  }
+  .card-hover-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Subtle fade-in for dynamic content */
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .animate-fade-in {
+    animation: fade-in 200ms ease-out both;
+  }
+
+  /* Smooth page content transitions */
+  .page-enter {
+    animation: fade-in 150ms ease-out;
+  }
+
   /* Subtle amber glow for active sidebar nav items */
   .nav-active-glow {
     box-shadow:

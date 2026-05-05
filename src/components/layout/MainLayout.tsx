@@ -158,7 +158,7 @@ export function MainLayout() {
         )}
 
         <main className="flex flex-1 flex-col overflow-hidden">
-          <div className="flex-1 overflow-auto p-2 md:p-4">
+          <div className="flex-1 overflow-auto p-2 md:p-4 scrollbar-thin page-enter">
             <Outlet />
           </div>
           <div className="safe-area-bottom">

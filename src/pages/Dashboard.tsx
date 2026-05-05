@@ -29,12 +29,12 @@ import { SkeletonCard } from '@/components/ui/skeleton'
 
 // Recorder state config - keyed by string rec_state
 const RECORDER_STATES: Record<string, { label: string; badgeClass: string; cardClass: string; dotColor: string }> = {
-  available: { label: 'AVAILABLE', badgeClass: 'bg-indigo-800 text-indigo-300', cardClass: 'border-indigo-800/30 bg-indigo-950/20 card-recessed', dotColor: 'bg-indigo-500' },
-  recording: { label: 'RECORDING', badgeClass: 'bg-live text-white', cardClass: 'border-live/50 bg-red-950/40 card-recording-glow', dotColor: 'bg-live animate-pulse' },
-  idle: { label: 'IDLE', badgeClass: 'bg-amber-700 text-amber-200', cardClass: 'border-amber-700/40 bg-amber-950/20 card-recessed', dotColor: 'bg-amber-500' },
-  stopped: { label: 'STOPPED', badgeClass: 'bg-red-900 text-red-300', cardClass: 'border-red-900/40 bg-red-950/20 card-recessed', dotColor: 'bg-red-400' },
+  available: { label: 'AVAILABLE', badgeClass: 'bg-indigo-800 text-indigo-300', cardClass: 'border-indigo-800/30 bg-indigo-950/20 card-recessed card-hover-lift', dotColor: 'bg-indigo-500' },
+  recording: { label: 'RECORDING', badgeClass: 'bg-live text-white', cardClass: 'border-live/50 bg-red-950/40 card-recording-glow card-hover-lift', dotColor: 'bg-live animate-pulse' },
+  idle: { label: 'IDLE', badgeClass: 'bg-amber-700 text-amber-200', cardClass: 'border-amber-700/40 bg-amber-950/20 card-recessed card-hover-lift', dotColor: 'bg-amber-500' },
+  stopped: { label: 'STOPPED', badgeClass: 'bg-red-900 text-red-300', cardClass: 'border-red-900/40 bg-red-950/20 card-recessed card-hover-lift', dotColor: 'bg-red-400' },
 }
-const DEFAULT_STATE = { label: 'UNKNOWN', badgeClass: 'bg-zinc-700 text-zinc-400', cardClass: 'border-zinc-700/30 bg-zinc-900/20 card-recessed', dotColor: 'bg-zinc-500' }
+const DEFAULT_STATE = { label: 'UNKNOWN', badgeClass: 'bg-zinc-700 text-zinc-400', cardClass: 'border-zinc-700/30 bg-zinc-900/20 card-recessed card-hover-lift', dotColor: 'bg-zinc-500' }
 
 // Elapsed time display component
 function RecorderElapsed({ startTime }: { startTime: number }) {
@@ -258,9 +258,9 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 page-enter">
       {/* Compact stats bar */}
-      <div className="flex flex-wrap items-center gap-4 lg:gap-6 rounded-lg border stat-bar-glass px-4 py-3">
+      <div className="flex flex-wrap items-center gap-4 lg:gap-6 rounded-lg border stat-bar-glass card-glass px-4 py-3">
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">Recorders</span>
           <span className="text-xl font-bold tabular-nums">{recordingCount}</span>
@@ -468,7 +468,7 @@ export default function Dashboard() {
           {systemsArray.map((rate) => (
             <div
               key={rate.sys_name || rate.system_id}
-              className="flex items-center gap-3 rounded-lg border bg-card card-glass px-3 py-2"
+              className="flex items-center gap-3 rounded-lg border bg-card card-glass card-hover-lift px-3 py-2"
             >
               <div>
                 <div className="font-medium capitalize text-sm">
