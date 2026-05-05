@@ -11,6 +11,7 @@ import { useAudioStore } from '@/stores/useAudioStore'
 import { useTalkgroupColors, ColorRule, RuleMode } from '@/stores/useTalkgroupColors'
 import { useSignalThresholds, type SignalThresholds } from '@/stores/useSignalThresholds'
 import { useUpdateStore } from '@/stores/useUpdateStore'
+import { useThemeStore, type ThemeId } from '@/stores/useThemeStore'
 import { APP_VERSION } from '@/version'
 import { getSSEManager } from '@/api/eventsource'
 import { Plus, Trash2, RotateCcw } from 'lucide-react'
@@ -36,6 +37,10 @@ export default function Settings() {
   const setAutoPlay = useAudioStore((s) => s.setAutoPlay)
   const volume = useAudioStore((s) => s.volume)
   const setVolume = useAudioStore((s) => s.setVolume)
+
+  // Theme
+  const theme = useThemeStore((s) => s.theme)
+  const setTheme = useThemeStore((s) => s.setTheme)
 
   // Signal quality thresholds
   const signalThresholds = useSignalThresholds()
@@ -315,6 +320,35 @@ export default function Settings() {
             >
               {unitIdHex ? 'Hex' : 'Decimal'}
             </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Theme */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Theme</CardTitle>
+          <CardDescription>Choose your color scheme</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-2">
+            {([
+              { id: 'dark' as ThemeId, label: 'Dark', desc: 'Default dark theme' },
+              { id: 'amber' as ThemeId, label: 'Amber', desc: 'Scanner-inspired warm tones' },
+              { id: 'high-contrast' as ThemeId, label: 'High Contrast', desc: 'Control room visibility' },
+              { id: 'light' as ThemeId, label: 'Light', desc: 'Daytime mode' },
+            ]).map((t) => (
+              <Button
+                key={t.id}
+                variant={theme === t.id ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setTheme(t.id)}
+                className="flex-col items-start gap-0.5 h-auto py-2 px-3"
+              >
+                <span>{t.label}</span>
+                <span className="text-[10px] font-normal opacity-70">{t.desc}</span>
+              </Button>
+            ))}
           </div>
         </CardContent>
       </Card>

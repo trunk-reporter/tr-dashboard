@@ -8,6 +8,7 @@ import { CommandPalette } from '@/components/command/CommandPalette'
 import { GoToMenu } from '@/components/command/GoToMenu'
 import { initializeRealtimeConnection } from '@/stores/useRealtimeStore'
 import { useUpdateStore } from '@/stores/useUpdateStore'
+import { useThemeStore } from '@/stores/useThemeStore'
 import { getHealth } from '@/api/client'
 import { KEYBOARD_SHORTCUTS } from '@/lib/constants'
 import { usePageTitle } from '@/hooks/usePageTitle'
@@ -28,6 +29,13 @@ export function MainLayout() {
   usePageTitle()
   useFaviconStatus()
   useEmergencyNotifications()
+
+  // Apply persisted theme on mount
+  const theme = useThemeStore((s) => s.theme)
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+  }, [theme])
 
   // Initialize SSE connection and check for updates
   useEffect(() => {
