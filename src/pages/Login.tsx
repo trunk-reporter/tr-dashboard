@@ -5,13 +5,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { login, setupFirstUser, checkNeedsSetup } from '@/api/client'
-import { detectAuthMode } from '@/api/auth-init'
 
 export default function Login() {
   const navigate = useNavigate()
   const setAuth = useAuthStore((s) => s.setAuth)
-  const authMode = useAuthStore((s) => s.authMode)
-  const jwtEnabled = useAuthStore((s) => s.jwtEnabled)
+  const authState = useAuthStore((s) => s.authState)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -19,34 +17,17 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [setupMode, setSetupMode] = useState(false)
   const [checkingSetup, setCheckingSetup] = useState(true)
-  const [detectingAuth, setDetectingAuth] = useState(authMode === null)
 
-  const needsLogin = authMode === 'full' && jwtEnabled
-
-  // If navigated directly to /login, detect auth mode ourselves
+  // If navigated directly to /login but auth state already resolved to open/token
   useEffect(() => {
-    if (authMode !== null) {
-      setDetectingAuth(false)
-      return
-    }
-    detectAuthMode().then((result) => {
-      setDetectingAuth(false)
-      if (!result) {
-        setError('Unable to connect to the API. Check that tr-engine is running.')
-        setCheckingSetup(false)
-      }
-    })
-  }, [authMode])
-
-  // Once auth mode is known, check if login is needed and if setup is required
-  useEffect(() => {
-    if (authMode === null) return
-
-    // No JWT login available — redirect to home
-    if (!needsLogin) {
+    if (authState === 'open' || authState === 'token' || authState === 'authenticated') {
       navigate('/', { replace: true })
-      return
     }
+  }, [authState, navigate])
+
+  // Once we know login is needed, check if setup is required
+  useEffect(() => {
+    if (authState !== 'login-required') return
 
     checkNeedsSetup().then((needs) => {
       setSetupMode(needs)
@@ -55,10 +36,9 @@ export default function Login() {
       setError('Could not determine setup status. Check your connection and reload.')
       setCheckingSetup(false)
     })
-  }, [authMode, needsLogin, navigate])
+  }, [authState])
 
-  // Show loading while auth mode is being detected
-  if (detectingAuth) {
+  if (authState === 'idle' || authState === 'detecting') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="text-muted-foreground">Loading...</div>
@@ -108,7 +88,6 @@ export default function Login() {
       navigate('/', { replace: true })
     } catch (err: any) {
       if (err?.status === 409) {
-        // Setup already completed — switch to login mode
         setSetupMode(false)
         setError('Setup already completed. Please sign in.')
         setPassword('')

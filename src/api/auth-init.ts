@@ -9,30 +9,23 @@ export interface AuthInitResult {
   jwtEnabled: boolean
 }
 
-/**
- * Fetch auth-init and update the auth store with the detected mode.
- * Returns the result, or null if the fetch failed.
- * Safe to call multiple times — skips if authMode is already set.
- */
 export async function detectAuthMode(): Promise<AuthInitResult | null> {
-  // Already detected — return current state
   const current = useAuthStore.getState()
-  if (current.authMode !== null) {
+  if (current.authState === 'open' || current.authState === 'token' || current.authState === 'authenticated') {
     return {
-      mode: current.authMode,
+      mode: current.authMode!,
       readToken: current.readToken,
       jwtEnabled: current.jwtEnabled,
     }
   }
 
-  let mode: AuthMode = 'full'
-  let readToken = ''
-  let jwtEnabled = true
+  useAuthStore.getState().setDetecting()
 
   try {
     const res = await fetch(`${API_BASE}/auth-init`)
     if (!res.ok) {
       console.error(`auth-init returned ${res.status} ${res.statusText}`)
+      useAuthStore.getState().setError(`auth-init returned ${res.status}`)
       return null
     }
 
@@ -41,35 +34,36 @@ export async function detectAuthMode(): Promise<AuthInitResult | null> {
       data = await res.json()
     } catch (parseErr) {
       console.error('auth-init returned OK but body is not valid JSON:', parseErr)
+      useAuthStore.getState().setError('Invalid response from auth-init')
       return null
     }
 
-    if (data && typeof data === 'object') {
-      if (data.mode && VALID_MODES.has(data.mode)) {
-        mode = data.mode
-        readToken = data.read_token || ''
-        jwtEnabled = data.jwt_enabled ?? false
-      } else if (data.mode) {
-        console.warn(`auth-init returned unrecognized mode: "${data.mode}", requiring login`)
-        mode = 'full'
-        jwtEnabled = true
-      } else if ('token' in data) {
-        // Legacy response: { token, guest_access }
-        readToken = data.token || ''
-        if (data.guest_access) {
-          mode = readToken ? 'full' : 'open'
-          jwtEnabled = false
-        } else {
-          mode = 'full'
-          jwtEnabled = true
-        }
-      }
+    if (!data || typeof data !== 'object') {
+      useAuthStore.getState().setError('Invalid auth-init response')
+      return null
     }
+
+    if (data.mode && VALID_MODES.has(data.mode)) {
+      const mode = data.mode as AuthMode
+      const readToken = data.read_token || ''
+      const jwtEnabled = data.jwt_enabled ?? false
+      useAuthStore.getState().setAuthInit(mode, readToken, jwtEnabled)
+      return { mode, readToken, jwtEnabled }
+    }
+
+    if (data.mode) {
+      console.warn(`auth-init returned unrecognized mode: "${data.mode}", requiring login`)
+      useAuthStore.getState().setLoginRequired()
+      return { mode: 'full', readToken: '', jwtEnabled: true }
+    }
+
+    // Fallback: no mode field — assume open
+    const readToken = data.token || ''
+    useAuthStore.getState().setOpen(readToken)
+    return { mode: 'open', readToken, jwtEnabled: false }
   } catch (err) {
     console.error('auth-init fetch failed:', err)
+    useAuthStore.getState().setError('Unable to connect to the API. Check that tr-engine is running.')
     return null
   }
-
-  useAuthStore.getState().setAuthInit(mode, readToken, jwtEnabled)
-  return { mode, readToken, jwtEnabled }
 }
