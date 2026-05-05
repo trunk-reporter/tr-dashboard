@@ -3,9 +3,9 @@ import { useSearchParams, Link } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Pagination } from '@/components/ui/pagination'
-import { getTalkgroups, getSystems } from '@/api/client'
+import { getTalkgroups, getSystems, getEncryptionStats } from '@/api/client'
 import { getSystemTypeLabel } from '@/lib/utils'
-import type { Talkgroup, System } from '@/api/types'
+import type { Talkgroup, System, TalkgroupEncryptionStat } from '@/api/types'
 import { useFilterStore } from '@/stores/useFilterStore'
 import { useMonitorStore } from '@/stores/useMonitorStore'
 import { useRealtimeStore } from '@/stores/useRealtimeStore'
@@ -22,6 +22,7 @@ export default function Talkgroups() {
   const [systems, setSystems] = useState<System[]>([])
   const [availableGroups, setAvailableGroups] = useState<string[]>([])
   const [availableTags, setAvailableTags] = useState<string[]>([])
+  const [encryptionStats, setEncryptionStats] = useState<Map<string, TalkgroupEncryptionStat>>(new Map())
   const [loading, setLoading] = useState(true)
   const [openOverrideMenu, setOpenOverrideMenu] = useState<string | null>(null)
   const overrideMenuRef = useRef<HTMLDivElement>(null)
@@ -119,6 +120,17 @@ export default function Talkgroups() {
         }
         setAvailableGroups(Array.from(groups).sort())
         setAvailableTags(Array.from(tags).sort())
+
+        // Fetch encryption stats for all talkgroups
+        getEncryptionStats().then((res) => {
+          const map = new Map<string, TalkgroupEncryptionStat>()
+          for (const stat of res.stats) {
+            if (stat.system_id != null && stat.tgid != null) {
+              map.set(talkgroupKey(stat.system_id, stat.tgid), stat)
+            }
+          }
+          setEncryptionStats(map)
+        }).catch(() => {})
       })
       .catch(console.error)
       .finally(() => setLoading(false))
@@ -494,6 +506,17 @@ export default function Talkgroups() {
                       <span><span className="text-foreground">{tg.calls_1h ?? 0}</span>/1h</span>
                       <span><span className="text-foreground">{tg.calls_24h ?? 0}</span>/24h</span>
                       <span><span className="text-foreground">{tg.unit_count ?? 0}</span>u</span>
+                      {(() => {
+                        const es = encryptionStats.get(talkgroupKey(tg.system_id, tg.tgid))
+                        if (es && es.total_count && es.total_count > 0 && (es.encrypted_pct ?? 0) > 0) {
+                          return (
+                            <span className="text-amber-400/80">
+                              {Math.round(es.encrypted_pct!)}% enc
+                            </span>
+                          )
+                        }
+                        return null
+                      })()}
                       <span className="text-muted-foreground/60">{formatRelativeTime(tg.last_seen || '')}</span>
                       {hasActiveCall && (
                         <span className="shrink-0 px-1 py-0.5 text-[10px] font-bold bg-live text-white rounded ml-auto">

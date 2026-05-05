@@ -3,8 +3,8 @@ import { useParams, Link } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { getTalkgroup, getTalkgroupCalls, updateTalkgroup, getCachedSystemType } from '@/api/client'
-import type { Talkgroup, Call, TalkgroupPatch } from '@/api/types'
+import { getTalkgroup, getTalkgroupCalls, updateTalkgroup, getEncryptionStats, getCachedSystemType } from '@/api/client'
+import type { Talkgroup, Call, TalkgroupPatch, TalkgroupEncryptionStat } from '@/api/types'
 import { useTranscriptionCache } from '@/stores/useTranscriptionCache'
 import { useFilterStore } from '@/stores/useFilterStore'
 import { useMonitorStore } from '@/stores/useMonitorStore'
@@ -21,6 +21,7 @@ export default function TalkgroupDetail() {
   const [calls, setCalls] = useState<Call[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [encryptionStat, setEncryptionStat] = useState<TalkgroupEncryptionStat | null>(null)
   const [unitSort, setUnitSort] = useState<'alpha_tag' | 'unit_id' | 'count'>('count')
   const [unitSortDir, setUnitSortDir] = useState<'asc' | 'desc'>('desc')
 
@@ -69,6 +70,14 @@ export default function TalkgroupDetail() {
             fetchTranscription(call.call_id)
           }
         }
+
+        // Fetch encryption stats for this talkgroup
+        getEncryptionStats({ hours: 168 }).then((res) => {
+          const stat = res.stats.find(
+            (s) => s.system_id === tgRes.system_id && s.tgid === tgRes.tgid
+          )
+          if (stat) setEncryptionStat(stat)
+        }).catch(() => {})
       })
       .catch((err) => {
         console.error(err)
@@ -416,6 +425,17 @@ export default function TalkgroupDetail() {
             <span className="text-muted-foreground">Units </span>
             <span className="font-bold tabular-nums">{talkgroup.unit_count?.toLocaleString() ?? '—'}</span>
           </div>
+          {encryptionStat && encryptionStat.total_count != null && encryptionStat.total_count > 0 && (
+            <div>
+              <span className="text-muted-foreground">Encrypted </span>
+              <span className="font-bold tabular-nums text-amber-400">
+                {Math.round(encryptionStat.encrypted_pct ?? 0)}%
+              </span>
+              <span className="text-xs text-muted-foreground ml-1">
+                ({encryptionStat.encrypted_count}/{encryptionStat.total_count})
+              </span>
+            </div>
+          )}
           <div className="ml-auto flex items-center gap-4 text-xs text-muted-foreground">
             {talkgroup.system_name && (
               <span>
