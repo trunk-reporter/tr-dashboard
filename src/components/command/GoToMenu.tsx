@@ -17,6 +17,7 @@ const NAVIGATION_OPTIONS = [
   { key: 'A', label: 'Affiliations', path: '/affiliations' },
   { key: 'E', label: 'Systems', path: '/systems' },
   { key: 'R', label: 'Directory', path: '/directory' },
+  { key: 'G', label: 'Call Groups', path: '/call-groups' },
   { key: 'I', label: 'Investigate', path: '/investigate' },
   { key: 'S', label: 'Settings', path: '/settings' },
   { key: 'X', label: 'Admin', path: '/admin' },

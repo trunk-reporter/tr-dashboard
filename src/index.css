@@ -48,6 +48,118 @@
   }
 }
 
+/* =============================================================================
+   Theme System
+   Each theme overrides CSS custom properties on [data-theme="..."].
+   ============================================================================= */
+
+[data-theme="dark"] {
+  --color-background: #0f172a;
+  --color-foreground: #f8fafc;
+  --color-card: #1e293b;
+  --color-card-foreground: #f8fafc;
+  --color-popover: #1e293b;
+  --color-popover-foreground: #f8fafc;
+  --color-primary: #f59e0b;
+  --color-primary-foreground: #1e293b;
+  --color-secondary: #334155;
+  --color-secondary-foreground: #f8fafc;
+  --color-muted: #334155;
+  --color-muted-foreground: #94a3b8;
+  --color-accent: #334155;
+  --color-accent-foreground: #f8fafc;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #f8fafc;
+  --color-border: #334155;
+  --color-input: #334155;
+  --color-ring: #f59e0b;
+  --color-success: #22c55e;
+  --color-warning: #f97316;
+  --color-info: #3b82f6;
+  --color-live: #f43f5e;
+}
+
+/* Amber / scanner-inspired warm tones */
+[data-theme="amber"] {
+  --color-background: #1a1500;
+  --color-foreground: #fef3c7;
+  --color-card: #2a2300;
+  --color-card-foreground: #fef3c7;
+  --color-popover: #2a2300;
+  --color-popover-foreground: #fef3c7;
+  --color-primary: #f59e0b;
+  --color-primary-foreground: #1a1500;
+  --color-secondary: #3d3400;
+  --color-secondary-foreground: #fef3c7;
+  --color-muted: #3d3400;
+  --color-muted-foreground: #a88f3c;
+  --color-accent: #3d3400;
+  --color-accent-foreground: #fef3c7;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #fef3c7;
+  --color-border: #4a3f00;
+  --color-input: #3d3400;
+  --color-ring: #f59e0b;
+  --color-success: #4ade80;
+  --color-warning: #fb923c;
+  --color-info: #60a5fa;
+  --color-live: #fb7185;
+}
+
+/* High contrast for control room */
+[data-theme="high-contrast"] {
+  --color-background: #000000;
+  --color-foreground: #ffffff;
+  --color-card: #1a1a1a;
+  --color-card-foreground: #ffffff;
+  --color-popover: #1a1a1a;
+  --color-popover-foreground: #ffffff;
+  --color-primary: #f59e0b;
+  --color-primary-foreground: #000000;
+  --color-secondary: #333333;
+  --color-secondary-foreground: #ffffff;
+  --color-muted: #333333;
+  --color-muted-foreground: #cccccc;
+  --color-accent: #333333;
+  --color-accent-foreground: #ffffff;
+  --color-destructive: #ff3333;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #555555;
+  --color-input: #333333;
+  --color-ring: #f59e0b;
+  --color-success: #33ff33;
+  --color-warning: #ff8800;
+  --color-info: #3399ff;
+  --color-live: #ff5555;
+}
+
+/* Light mode */
+[data-theme="light"] {
+  --color-background: #f8fafc;
+  --color-foreground: #0f172a;
+  --color-card: #ffffff;
+  --color-card-foreground: #0f172a;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #0f172a;
+  --color-primary: #d97706;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #e2e8f0;
+  --color-secondary-foreground: #0f172a;
+  --color-muted: #e2e8f0;
+  --color-muted-foreground: #64748b;
+  --color-accent: #e2e8f0;
+  --color-accent-foreground: #0f172a;
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #cbd5e1;
+  --color-input: #e2e8f0;
+  --color-ring: #d97706;
+  --color-success: #16a34a;
+  --color-warning: #ea580c;
+  --color-info: #2563eb;
+  --color-live: #e11d48;
+}
+
 @layer components {
   /* Subtle top-highlight gradient + refined shadow for all cards */
   .card-glass {
