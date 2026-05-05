@@ -12,15 +12,39 @@ import {
   getUnits,
   updateUnit,
   importTalkgroupDirectory,
+  getMaintenanceStatus,
+  runMaintenance,
 } from '@/api/client'
-import type { System, Talkgroup, Unit, SystemMergeResponse } from '@/api/types'
+import type {
+  System,
+  Talkgroup,
+  Unit,
+  SystemMergeResponse,
+  MaintenanceStatusResponse,
+} from '@/api/types'
 
 export default function Admin() {
   const [systems, setSystems] = useState<System[]>([])
+  const [maintenance, setMaintenance] = useState<MaintenanceStatusResponse | null>(null)
+  const [maintenanceRunning, setMaintenanceRunning] = useState(false)
 
   useEffect(() => {
     getSystems().then((res) => setSystems(res.systems)).catch(console.error)
+    getMaintenanceStatus().then((res) => setMaintenance(res)).catch(() => {})
   }, [])
+
+  const handleRunMaintenance = async () => {
+    setMaintenanceRunning(true)
+    try {
+      await runMaintenance()
+      const updated = await getMaintenanceStatus()
+      setMaintenance(updated)
+    } catch (err) {
+      console.error('Maintenance run failed:', err)
+    } finally {
+      setMaintenanceRunning(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -29,6 +53,12 @@ export default function Admin() {
         <p className="text-muted-foreground">System administration and data management</p>
       </div>
 
+      <MaintenanceSection
+        maintenance={maintenance}
+        running={maintenanceRunning}
+        onRun={handleRunMaintenance}
+      />
+      <Separator />
       <SystemMergeSection systems={systems} />
       <Separator />
       <TalkgroupEditSection />
@@ -37,6 +67,92 @@ export default function Admin() {
       <Separator />
       <CsvImportSection systems={systems} />
     </div>
+  )
+}
+
+// =============================================================================
+// Maintenance
+// =============================================================================
+
+function MaintenanceSection({
+  maintenance,
+  running,
+  onRun,
+}: {
+  maintenance: MaintenanceStatusResponse | null
+  running: boolean
+  onRun: () => void
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Maintenance</CardTitle>
+            <CardDescription>Database maintenance and data retention</CardDescription>
+          </div>
+          {maintenance?.running && (
+            <Badge variant="default" className="animate-pulse">Running</Badge>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {maintenance?.config && (
+          <div>
+            <p className="text-sm font-medium mb-2">Retention Settings</p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+              {Object.entries({
+                'Calls': maintenance.config.retention_calls,
+                'Raw Messages': maintenance.config.retention_raw_messages,
+                'Console Logs': maintenance.config.retention_console_logs,
+                'Plugin Status': maintenance.config.retention_plugin_status,
+                'Checkpoints': maintenance.config.retention_checkpoints,
+                'Stale Calls': maintenance.config.retention_stale_calls,
+              }).map(([label, value]) => (
+                value && (
+                  <div key={label} className="rounded border px-2 py-1">
+                    <div className="text-xs text-muted-foreground">{label}</div>
+                    <div className="font-mono text-xs">{value}</div>
+                  </div>
+                )
+              ))}
+            </div>
+            {maintenance.config.schedule && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Schedule: <span className="font-mono">{maintenance.config.schedule}</span>
+              </p>
+            )}
+          </div>
+        )}
+
+        {maintenance?.last_run && (
+          <div>
+            <p className="text-sm font-medium mb-2">Last Maintenance Run</p>
+            <div className="text-xs text-muted-foreground space-y-0.5">
+              <p>Started: {new Date(maintenance.last_run.started_at).toLocaleString()}</p>
+              {maintenance.last_run.completed_at && (
+                <p>Completed: {new Date(maintenance.last_run.completed_at).toLocaleString()}</p>
+              )}
+              <p>Partitions created: {maintenance.last_run.partitions_created ?? 0}</p>
+              <p>Calls deleted: {maintenance.last_run.calls_deleted ?? 0}</p>
+              {maintenance.last_run.errors && maintenance.last_run.errors.length > 0 && (
+                <div className="text-destructive mt-1">
+                  {maintenance.last_run.errors.map((e, i) => (
+                    <p key={i}>{e}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <Button onClick={onRun} disabled={running || maintenance?.running}>
+            {running || maintenance?.running ? 'Running...' : 'Run Maintenance Now'}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 

@@ -27,6 +27,8 @@ import type {
   EncryptionStatsResponse,
   SystemMergeRequest,
   SystemMergeResponse,
+  MaintenanceStatusResponse,
+  MaintenanceRunResponse,
   HealthResponse,
   SystemPatch,
   SitePatch,
@@ -704,6 +706,14 @@ export async function mergeSystems(req: SystemMergeRequest): Promise<SystemMerge
     method: 'POST',
     body: JSON.stringify(req),
   })
+}
+
+export async function getMaintenanceStatus(): Promise<MaintenanceStatusResponse> {
+  return request('/admin/maintenance')
+}
+
+export async function runMaintenance(): Promise<MaintenanceRunResponse> {
+  return request('/admin/maintenance', { method: 'POST' })
 }
 
 // =============================================================================

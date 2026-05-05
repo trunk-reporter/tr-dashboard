@@ -587,6 +587,42 @@ export interface SystemMergeResponse {
 }
 
 
+export interface MaintenanceConfig {
+  retention_calls?: string
+  retention_raw_messages?: string
+  retention_console_logs?: string
+  retention_plugin_status?: string
+  retention_checkpoints?: string
+  retention_stale_calls?: string
+  schedule?: string
+}
+
+export interface MaintenanceRun {
+  started_at: string
+  completed_at?: string
+  partitions_created?: number
+  calls_deleted?: number
+  raw_messages_deleted?: number
+  console_logs_deleted?: number
+  errors?: string[]
+}
+
+export interface MaintenanceStatusResponse {
+  config?: MaintenanceConfig
+  last_run?: MaintenanceRun | null
+  running?: boolean
+}
+
+export interface MaintenanceRunResponse {
+  started_at: string
+  completed_at?: string
+  partitions_created?: number
+  calls_deleted?: number
+  raw_messages_deleted?: number
+  console_logs_deleted?: number
+  errors?: string[]
+}
+
 // =============================================================================
 // Error Types
 // =============================================================================
