@@ -180,6 +180,8 @@ npm run lint         # Type-check only
 npm run api:generate # Regenerate API types from OpenAPI spec
 ```
 
+`npm run api:generate` expects `tr-dashboard` and `tr-engine` to be checked out as sibling directories and reads the backend spec from `../tr-engine/openapi.yaml`.
+
 ## Write Access
 
 tr-dashboard supports inline editing of talkgroup metadata (name, group, tag, priority, description) and unit names directly from their detail pages.

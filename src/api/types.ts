@@ -1,563 +1,159 @@
 /**
- * API Types for tr-engine v0.7.3
+ * API Types for tr-engine.
  *
- * Hand-written types matching the OpenAPI spec. Reference: /openapi.yaml
- * Auto-generated types: npm run api:generate → src/api/generated.ts
+ * Most exported types are aliases to the generated OpenAPI schemas.
+ * Regenerate with: npm run api:generate
  */
+
+import type { components } from './generated'
+
+type Schema = components['schemas']
 
 // =============================================================================
 // Enums
 // =============================================================================
 
-export type SystemType = string
-
-export type TalkgroupMode = 'D' | 'A' | 'E' | 'M' | 'T'
-
-export type EventType = 'on' | 'off' | 'join' | 'call' | 'end' | 'data' | 'ans_req' | 'location' | 'ackresp' | 'signal'
-
-export type CallState = 'monitoring' | 'recording' | 'stopped' | 'completed'
-
-export type MonState = 'unspecified' | 'active' | 'duplicate'
-
-export type RecState = 'available' | 'recording' | 'idle' | 'stopped'
-
-export type TranscriptionStatus = 'none' | 'auto' | 'reviewed' | 'verified' | 'excluded'
-
-export type TranscriptionSource = 'auto' | 'human' | 'llm'
-
-export type SSEEventType =
-  | 'call_start'
-  | 'call_update'
-  | 'call_end'
-  | 'unit_event'
-  | 'recorder_update'
-  | 'rate_update'
-  | 'trunking_message'
-  | 'console'
+export type SystemType = Schema['SystemType']
+export type TalkgroupMode = Schema['TalkgroupMode']
+export type EventType = Schema['EventType']
+export type CallState = Schema['CallState']
+export type MonState = Schema['MonState']
+export type RecState = Schema['RecState']
+export type TranscriptionStatus = Schema['TranscriptionStatus']
+export type TranscriptionSource = Schema['TranscriptionSource']
+export type SSEEventType = Schema['SSEEventType']
 
 // =============================================================================
 // Core Models
 // =============================================================================
 
-/** Logical radio network (P25 WACN-level or conventional system) */
-export interface System {
-  system_id: number
-  system_type: SystemType
-  name?: string
-  sysid?: string
-  wacn?: string
+export type System = Omit<Schema['System'], 'sites'> & {
   sites?: Site[]
 }
-
-/** Recording site — one trunk-recorder sys_name monitoring a system */
-export interface Site {
-  site_id: number
+export type Site = Schema['Site'] & {
   system_id: number
-  short_name: string
-  instance_id?: string
-  nac?: string
-  rfss?: number
-  p25_site_id?: number
-  sys_num?: number
 }
-
-/** P25 system grouped by network with sites */
-export interface P25System {
-  system_id: number
-  name?: string
-  sysid?: string
-  wacn?: string
-  sites?: Site[]
-  talkgroup_count?: number
-  unit_count?: number
-  calls_24h?: number
-}
-
-/** A talkgroup on a radio system */
-export interface Talkgroup {
-  system_id: number
-  system_name?: string
-  sysid?: string
-  tgid: number
-  alpha_tag?: string
-  tag?: string
-  group?: string
-  description?: string
-  mode?: TalkgroupMode
-  priority?: number
-  first_seen?: string
-  last_seen?: string
-  call_count?: number
-  calls_1h?: number
-  calls_24h?: number
-  unit_count?: number
-  relevance_score?: number
-}
-
-/** A radio unit (mobile or portable radio) */
-export interface Unit {
-  system_id: number
-  system_name?: string
-  sysid?: string
-  unit_id: number
-  alpha_tag?: string
-  alpha_tag_source?: string
-  first_seen?: string
-  last_seen?: string
-  last_event_type?: EventType
-  last_event_time?: string
-  last_event_tgid?: number
-  last_event_tg_tag?: string
-  relevance_score?: number
-}
-
-/** A unit event (registration, affiliation, call activity, signal decode) */
-export interface UnitEvent {
-  id: number
-  event_type: EventType
-  time: string
-  system_id?: number
-  system_name?: string
-  unit_rid: number
-  unit_alpha_tag?: string
-  tgid?: number
-  tg_alpha_tag?: string
-  tg_description?: string
-  instance_id?: string
-  metadata_json?: Record<string, unknown>
-  // Signal event fields (SSE sends these top-level, REST puts them in metadata_json)
-  signaling_type?: string   // MDC1200, FLEETSYNC, STAR, unknown
-  signal_type?: string      // normal, emergency, radio_check, etc.
-}
-
-/** A recorded radio call */
-export interface Call {
-  // Identifiers
-  call_id: number
-  call_group_id?: number
-
-  // System context
-  system_id: number
-  system_name?: string
-  sysid?: string
-
-  // Site context
-  site_id?: number
-  site_short_name?: string
-
-  // Talkgroup context
-  tgid: number
-  tg_alpha_tag?: string
-  tg_description?: string
-  tg_tag?: string
-  tg_group?: string
-
-  // Timing
-  start_time: string
-  stop_time?: string | null
-  duration?: number
-
-  // Audio
-  audio_url?: string | null
-  audio_type?: string
-  audio_size?: number
-
-  // Signal quality
-  freq?: number
-  freq_error?: number
-  signal_db?: number | null
-  noise_db?: number | null
-  error_count?: number
-  spike_count?: number
-
-  // Status
-  call_state?: CallState
-  mon_state?: MonState
-  emergency?: boolean
-  encrypted?: boolean
-  analog?: boolean
-  conventional?: boolean
-  phase2_tdma?: boolean
-  tdma_slot?: number
-
-  // Patches
-  patched_tgids?: number[]
-
-  // Inline transmission/frequency data (JSONB)
+export type P25System = Schema['P25System']
+export type Talkgroup = Schema['Talkgroup']
+export type Unit = Schema['Unit']
+export type UnitEvent = Schema['UnitEvent']
+export type Call = Omit<Schema['Call'], 'src_list' | 'freq_list'> & {
   src_list?: CallTransmission[]
   freq_list?: CallFrequency[]
-  unit_ids?: number[]
-
-  // Units on this call
-  units?: CallUnit[]
-
-  // Transcription (denormalized)
-  has_transcription?: boolean
-  transcription_status?: TranscriptionStatus
-  transcription_text?: string | null
-  transcription_word_count?: number | null
-
-  // Extensible metadata
-  metadata_json?: Record<string, unknown>
 }
-
-/** A unit that transmitted during a call */
-export interface CallUnit {
-  system_id: number
-  unit_id: number
-  alpha_tag?: string
-}
-
-/** A unit key-up from trunk-recorder's srcList */
-export interface CallTransmission {
+export type CallUnit = Schema['CallUnit']
+export type CallTransmission = Schema['CallTransmission'] & {
   src: number
-  tag?: string
   time: number
   pos: number
   duration: number
   emergency: number
-  signal_system?: string
 }
-
-/** A frequency segment from trunk-recorder's freqList */
-export interface CallFrequency {
+export type CallFrequency = Schema['CallFrequency'] & {
   freq: number
   time: number
   pos: number
   len: number
-  error_count?: number
-  spike_count?: number
 }
-
-/** A group of duplicate call recordings from multiple recorders */
-export interface CallGroup {
-  id: number
-  system_id?: number
-  system_name?: string
-  sysid?: string
-  site_id?: number
-  site_short_name?: string
-  tgid?: number
-  tg_alpha_tag?: string
-  tg_description?: string
-  tg_tag?: string
-  tg_group?: string
-  start_time?: string
-  stop_time?: string
-  duration?: number
-  call_count?: number
-  primary_call_id?: number
-  has_transcription?: boolean
-  transcription_status?: TranscriptionStatus
-  transcription_text?: string | null
-}
-
-/** A transcription of a call's audio content */
-export interface Transcription {
-  id: number
-  call_id: number
-  text: string
-  source: TranscriptionSource
-  is_primary?: boolean
-  confidence?: number | null
-  language?: string
-  model?: string
-  provider?: string
-  word_count?: number
-  duration_ms?: number
-  created_at?: string
-  words?: {
-    words?: AttributedWord[]
-    segments?: TranscriptionSegment[]
-  }
-}
-
-/** A word with timing and unit attribution */
-export interface AttributedWord {
-  word: string
-  start: number
-  end: number
-  src: number
-  src_tag?: string
-}
-
-/** Consecutive words from the same radio unit */
-export interface TranscriptionSegment {
-  src: number
-  src_tag?: string
-  start: number
-  end: number
-  text: string
-}
-
-/** Trunk-recorder recorder (SDR channel) */
-export interface Recorder {
+export type CallGroup = Schema['CallGroup']
+export type Transcription = Schema['Transcription']
+export type AttributedWord = Schema['AttributedWord']
+export type TranscriptionSegment = Schema['TranscriptionSegment']
+export type Recorder = Schema['Recorder'] & {
   id: string
+  src_num: number
+  rec_num: number
+  freq: number
+  duration: number
+  count: number
   instance_id?: string
   system_id?: number | null
-  src_num?: number
-  rec_num?: number
-  type?: string
-  rec_state?: RecState
-  freq?: number
-  duration?: number
-  count?: number
-  squelched?: boolean
-  tgid?: number | null
-  tg_alpha_tag?: string | null
-  unit_id?: number | null
-  unit_alpha_tag?: string | null
 }
-
-/** Live talkgroup affiliation entry */
-export interface Affiliation {
-  system_id: number
-  system_name?: string
-  sysid?: string
-  unit_id: number
-  unit_alpha_tag?: string
-  tgid: number
-  tg_alpha_tag?: string
-  tg_description?: string
-  tg_tag?: string
-  tg_group?: string
-  previous_tgid?: number | null
-  affiliated_since: string
-  last_event_time: string
-  status: 'affiliated' | 'off'
-}
-
-/** Talkgroup directory entry (from CSV import) */
-export interface TalkgroupDirectoryEntry {
-  system_id?: number
-  system_name?: string
-  tgid?: number
-  alpha_tag?: string
-  mode?: string
-  description?: string
-  tag?: string
-  category?: string
-  priority?: number | null
-}
+export type Affiliation = Schema['Affiliation']
+export type TalkgroupDirectoryEntry = Schema['TalkgroupDirectoryEntry']
 
 // =============================================================================
 // Response Wrappers
 // =============================================================================
 
-export interface SystemListResponse {
+export interface SystemListResponse extends Omit<Schema['SystemListResponse'], 'systems'> {
   systems: System[]
-  total: number
 }
-
-export interface P25SystemListResponse {
-  systems: P25System[]
-  total: number
-}
-
-export interface TalkgroupListResponse {
-  talkgroups: Talkgroup[]
-  total: number
-  limit: number
-  offset: number
-}
-
-export interface UnitListResponse {
-  units: Unit[]
-  total: number
-  limit: number
-  offset: number
-}
-
-export interface UnitEventListResponse {
-  events: UnitEvent[]
-  total: number
-  limit: number
-  offset: number
-}
-
-export interface CallListResponse {
+export type P25SystemListResponse = Schema['P25SystemListResponse']
+export type TalkgroupListResponse = Schema['TalkgroupListResponse']
+export type UnitListResponse = Schema['UnitListResponse']
+export type UnitEventListResponse = Schema['UnitEventListResponse']
+export interface CallListResponse extends Omit<Schema['CallListResponse'], 'calls'> {
   calls: Call[]
-  total: number
-  limit: number
-  offset: number
 }
-
-export interface ActiveCallListResponse {
+export interface ActiveCallListResponse extends Omit<Schema['ActiveCallListResponse'], 'calls'> {
   calls: Call[]
-  total: number
 }
-
-export interface CallGroupListResponse {
+export interface CallGroupListResponse extends Omit<Schema['CallGroupListResponse'], 'call_groups'> {
   call_groups: CallGroup[]
-  total: number
-  limit: number
-  offset: number
 }
-
-export interface CallGroupDetailResponse {
+export interface CallGroupDetailResponse extends Omit<Schema['CallGroupDetailResponse'], 'call_group' | 'calls'> {
   call_group: CallGroup
   calls: Call[]
 }
-
-export interface CallFrequencyListResponse {
+export interface CallFrequencyListResponse extends Omit<Schema['CallFrequencyListResponse'], 'frequencies'> {
   frequencies: CallFrequency[]
-  total: number
 }
-
-export interface CallTransmissionListResponse {
+export interface CallTransmissionListResponse extends Omit<Schema['CallTransmissionListResponse'], 'transmissions'> {
   transmissions: CallTransmission[]
-  total: number
 }
-
-export interface AffiliationListResponse {
-  affiliations: Affiliation[]
-  total: number
-  limit: number
-  offset: number
-  summary: {
-    talkgroup_counts: Record<string, number>
-  }
-}
-
+export type AffiliationListResponse = Schema['AffiliationListResponse']
 export interface TalkgroupDirectoryListResponse {
   talkgroups: TalkgroupDirectoryEntry[]
   total: number
   limit: number
   offset: number
 }
-
-export interface TranscriptionSearchHit {
+export type TranscriptionSearchHit = Schema['TranscriptionSearchHit'] & {
   id: number
   call_id: number
   text: string
-  source?: string
-  is_primary?: boolean
-  word_count?: number
-  duration_ms?: number
-  created_at?: string
-  rank?: number
-  system_id?: number
-  system_name?: string
-  tgid?: number
-  tg_alpha_tag?: string
-  call_start_time?: string
-  call_duration?: number | null
 }
-
-export interface TranscriptionSearchResponse {
+export interface TranscriptionSearchResponse extends Omit<Schema['TranscriptionSearchResponse'], 'results'> {
   results: TranscriptionSearchHit[]
-  total: number
-  limit: number
-  offset: number
 }
-
-export interface TranscriptionQueueStats {
-  status: string
-  pending?: number
-  completed?: number
-  failed?: number
-}
-
-export interface RecorderListResponse {
+export type TranscriptionQueueStats = Schema['TranscriptionQueueStats']
+export interface RecorderListResponse extends Omit<Schema['RecorderListResponse'], 'recorders'> {
   recorders: Recorder[]
-  total: number
 }
 
 // =============================================================================
 // Stats Types
 // =============================================================================
 
-export interface StatsResponse {
-  systems?: number
-  talkgroups?: number
-  units?: number
-  total_calls?: number
-  calls_24h?: number
-  calls_1h?: number
-  total_duration_hours?: number
+export type SystemActivity = Schema['SystemActivity'] & {
+  system_id: number
+}
+export interface StatsResponse extends Omit<Schema['StatsResponse'], 'system_activity'> {
   system_activity?: SystemActivity[]
 }
-
-export interface SystemActivity {
+export type DecodeRate = Schema['DecodeRate'] & {
   system_id: number
-  system_name?: string
-  sysid?: string
-  calls_1h?: number
-  calls_24h?: number
-  active_talkgroups?: number
-  active_units?: number
-}
-
-export interface DecodeRate {
-  time?: string
-  system_id: number
-  system_name?: string
   sys_name?: string
-  sysid?: string
   decode_rate: number
   total_messages?: number
-  control_channel?: number
 }
-
-export interface DecodeRatesResponse {
+export interface DecodeRatesResponse extends Omit<Schema['DecodeRatesResponse'], 'rates'> {
   rates: DecodeRate[]
-  total: number
 }
-
-export interface TalkgroupActivity {
-  system_id?: number
-  system_name?: string
-  tgid?: number
-  tg_alpha_tag?: string
-  tg_description?: string
-  tg_tag?: string
-  tg_group?: string
-  call_count?: number
-  total_duration?: number
-  emergency_count?: number
-  first_call?: string
-  last_call?: string
-}
-
+export type TalkgroupActivity = Schema['TalkgroupActivity']
 export interface TalkgroupActivityResponse {
   activity: TalkgroupActivity[]
   total: number
 }
-
-export interface TalkgroupEncryptionStat {
-  system_id?: number
-  system_name?: string
-  sysid?: string
-  tgid?: number
-  tg_alpha_tag?: string
-  tg_description?: string
-  tg_tag?: string
-  tg_group?: string
-  encrypted_count?: number
-  clear_count?: number
-  total_count?: number
-  encrypted_pct?: number
-}
-
-export interface EncryptionStatsResponse {
-  stats: TalkgroupEncryptionStat[]
-  total: number
-  hours?: number
-}
+export type TalkgroupEncryptionStat = Schema['TalkgroupEncryptionStat']
+export type EncryptionStatsResponse = Schema['EncryptionStatsResponse']
 
 // =============================================================================
 // Health
 // =============================================================================
 
-export interface HealthResponse {
-  status: string
-  version?: string
-  uptime_seconds?: number
-  checks?: {
-    database?: string
-    mqtt?: string
-    transcription?: string
-  }
+export interface HealthResponse extends Omit<Schema['HealthResponse'], 'trunk_recorders'> {
   trunk_recorders?: Array<{
     instance_id: string
     status: string
@@ -569,106 +165,40 @@ export interface HealthResponse {
 // Admin
 // =============================================================================
 
-export interface SystemMergeRequest {
-  source_id: number
-  target_id: number
+export interface SystemMergeRequest extends Omit<Schema['SystemMergeRequest'], 'update_target_metadata'> {
   update_target_metadata?: boolean
 }
-
-export interface SystemMergeResponse {
-  target_id: number
-  source_id: number
-  calls_moved: number
-  talkgroups_moved: number
-  talkgroups_merged: number
-  units_moved: number
-  units_merged: number
-  events_moved: number
-}
-
-
-export interface MaintenanceConfig {
+export type SystemMergeResponse = Schema['SystemMergeResponse']
+export type MaintenanceConfig = Schema['MaintenanceConfig'] & {
   retention_calls?: string
-  retention_raw_messages?: string
-  retention_console_logs?: string
-  retention_plugin_status?: string
-  retention_checkpoints?: string
-  retention_stale_calls?: string
-  schedule?: string
 }
-
-export interface MaintenanceRun {
+export type MaintenanceRun = Schema['MaintenanceRun'] & {
   started_at: string
   completed_at?: string
-  partitions_created?: number
   calls_deleted?: number
   raw_messages_deleted?: number
   console_logs_deleted?: number
   errors?: string[]
 }
-
-export interface MaintenanceStatusResponse {
+export interface MaintenanceStatusResponse extends Omit<Schema['MaintenanceStatus'], 'config' | 'last_run'> {
   config?: MaintenanceConfig
   last_run?: MaintenanceRun | null
   running?: boolean
 }
-
-export interface MaintenanceRunResponse {
-  started_at: string
-  completed_at?: string
-  partitions_created?: number
-  calls_deleted?: number
-  raw_messages_deleted?: number
-  console_logs_deleted?: number
-  errors?: string[]
-}
+export type MaintenanceRunResponse = MaintenanceRun
 
 // =============================================================================
 // Error Types
 // =============================================================================
 
-export interface ErrorResponse {
-  error: string
-  detail?: string
-}
-
-export interface AmbiguousError {
-  error: string
-  matches: Array<{
-    system_id: number
-    system_name?: string
-    sysid?: string
-  }>
-}
+export type ErrorResponse = Schema['Error']
+export type AmbiguousError = Schema['AmbiguousError']
 
 // =============================================================================
 // Patch Types (for PATCH requests)
 // =============================================================================
 
-export interface SystemPatch {
-  sysid?: string
-  wacn?: string
-  name?: string
-}
-
-export interface SitePatch {
-  short_name?: string
-  instance_id?: string
-  nac?: string
-  rfss?: number
-  p25_site_id?: number
-}
-
-export interface TalkgroupPatch {
-  alpha_tag?: string
-  alpha_tag_source?: string
-  description?: string
-  group?: string
-  tag?: string
-  priority?: number
-}
-
-export interface UnitPatch {
-  alpha_tag?: string
-  alpha_tag_source?: string
-}
+export type SystemPatch = Schema['SystemPatch']
+export type SitePatch = Schema['SitePatch']
+export type TalkgroupPatch = Schema['TalkgroupPatch']
+export type UnitPatch = Schema['UnitPatch']

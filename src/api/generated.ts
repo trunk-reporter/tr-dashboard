@@ -32,14 +32,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Web auth bootstrap
-         * @description Returns the API auth token for web UI pages. No authentication required.
-         *     Used by `auth.js` to transparently authenticate browser-side API calls.
-         *     The URL has no file extension so CDNs (Cloudflare) skip caching it.
-         *
-         *     When a valid JWT is present in the request, the response includes a `user`
-         *     field with the authenticated user's info. The `user` field is absent (not null)
-         *     when no JWT session is present, preserving backward compatibility.
+         * Auth mode discovery
+         * @description Returns the engine's auth mode and any public read token.
+         *     Always available without authentication. Clients use this to
+         *     determine whether to prompt for a token, show a login form,
+         *     or skip auth entirely.
          */
         get: operations["getAuthInit"];
         put?: never;
@@ -1066,13 +1063,14 @@ export interface paths {
          *     trunk-recorder's upload plugin at `POST /api/v1/call-upload` and it
          *     works out of the box.
          *
-         *     **Authentication:** When `WRITE_TOKEN` is configured, this endpoint
-         *     requires the write token (uploads are write operations). Otherwise,
-         *     `AUTH_TOKEN` is accepted. In addition to the standard
-         *     `Authorization: Bearer` header and `?token=` query parameter, this
-         *     endpoint also accepts auth via the `key` (rdio-scanner) or `api_key`
-         *     (OpenMHz) multipart form fields. This allows trunk-recorder upload
-         *     plugins to authenticate without custom header configuration.
+         *     **Authentication:** Uploads are write operations. In full auth mode,
+         *     use an API key (`tre_...`) or an editor/admin JWT. In token mode,
+         *     use `AUTH_TOKEN`. The deprecated `WRITE_TOKEN` is still accepted for
+         *     legacy deployments. In addition to the standard `Authorization: Bearer`
+         *     header and `?token=` query parameter, this endpoint also accepts auth
+         *     via the `key` (rdio-scanner) or `api_key` (OpenMHz) multipart form
+         *     fields. This allows trunk-recorder upload plugins to authenticate
+         *     without custom header configuration.
          *
          *     **Format detection:** The endpoint inspects form field names to
          *     determine the upload format:
@@ -1773,6 +1771,104 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/maintenance/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update a retention setting
+         * @description Updates a single retention setting. The value is persisted to the
+         *     `config_overrides` table and applied immediately to the live pipeline.
+         *     Returns 409 if the key is locked by an environment variable.
+         *     Requires admin role.
+         */
+        put: operations["setMaintenanceConfig"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/maintenance/config/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Reset a retention setting to default
+         * @description Removes a DB-stored retention override and resets the setting to its
+         *     environment variable value (if set) or coded default. Returns 409 if
+         *     the key is locked by an environment variable.
+         *     Requires admin role.
+         */
+        delete: operations["deleteMaintenanceConfig"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/storage/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get database storage statistics
+         * @description Returns per-table row counts and sizes from `pg_stat_user_tables`,
+         *     plus partition breakdowns for large partitioned tables. Total
+         *     database size is included. If a per-table stat fails, the table is
+         *     omitted and an entry is added to `errors[]` — the rest of the
+         *     response still returns.
+         *     Requires admin role.
+         */
+        get: operations["getStorageStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/storage/purge/{table}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Manually purge old data from a table
+         * @description Triggers an immediate purge of rows (or partitions) older than the
+         *     specified duration. The `table` path parameter must be one of the
+         *     allowed purgeable tables. Purge runs with a 5-minute context
+         *     timeout — if it times out, `timed_out: true` is returned with
+         *     a partial count.
+         *
+         *     This action is irreversible.
+         *     Requires admin role.
+         */
+        post: operations["purgeTable"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1802,9 +1898,10 @@ export interface components {
          *     - **location**: unit location update
          *     - **ackresp**: acknowledge response
          *     - **signal**: in-band signaling decode (MDC1200, FleetSync, STAR)
+         *     - **call_alert**: directed unit-to-unit page (P25 TSBK 0x1F); `target_unit` and `target_unit_alpha_tag` present in SSE payload and `metadata_json`
          * @enum {string}
          */
-        EventType: "on" | "off" | "join" | "call" | "end" | "data" | "ans_req" | "location" | "ackresp" | "signal";
+        EventType: "on" | "off" | "join" | "call" | "end" | "data" | "ans_req" | "location" | "ackresp" | "signal" | "call_alert";
         /**
          * @description Call recording state (mapped from trunk-recorder integer values):
          *     - **monitoring**: control channel activity seen, no audio capture yet
@@ -2407,6 +2504,18 @@ export interface components {
              * @example normal
              */
             signal_type?: string;
+            /**
+             * @description Unit ID of the radio being paged (P25 Call Alert, TSBK 0x1F).
+             *     Only present in SSE payloads for `unit_event:call_alert` events.
+             * @example 4811289
+             */
+            target_unit?: number;
+            /**
+             * @description Alpha tag for the paged unit, if known.
+             *     Only present in SSE payloads for `unit_event:call_alert` events.
+             * @example OFFICER JONES
+             */
+            target_unit_alpha_tag?: string;
         };
         /**
          * @description A frequency segment from trunk-recorder's freqList. Each entry
@@ -3604,7 +3713,7 @@ export interface components {
             /** @description Results of the last maintenance run. Null if no run has completed since startup. */
             last_run?: components["schemas"]["MaintenanceRun"] | null;
         };
-        /** @description Active retention settings for automatic maintenance. */
+        /** @description Active retention settings for automatic maintenance. Each setting includes a `_source` ("env", "db", or "default") and a `_locked` flag (true when set by environment variable and immutable through the API). */
         MaintenanceConfig: {
             /**
              * @description Raw MQTT message retention (Go duration, e.g. 168h = 7 days)
@@ -3612,25 +3721,76 @@ export interface components {
              */
             retention_raw_messages?: string;
             /**
+             * @description Where this value originates
+             * @example env
+             * @enum {string}
+             */
+            retention_raw_messages_source?: "env" | "db" | "default";
+            /**
+             * @description True when set by environment variable (immutable through API)
+             * @example true
+             */
+            retention_raw_messages_locked?: boolean;
+            /**
              * @description Console log retention (Go duration, e.g. 720h = 30 days)
              * @example 720h0m0s
              */
             retention_console_logs?: string;
+            /**
+             * @example db
+             * @enum {string}
+             */
+            retention_console_logs_source?: "env" | "db" | "default";
+            /** @example false */
+            retention_console_logs_locked?: boolean;
             /**
              * @description Plugin status retention (Go duration)
              * @example 720h0m0s
              */
             retention_plugin_status?: string;
             /**
+             * @example default
+             * @enum {string}
+             */
+            retention_plugin_status_source?: "env" | "db" | "default";
+            /** @example false */
+            retention_plugin_status_locked?: boolean;
+            /**
+             * @description Trunking message retention (Go duration, default 720h = 30 days)
+             * @example 720h0m0s
+             */
+            retention_trunking_messages?: string;
+            /**
+             * @example default
+             * @enum {string}
+             */
+            retention_trunking_messages_source?: "env" | "db" | "default";
+            /** @example false */
+            retention_trunking_messages_locked?: boolean;
+            /**
              * @description Active call checkpoint retention (Go duration)
              * @example 168h0m0s
              */
             retention_checkpoints?: string;
             /**
+             * @example env
+             * @enum {string}
+             */
+            retention_checkpoints_source?: "env" | "db" | "default";
+            /** @example true */
+            retention_checkpoints_locked?: boolean;
+            /**
              * @description Stale incomplete call retention (Go duration)
              * @example 1h0m0s
              */
             retention_stale_calls?: string;
+            /**
+             * @example default
+             * @enum {string}
+             */
+            retention_stale_calls_source?: "env" | "db" | "default";
+            /** @example false */
+            retention_stale_calls_locked?: boolean;
             /**
              * @description Maintenance run schedule
              * @example every 24h
@@ -3808,6 +3968,140 @@ export interface components {
              */
             started_at?: string;
         };
+        /** @description Request body for updating a retention setting. */
+        RetentionConfigUpdate: {
+            /**
+             * @description Retention config key
+             * @example retention_console_logs
+             * @enum {string}
+             */
+            key: "retention_raw_messages" | "retention_console_logs" | "retention_plugin_status" | "retention_trunking_messages" | "retention_checkpoints" | "retention_stale_calls";
+            /**
+             * @description Go duration string (e.g. 48h, 720h, 7d)
+             * @example 48h
+             */
+            value: string;
+        };
+        /** @description Database storage statistics including per-table sizes and partition breakdowns. */
+        StorageStats: {
+            /**
+             * Format: int64
+             * @description Total database size in bytes
+             * @example 8589934592
+             */
+            total_db_bytes?: number;
+            /** @description Per-table size information, sorted by total_bytes descending */
+            tables?: components["schemas"]["TableSizeInfo"][];
+            /**
+             * @description Per-table errors that occurred during stat collection. Affected tables are omitted from `tables`.
+             * @example [
+             *       "failed to get partitions for some_table: connection timeout"
+             *     ]
+             */
+            errors?: string[];
+        };
+        /** @description Size information for a single database table. */
+        TableSizeInfo: {
+            /**
+             * @description Table name
+             * @example mqtt_raw_messages
+             */
+            name?: string;
+            /**
+             * Format: int64
+             * @description Estimated live row count (from pg_stat_user_tables)
+             * @example 4200000
+             */
+            row_count?: number;
+            /**
+             * Format: int64
+             * @description Table data size in bytes (pg_table_size)
+             * @example 5368709120
+             */
+            table_bytes?: number;
+            /**
+             * Format: int64
+             * @description Index size in bytes (pg_indexes_size)
+             * @example 536870912
+             */
+            index_bytes?: number;
+            /**
+             * Format: int64
+             * @description Total relation size in bytes (pg_total_relation_size)
+             * @example 5905580032
+             */
+            total_bytes?: number;
+            /** @description Per-partition breakdown. Only present for partitioned tables. */
+            partitions?: components["schemas"]["PartitionInfo"][];
+        };
+        /** @description Size information for a single table partition. */
+        PartitionInfo: {
+            /**
+             * @description Partition name
+             * @example mqtt_raw_messages_2026_w14
+             */
+            name?: string;
+            /**
+             * Format: int64
+             * @description Total relation size in bytes
+             * @example 2684354560
+             */
+            total_bytes?: number;
+        };
+        /** @description Request body for manual table purge. */
+        PurgeRequest: {
+            /**
+             * @description Rows/partitions older than this duration will be deleted (Go duration, e.g. 48h, 7d)
+             * @example 48h
+             */
+            older_than: string;
+        };
+        /** @description Response from a manual table purge operation. */
+        PurgeResponse: {
+            /**
+             * @description Table that was purged
+             * @example mqtt_raw_messages
+             */
+            table?: string;
+            /**
+             * @description The duration threshold that was used
+             * @example 48h
+             */
+            older_than?: string;
+            /**
+             * Format: int64
+             * @description Number of rows deleted (null for partition-drop purges)
+             * @example null
+             */
+            rows_deleted?: number | null;
+            /**
+             * @description Number of partitions dropped (null for row-delete purges)
+             * @example 2
+             */
+            partitions_dropped?: number | null;
+            /**
+             * @description Names of dropped partitions (only when partitions were dropped)
+             * @example [
+             *       "mqtt_raw_messages_2025_w48"
+             *     ]
+             */
+            partitions_dropped_names?: string[];
+            /**
+             * @description True if the 5-minute context deadline expired before completion
+             * @example false
+             */
+            timed_out?: boolean;
+            /**
+             * @description Wall-clock duration of the purge operation in milliseconds
+             * @example 4823
+             */
+            duration_ms?: number;
+            /**
+             * @description Always present, reminding that this action is irreversible
+             * @example This action is irreversible.
+             */
+            warning?: string;
+        };
     };
     responses: {
         /** @description Bad Request */
@@ -3943,30 +4237,26 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Token payload */
+            /** @description Auth mode info */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
-                        /** @description Bearer token for API authentication */
-                        token: string;
-                        /** @description Present only when a valid JWT session exists */
-                        user?: {
-                            username?: string;
-                            /** @enum {string} */
-                            role?: "viewer" | "editor" | "admin";
-                        };
+                        /**
+                         * @description - open: no auth required
+                         *     - token: shared API token required (not returned here)
+                         *     - full: JWT login available, optional public read token
+                         * @enum {string}
+                         */
+                        mode: "open" | "token" | "full";
+                        /** @description Public read token (only in full mode with AUTH_TOKEN set) */
+                        read_token?: string | null;
+                        /** @description Whether JWT login endpoints are available */
+                        jwt_enabled: boolean;
                     };
                 };
-            };
-            /** @description Auth not configured (AUTH_TOKEN not set and auto-generation failed) */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
@@ -6912,6 +7202,168 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    setMaintenanceConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetentionConfigUpdate"];
+            };
+        };
+        responses: {
+            /** @description Retention setting updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example retention_console_logs */
+                        key?: string;
+                        /** @example 48h0m0s */
+                        value?: string;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Key is locked by environment variable */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Pipeline not running */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteMaintenanceConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Retention config key (e.g. retention_console_logs) */
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Retention override removed, reset to default */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example retention_console_logs */
+                        key?: string;
+                        /** @example reset to default */
+                        status?: string;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Key is locked by environment variable */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Pipeline not running */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getStorageStats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Storage stats */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StorageStats"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    purgeTable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Purgeable table key (see allowlist) */
+                table: "mqtt_raw_messages" | "console_messages" | "trunking_messages" | "plugin_statuses" | "call_active_checkpoints";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PurgeRequest"];
+            };
+        };
+        responses: {
+            /** @description Purge completed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurgeResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+            /** @description Purge timed out (partial results included) */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurgeResponse"];
                 };
             };
         };

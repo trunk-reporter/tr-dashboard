@@ -24,7 +24,7 @@ npm install           # Install dependencies
 npm run dev           # Start dev server on 0.0.0.0:5173
 npm run build         # Type-check (tsc -b) then build with Vite
 npm run lint          # Type-check only (tsc --noEmit)
-npm run api:generate  # Regenerate TypeScript types from OpenAPI spec
+npm run api:generate  # Regenerate TypeScript types from ../tr-engine/openapi.yaml
 ```
 
 There are no tests configured in this project. The `lint` command is the primary code quality check.

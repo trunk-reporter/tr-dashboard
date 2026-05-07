@@ -28,7 +28,7 @@ In `package.json`, change:
 ```
 To:
 ```json
-"api:generate": "openapi-typescript ./openapi.yaml -o src/api/generated.ts"
+"api:generate": "openapi-typescript ../tr-engine/openapi.yaml -o src/api/generated.ts"
 ```
 
 **Step 2: Run the generator**
