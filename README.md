@@ -180,6 +180,8 @@ npm run lint         # Type-check only
 npm run api:generate # Regenerate API types from OpenAPI spec
 ```
 
+Before marking implementation work complete, follow the project quality gates in [`docs/quality-gates.md`](docs/quality-gates.md).
+
 ## Write Access
 
 tr-dashboard supports inline editing of talkgroup metadata (name, group, tag, priority, description) and unit names directly from their detail pages.
