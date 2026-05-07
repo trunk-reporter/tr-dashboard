@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
+import { useEffect, useCallback, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { SkeletonRow } from '@/components/ui/skeleton'
@@ -7,22 +7,18 @@ import { Badge } from '@/components/ui/badge'
 import { Pagination } from '@/components/ui/pagination'
 import { CallList } from '@/components/calls/CallList'
 import { TalkgroupMultiSelect } from '@/components/calls/TalkgroupMultiSelect'
-import { getCalls, getTalkgroups, getSystems } from '@/api/client'
+import { getCalls } from '@/api/client'
+import { useApiQuery } from '@/api/query'
+import { callService, queryKeys, systemService, talkgroupService } from '@/api/services'
 import { getSystemTypeLabel } from '@/lib/utils'
 import { useRealtimeStore } from '@/stores/useRealtimeStore'
 import { useTranscriptionCache } from '@/stores/useTranscriptionCache'
-import type { Call, Talkgroup, System } from '@/api/types'
+import type { CallQueryParams } from '@/api/client'
 
 const DEFAULT_PAGE_SIZE = 50
 
 export default function Calls() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const [calls, setCalls] = useState<Call[]>([])
-  const [loading, setLoading] = useState(true)
-  const [totalCount, setTotalCount] = useState(0)
-  const [systems, setSystems] = useState<System[]>([])
-  const [talkgroups, setTalkgroups] = useState<Talkgroup[]>([])
-
   const page = parseInt(searchParams.get('page') || '1', 10)
   const pageSize = parseInt(searchParams.get('size') || String(DEFAULT_PAGE_SIZE), 10)
   const systemFilter = searchParams.get('system') || ''
@@ -43,16 +39,6 @@ export default function Calls() {
     if (!talkgroupFilterRaw) return []
     return talkgroupFilterRaw.split(',').filter(Boolean)
   }, [talkgroupFilterRaw])
-
-  // Fetch systems and talkgroups for filters
-  useEffect(() => {
-    Promise.all([getSystems(), getTalkgroups({ limit: 100 })])
-      .then(([sysRes, tgRes]) => {
-        setSystems(sysRes.systems || [])
-        setTalkgroups(tgRes.talkgroups || [])
-      })
-      .catch(console.error)
-  }, [])
 
   const fetchTranscription = useTranscriptionCache((s) => s.fetchTranscription)
 
@@ -92,10 +78,18 @@ export default function Calls() {
     return { start_time: start.toISOString(), end_time: end.toISOString() }
   }, [aroundTime])
 
-  // Fetch calls
-  useEffect(() => {
-    setLoading(true)
-    getCalls({
+  const systemsQuery = useApiQuery(
+    queryKeys.systems.list(),
+    systemService.list,
+    { staleTime: 5 * 60 * 1000 }
+  )
+  const talkgroupsQuery = useApiQuery(
+    queryKeys.talkgroups.list({ limit: 100 }),
+    () => talkgroupService.list({ limit: 100 }),
+    { staleTime: 5 * 60 * 1000 }
+  )
+
+  const callParams = useMemo<CallQueryParams>(() => ({
       system_id: tgFilterSystemId || systemFilter || undefined,
       tgid: tgFilterTgid,
       sort: '-start_time',
@@ -104,20 +98,27 @@ export default function Calls() {
       end_time: timeWindow?.end_time,
       limit: pageSize,
       offset,
-    })
-      .then((res) => {
-        const fetched = res.calls || []
-        setCalls(fetched)
-        setTotalCount(res.total)
-        for (const call of fetched) {
-          if (call.has_transcription) {
-            fetchTranscription(call.call_id)
-          }
-        }
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false))
-  }, [page, pageSize, systemFilter, tgFilterSystemId, tgFilterTgid, offset, fetchTranscription, timeWindow])
+    }), [tgFilterSystemId, systemFilter, tgFilterTgid, timeWindow, pageSize, offset])
+
+  const callsQuery = useApiQuery(
+    queryKeys.calls.list(callParams),
+    () => callService.list(callParams),
+    { staleTime: 10_000 }
+  )
+
+  const systems = systemsQuery.data?.systems || []
+  const talkgroups = talkgroupsQuery.data?.talkgroups || []
+  const calls = callsQuery.data?.calls || []
+  const totalCount = callsQuery.data?.total || 0
+  const loading = callsQuery.isLoading
+
+  useEffect(() => {
+    for (const call of calls) {
+      if (call.has_transcription) {
+        fetchTranscription(call.call_id)
+      }
+    }
+  }, [calls, fetchTranscription])
 
   // Auto-navigate to the page containing the highlighted call
   useEffect(() => {
