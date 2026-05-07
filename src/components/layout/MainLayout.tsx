@@ -17,6 +17,7 @@ import { useEmergencyNotifications } from '@/hooks/useEmergencyNotifications'
 import { useAlertEngine } from '@/hooks/useAlertEngine'
 import { PWAUpdateBanner } from './PWAUpdateBanner'
 import { OfflineBanner } from './OfflineBanner'
+import { ToastContainer } from '@/components/ui/toast'
 
 export function MainLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true)
@@ -182,6 +183,7 @@ export function MainLayout() {
         setGoToMenuOpen(false)
         navigate(path)
       }} />
+      <ToastContainer />
     </div>
   )
 }

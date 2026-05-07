@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { SkeletonRow } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Banner } from '@/components/ui/banner'
 import { Pagination } from '@/components/ui/pagination'
 import { CallList } from '@/components/calls/CallList'
 import { TalkgroupMultiSelect } from '@/components/calls/TalkgroupMultiSelect'
@@ -281,15 +282,17 @@ export default function Calls() {
 
       {/* Time window banner */}
       {aroundTime && (
-        <div className="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5">
-          <Badge variant="outline" className="shrink-0">Time Window</Badge>
-          <span className="text-sm text-muted-foreground">
-            Showing ±4 hours around {new Date(aroundTime).toLocaleString()}
-          </span>
-          <Button variant="ghost" size="sm" className="ml-auto" onClick={clearTimeWindow}>
-            Show latest
-          </Button>
-        </div>
+        <Banner
+          variant="info"
+          icon={<Badge variant="outline" className="shrink-0">Time Window</Badge>}
+          action={
+            <Button variant="ghost" size="sm" onClick={clearTimeWindow}>
+              Show latest
+            </Button>
+          }
+        >
+          Showing ±4 hours around {new Date(aroundTime).toLocaleString()}
+        </Banner>
       )}
 
       {/* Filters */}
