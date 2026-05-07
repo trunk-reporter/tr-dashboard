@@ -1,5 +1,11 @@
 # tr-dashboard Design Plan
 
+## Focused Design Specs
+
+- [Talkgroup and Unit Directory Experience](talkgroup-unit-directory-experience.md)
+
+---
+
 ## Selected Design: Option C - Hybrid Scanner
 
 We are implementing Option C as the primary design. Options A and B are preserved below for potential future implementation or as alternative themes.
