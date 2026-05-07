@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { refreshAuth } from '@/api/client'
 import { detectAuthMode } from '@/api/auth-init'
+import TokenEntry from '@/pages/TokenEntry'
 
 interface RequireAuthProps {
   children: React.ReactNode
@@ -46,6 +47,9 @@ export function RequireAuth({ children }: RequireAuthProps) {
     case 'open':
     case 'token':
       return <>{children}</>
+
+    case 'token-entry':
+      return <TokenEntry />
 
     case 'authenticated':
       return <>{children}</>

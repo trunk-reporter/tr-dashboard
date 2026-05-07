@@ -11,7 +11,9 @@ export type AuthMode = 'open' | 'token' | 'full'
 
 /**
  * Auth state machine:
- *   idle → detecting → open | token | login-required | authenticated | error
+ *   idle → detecting → open | token | token-entry | login-required | authenticated | error
+ *   token → token-entry (if backend returns empty readToken)
+ *   token-entry → token (when user provides a token)
  *   login-required → authenticated (on login)
  *   authenticated → login-required (on logout / session expiry)
  *   error → detecting (on retry)
@@ -21,6 +23,7 @@ export type AuthState =
   | 'detecting'
   | 'open'
   | 'token'
+  | 'token-entry'
   | 'login-required'
   | 'authenticated'
   | 'error'
@@ -39,6 +42,7 @@ interface AuthStateStore {
   setDetecting: () => void
   setOpen: (readToken: string) => void
   setToken: (readToken: string) => void
+  setTokenEntry: (readToken: string) => void
   setLoginRequired: () => void
   setAuthenticated: (accessToken: string, user: AuthUser) => void
   setAuthInit: (mode: AuthMode, readToken: string, jwtEnabled: boolean) => void
@@ -73,6 +77,9 @@ export const useAuthStore = create<AuthStateStore>()(
       setToken: (readToken) =>
         set({ authState: 'token', authMode: 'token', readToken, jwtEnabled: false }),
 
+      setTokenEntry: (readToken: string) =>
+        set({ authState: 'token-entry', authMode: 'token', readToken, jwtEnabled: false }),
+
       setLoginRequired: () =>
         set({ authState: 'login-required', authMode: 'full', jwtEnabled: true, readToken: '' }),
 
@@ -90,9 +97,16 @@ export const useAuthStore = create<AuthStateStore>()(
         if (mode === 'open') {
           set({ authState: 'open', authMode: mode, readToken, jwtEnabled })
         } else if (mode === 'token') {
-          set({ authState: 'token', authMode: mode, readToken, jwtEnabled })
+          // Token mode: show entry screen when no readToken is available.
+          // The backend intentionally doesn't expose AUTH_TOKEN, so readToken is blank.
+          // User must provide their token via the entry screen before protected routes render.
+          if (readToken) {
+            set({ authState: 'token', authMode: mode, readToken, jwtEnabled })
+          } else {
+            set({ authState: 'token-entry', authMode: mode, readToken, jwtEnabled })
+          }
         } else if (mode === 'full' && jwtEnabled) {
-          set({ authState: 'login-required', authMode: mode, readToken, jwtEnabled })
+          set({ authState: 'login-required', authMode: mode, readToken: '', jwtEnabled })
         } else {
           set({ authState: 'open', authMode: mode, readToken, jwtEnabled })
         }
@@ -126,6 +140,7 @@ export const useAuthStore = create<AuthStateStore>()(
       name: 'tr-dashboard-auth',
       partialize: (state) => ({
         writeToken: state.writeToken,
+        readToken: state.readToken,
       }),
       migrate: (persisted: any, version: number) => {
         if (version === 0 && persisted && typeof persisted === 'object') {

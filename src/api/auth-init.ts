@@ -11,12 +11,21 @@ export interface AuthInitResult {
 
 export async function detectAuthMode(): Promise<AuthInitResult | null> {
   const current = useAuthStore.getState()
+
   if (current.authState === 'open' || current.authState === 'token' || current.authState === 'authenticated') {
     return {
       mode: current.authMode!,
       readToken: current.readToken,
       jwtEnabled: current.jwtEnabled,
     }
+  }
+
+  // Check for a persisted token (survives page refresh since authState resets to idle
+  // but readToken/writeToken are preserved via persist middleware).
+  if (current.authState === 'idle' && (current.readToken || current.writeToken)) {
+    const token = current.readToken || current.writeToken
+    useAuthStore.getState().setToken(token)
+    return { mode: 'token', readToken: token, jwtEnabled: false }
   }
 
   useAuthStore.getState().setDetecting()

@@ -196,7 +196,11 @@ export default function Settings() {
                   className="flex-1 h-9 font-mono"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && tokenInput.trim()) {
-                      setWriteToken(tokenInput.trim())
+                      if (authMode === 'token') {
+                        useAuthStore.getState().setToken(tokenInput.trim())
+                      } else {
+                        setWriteToken(tokenInput.trim())
+                      }
                       setTokenInput('')
                     }
                   }}
@@ -205,7 +209,11 @@ export default function Settings() {
                   size="sm"
                   onClick={() => {
                     if (tokenInput.trim()) {
-                      setWriteToken(tokenInput.trim())
+                      if (authMode === 'token') {
+                        useAuthStore.getState().setToken(tokenInput.trim())
+                      } else {
+                        setWriteToken(tokenInput.trim())
+                      }
                       setTokenInput('')
                     }
                   }}

@@ -5,6 +5,7 @@ import { RequireAuth } from '@/components/auth/RequireAuth'
 import { PageLoader } from '@/components/ui/page-loader'
 import Dashboard from '@/pages/Dashboard'
 import Login from '@/pages/Login'
+import TokenEntry from '@/pages/TokenEntry'
 
 const Calls = lazy(() => import('@/pages/Calls'))
 const CallDetail = lazy(() => import('@/pages/CallDetail'))
@@ -30,6 +31,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/token-entry" element={<TokenEntry />} />
       <Route element={<RequireAuth><MainLayout /></RequireAuth>}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/calls" element={<Suspense fallback={<PageLoader />}><Calls /></Suspense>} />
