@@ -35,6 +35,22 @@
 
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* Elevation / shadow tokens */
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.04);
+  --shadow-elevated: 0 4px 16px rgba(0,0,0,0.25), 0 1px 4px rgba(0,0,0,0.2);
+  --shadow-glow: 0 0 12px rgba(245,158,11,0.15), 0 0 4px rgba(245,158,11,0.1);
+  --shadow-recessed: inset 0 1px 3px rgba(0,0,0,0.25), inset 0 0 1px rgba(0,0,0,0.15);
+
+  /* Animation duration tokens */
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 400ms;
+
+  /* Opacity tokens */
+  --opacity-disabled: 0.4;
+  --opacity-muted: 0.6;
+  --opacity-subtle: 0.8;
 }
 
 @layer base {
@@ -306,6 +322,21 @@
     );
     background-size: 200% 100%;
     animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  }
+
+  /* Toast entrance animation */
+  @keyframes toast-enter {
+    from {
+      opacity: 0;
+      transform: translateX(100%);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+  .animate-toast-enter {
+    animation: toast-enter var(--duration-normal, 250ms) ease-out both;
   }
 
   /* Section header with left amber accent */

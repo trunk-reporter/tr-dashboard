@@ -4,6 +4,9 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/ui/hover-card'
+import { FilterChip } from '@/components/ui/filter-chip'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ConnectionIndicator } from '@/components/ui/connection-indicator'
 import { useRealtimeStore } from '@/stores/useRealtimeStore'
 import { useAudioStore, selectIsPlaying } from '@/stores/useAudioStore'
 import { useTranscriptionCache } from '@/stores/useTranscriptionCache'
@@ -286,12 +289,7 @@ export default function Dashboard() {
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">Systems</span>
           <span className="text-xl font-bold tabular-nums">{systemsArray.length}</span>
-          <Badge
-            variant={connectionStatus === 'connected' ? 'success' : 'secondary'}
-            className="text-xs"
-          >
-            {connectionStatus}
-          </Badge>
+          <ConnectionIndicator status={connectionStatus} />
         </div>
         <div className="h-6 w-px bg-border hidden sm:block" />
         <div className="flex items-center gap-2">
@@ -544,61 +542,21 @@ export default function Dashboard() {
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <h2 className="section-header">RECENT CALLS</h2>
           <div className="flex flex-wrap items-center gap-1">
-            <button
-              onClick={() => setFilterFavorites(!filterFavorites)}
-              className={cn(
-                "px-2 py-0.5 text-xs rounded-full border transition-colors",
-                filterFavorites
-                  ? "bg-amber-500 text-white border-amber-500"
-                  : "bg-transparent text-muted-foreground border-border hover:border-amber-500/50"
-              )}
-            >
+            <FilterChip active={filterFavorites} variant="amber" onClick={() => setFilterFavorites(!filterFavorites)}>
               Favorites
-            </button>
-            <button
-              onClick={() => setFilterMonitored(!filterMonitored)}
-              className={cn(
-                "px-2 py-0.5 text-xs rounded-full border transition-colors",
-                filterMonitored
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-transparent text-muted-foreground border-border hover:border-primary/50"
-              )}
-            >
+            </FilterChip>
+            <FilterChip active={filterMonitored} onClick={() => setFilterMonitored(!filterMonitored)}>
               Monitored
-            </button>
-            <button
-              onClick={() => setFilterTranscribed(!filterTranscribed)}
-              className={cn(
-                "px-2 py-0.5 text-xs rounded-full border transition-colors",
-                filterTranscribed
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-transparent text-muted-foreground border-border hover:border-primary/50"
-              )}
-            >
+            </FilterChip>
+            <FilterChip active={filterTranscribed} onClick={() => setFilterTranscribed(!filterTranscribed)}>
               Transcribed
-            </button>
-            <button
-              onClick={() => setFilterEmergency(!filterEmergency)}
-              className={cn(
-                "px-2 py-0.5 text-xs rounded-full border transition-colors",
-                filterEmergency
-                  ? "bg-destructive text-destructive-foreground border-destructive"
-                  : "bg-transparent text-muted-foreground border-border hover:border-destructive/50"
-              )}
-            >
+            </FilterChip>
+            <FilterChip active={filterEmergency} variant="destructive" onClick={() => setFilterEmergency(!filterEmergency)}>
               Emergency
-            </button>
-            <button
-              onClick={() => setFilterLong(!filterLong)}
-              className={cn(
-                "px-2 py-0.5 text-xs rounded-full border transition-colors",
-                filterLong
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-transparent text-muted-foreground border-border hover:border-primary/50"
-              )}
-            >
+            </FilterChip>
+            <FilterChip active={filterLong} onClick={() => setFilterLong(!filterLong)}>
               Long (&gt;30s)
-            </button>
+            </FilterChip>
           </div>
           <span className="text-xs text-muted-foreground ml-auto">
             {hasActiveFilter
@@ -618,15 +576,18 @@ export default function Dashboard() {
             ))}
           </div>
         ) : filteredCalls.length === 0 ? (
-          <div className="flex h-32 flex-col items-center justify-center gap-2 text-muted-foreground">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-40">
-              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-              <line x1="12" x2="12" y1="19" y2="22" />
-            </svg>
-            <span>No calls match filters</span>
-            <span className="text-xs">Try adjusting your filter selection</span>
-          </div>
+          <EmptyState
+            icon={
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" x2="12" y1="19" y2="22" />
+              </svg>
+            }
+            title="No calls match filters"
+            description="Try adjusting your filter selection"
+            className="h-32 py-0"
+          />
         ) : (
           <div
             className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
