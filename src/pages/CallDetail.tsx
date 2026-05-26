@@ -1,11 +1,12 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useAudioStore, selectIsPlaying } from '@/stores/useAudioStore'
-import { getCall, getCallTransmissions, getCallFrequencies, getCallTranscription, getCachedSystemType } from '@/api/client'
-import type { Call, CallTransmission, CallFrequency, Transcription } from '@/api/types'
+import { getCachedSystemType } from '@/api/client'
+import { useApiQuery } from '@/api/query'
+import { callService, queryKeys } from '@/api/services'
 import {
   formatDuration,
   formatDateTime,
@@ -24,84 +25,23 @@ import { TRANSMISSION_COLORS } from '@/components/audio/TransmissionTimeline'
 
 export default function CallDetail() {
   const { id } = useParams<{ id: string }>()
-  const [call, setCall] = useState<Call | null>(null)
-  const [transmissions, setTransmissions] = useState<CallTransmission[]>([])
-  const [frequencies, setFrequencies] = useState<CallFrequency[]>([])
-  const [transcription, setTranscription] = useState<Transcription | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
   const unitIdHex = useFilterStore((s) => s.unitIdHex)
   const loadCall = useAudioStore((s) => s.loadCall)
   const currentCall = useAudioStore((s) => s.currentCall)
   const isPlaying = useAudioStore(selectIsPlaying)
 
   const callId = id ? parseInt(id, 10) : NaN
-
-  useEffect(() => {
-    if (isNaN(callId)) return
-
-    let cancelled = false
-
-    setLoading(true)
-    setError(null)
-    setCall(null)
-    setTransmissions([])
-    setFrequencies([])
-    setTranscription(null)
-
-    getCall(callId)
-      .then(async (callRes) => {
-        if (cancelled) return
-        setCall(callRes)
-
-        // Use inline src_list if present, otherwise fetch
-        if (callRes.src_list && callRes.src_list.length > 0) {
-          setTransmissions(callRes.src_list)
-        } else {
-          try {
-            const txRes = await getCallTransmissions(callId)
-            if (!cancelled) setTransmissions(txRes.transmissions || [])
-          } catch {
-            // No transmissions available
-          }
-        }
-
-        if (cancelled) return
-
-        // Use inline freq_list if present, otherwise fetch
-        if (callRes.freq_list && callRes.freq_list.length > 0) {
-          setFrequencies(callRes.freq_list)
-        } else {
-          try {
-            const freqRes = await getCallFrequencies(callId)
-            if (!cancelled) setFrequencies(freqRes.frequencies || [])
-          } catch {
-            // No frequencies available
-          }
-        }
-
-        if (cancelled) return
-
-        // Fetch transcription
-        try {
-          const tx = await getCallTranscription(callId)
-          if (!cancelled) setTranscription(tx)
-        } catch {
-          // Transcription not available
-        }
-      })
-      .catch((err) => {
-        if (cancelled) return
-        console.error(err)
-        setError('Failed to load call details')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-
-    return () => { cancelled = true }
-  }, [callId])
+  const detailQuery = useApiQuery(
+    queryKeys.calls.detail(callId),
+    () => callService.getDetail(callId),
+    { enabled: !isNaN(callId), staleTime: 30_000 }
+  )
+  const call = detailQuery.data?.call ?? null
+  const transmissions = detailQuery.data?.transmissions ?? []
+  const frequencies = detailQuery.data?.frequencies ?? []
+  const transcription = detailQuery.data?.transcription ?? null
+  const loading = detailQuery.isLoading
+  const error = detailQuery.error ? 'Failed to load call details' : null
 
   const tgid = call?.tgid ?? 0
   const tgAlphaTag = call?.tg_alpha_tag
