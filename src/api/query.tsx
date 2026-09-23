@@ -9,6 +9,8 @@ export interface QueryState<T> {
   isFetching: boolean
   isError: boolean
   isSuccess: boolean
+  /** True while `data` still belongs to a previous key (the new key's first fetch is in flight). */
+  isPreviousData: boolean
   refetch: () => Promise<T>
 }
 
@@ -102,8 +104,12 @@ export function useApiQuery<T>(
   const queryFnRef = useRef(queryFn)
   const initialEntry = client.getEntry<T>(stableKey)
   const [data, setData] = useState<T | undefined>(initialEntry?.data)
+  // Key that `data` was loaded for; differs from keyString after a key change until the new data lands
+  const [dataKey, setDataKey] = useState<string | undefined>(initialEntry?.data !== undefined ? keyString : undefined)
   const [error, setError] = useState<Error | null>(initialEntry?.error ?? null)
   const [isFetching, setIsFetching] = useState(false)
+  // Key currently rendered; a refetch that resolves after a key change must not overwrite the new key's state
+  const currentKeyRef = useRef(keyString)
   const enabled = options?.enabled ?? true
   const staleTime = options?.staleTime ?? DEFAULT_STALE_TIME_MS
 
@@ -111,21 +117,30 @@ export function useApiQuery<T>(
     queryFnRef.current = queryFn
   }, [queryFn])
 
+  // Declared before the fetch effect below, so it is updated before the new key's fetch starts
+  useEffect(() => {
+    currentKeyRef.current = keyString
+  }, [keyString])
+
   const execute = useCallback(async (force = false) => {
+    const isCurrent = () => currentKeyRef.current === keyString
     setIsFetching(true)
     setError(null)
     try {
       const result = await client.fetchQuery(stableKey, queryFnRef.current, staleTime, force)
-      setData(result)
+      if (isCurrent()) {
+        setData(result)
+        setDataKey(keyString)
+      }
       return result
     } catch (err) {
       const nextError = err instanceof Error ? err : new Error(String(err))
-      setError(nextError)
+      if (isCurrent()) setError(nextError)
       throw nextError
     } finally {
-      setIsFetching(false)
+      if (isCurrent()) setIsFetching(false)
     }
-  }, [client, stableKey, staleTime])
+  }, [client, keyString, stableKey, staleTime])
 
   useEffect(() => {
     if (!enabled) return
@@ -134,7 +149,10 @@ export function useApiQuery<T>(
     setError(null)
     client.fetchQuery(stableKey, queryFnRef.current, staleTime)
       .then((result) => {
-        if (!cancelled) setData(result)
+        if (!cancelled) {
+          setData(result)
+          setDataKey(keyString)
+        }
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err : new Error(String(err)))
@@ -152,6 +170,7 @@ export function useApiQuery<T>(
     isFetching,
     isError: error !== null,
     isSuccess: data !== undefined && error === null,
+    isPreviousData: data !== undefined && dataKey !== keyString,
     refetch: () => execute(true),
   }
 }

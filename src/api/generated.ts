@@ -719,6 +719,122 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/unit-tag-suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List unit alpha tag suggestions
+         * @description Returns candidate unit alpha tags extracted from transcriptions where
+         *     a unit identified itself (e.g. "County, Medic 12 on scene"). Only the
+         *     unit's own speech is used (word-level attribution against the call's
+         *     `src_list`); transcriptions without attribution are skipped unless
+         *     every transmission in the call came from the same unit.
+         *
+         *     Only unit designators are extracted ("Medic 12", "Battalion Chief 2",
+         *     "P338", "1 Paul 31", "Adam 12"), never personal names, and only from a
+         *     call's primary (current) transcription. A transmission recorded by
+         *     several sites (one call group) counts as one call.
+         *
+         *     Candidates are keyed by `(system_id, unit_id, tag_key)` and accumulate
+         *     evidence across calls. **Pending** suggestions are only listed once they
+         *     pass the review gate: seen in at least `UNIT_TAG_SUGGESTIONS_MIN_CALLS`
+         *     distinct calls (default 3), at least `UNIT_TAG_SUGGESTIONS_MIN_SHARE`
+         *     (default 0.2) of the unit's self-identification calls, and not already
+         *     the unit's alpha tag. The gate applies to pending rows for every
+         *     `status` value; approved and dismissed rows are always listed.
+         *
+         *     Pending results are grouped by unit (busiest units first, then each
+         *     unit's candidates by `call_count`); approved/dismissed results are
+         *     ordered by decision time, newest first. The endpoint works whether or
+         *     not the background scanner is enabled — `scanner.enabled` reports it.
+         */
+        get: operations["listUnitTagSuggestions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/unit-tag-suggestions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a unit alpha tag suggestion
+         * @description Returns one suggestion by ID regardless of status or review gate.
+         */
+        get: operations["getUnitTagSuggestion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/unit-tag-suggestions/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a unit alpha tag suggestion
+         * @description Applies a **pending** suggestion to its unit and marks it `approved`.
+         *     The optional body overrides the proposed tag ("edit, then approve");
+         *     without it the suggestion's `proposed_tag` is applied.
+         *
+         *     The unit is updated through the same path as `PATCH /units/{id}`
+         *     with `alpha_tag_source` set to `manual` (a person explicitly chose the
+         *     tag, so MQTT and CSV re-imports will not overwrite it), including the
+         *     best-effort CSV writeback when `CSV_WRITEBACK` is enabled. The unit's
+         *     previous tag and source are recorded on the suggestion
+         *     (`previous_tag`, `previous_tag_source`) with `decided_by`/`decided_at`.
+         *     Other suggestions for the same unit are left untouched. Requires write
+         *     access (same as `PATCH /units/{id}`).
+         */
+        post: operations["approveUnitTagSuggestion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/unit-tag-suggestions/{id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dismiss a unit alpha tag suggestion
+         * @description Marks a **pending** suggestion `dismissed` without touching the unit.
+         *     A dismissed candidate keeps accumulating evidence when seen again but
+         *     never returns to the pending queue. No request body. Requires write
+         *     access (same as `PATCH /units/{id}`).
+         */
+        post: operations["dismissUnitTagSuggestion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/unit-events": {
         parameters: {
             query?: never;
@@ -3182,6 +3298,186 @@ export interface components {
              */
             alpha_tag_source?: string;
         };
+        /**
+         * @description One call in which the unit identified itself with the candidate tag.
+         *     Suggestions keep the 10 most recent (newest first).
+         */
+        UnitTagEvidence: {
+            /**
+             * Format: int64
+             * @example 48531
+             */
+            call_id: number;
+            /**
+             * Format: int64
+             * @description Call group of the call (omitted when it has none). Other sites'
+             *     recordings of the same transmission share it and are not counted again.
+             * @example 20417
+             */
+            call_group_id?: number;
+            /** Format: date-time */
+            call_start_time: string;
+            /** Format: int64 */
+            transcription_id: number;
+            /** @example 9178 */
+            tgid: number;
+            /**
+             * @description Talkgroup alpha tag at the time of the call (omitted when empty)
+             * @example BC Fire Dispatch
+             */
+            tg_alpha_tag?: string;
+            /**
+             * @description The unit's own transmission text (max 240 characters)
+             * @example County, Medic 12 on scene.
+             */
+            excerpt: string;
+            /**
+             * @description Extraction rule that matched: `addressee_caller` ("County, Medic 12 ..."),
+             *     `unit_caller` ("Engine 5, Medic 12."), `caller_to` ("Medic 12 to County"),
+             *     `from_caller` ("Command from Engine 5"), `this_is` ("this is Rescue 2"),
+             *     `status` ("Engine 5 on scene"), `bare` (the whole transmission is the ID).
+             * @enum {string}
+             */
+            pattern: "addressee_caller" | "unit_caller" | "caller_to" | "from_caller" | "this_is" | "status" | "bare";
+            /**
+             * Format: double
+             * @description Seconds into the call audio where the unit's transmission starts
+             */
+            start: number;
+            /**
+             * Format: double
+             * @description Seconds into the call audio where the unit's transmission ends
+             */
+            end: number;
+            /**
+             * @description Call audio URL (same as `GET /calls/{id}/audio`; 404 if the call has no audio)
+             * @example /api/v1/calls/48531/audio
+             */
+            audio_url: string;
+        };
+        /** @description A candidate alpha tag for one unit, with accumulated evidence. */
+        UnitTagSuggestion: {
+            /**
+             * Format: int64
+             * @example 42
+             */
+            id: number;
+            /** @example 1 */
+            system_id: number;
+            /** @example Butler/Warren P25 */
+            system_name?: string;
+            /** @example 1234567 */
+            unit_id: number;
+            /**
+             * @description The unit's current alpha tag ("" if none)
+             * @example
+             */
+            unit_alpha_tag: string;
+            /**
+             * @description Source of the unit's current alpha tag (omitted when empty)
+             * @example mqtt
+             */
+            unit_alpha_tag_source?: string;
+            /**
+             * @description Normalized comparison key (uppercase, spoken numbers as digits)
+             * @example MEDIC 12
+             */
+            tag_key: string;
+            /**
+             * @description Display form of the candidate
+             * @example Medic 12
+             */
+            proposed_tag: string;
+            /** @enum {string} */
+            status: "pending" | "approved" | "dismissed";
+            /**
+             * @description Total self-identifications with this tag (a call can contribute several)
+             * @example 6
+             */
+            occurrences: number;
+            /**
+             * @description Distinct calls with this self-identification (multi-site recordings of one transmission count once)
+             * @example 4
+             */
+            call_count: number;
+            /**
+             * Format: double
+             * @description This candidate's call_count as a fraction of all of the unit's candidates' call_counts
+             * @example 0.8
+             */
+            share: number;
+            /**
+             * @description True when the unit's alpha tag already names this designator —
+             *     the whole tag, a designator inside it ("BCFD Medic 12"), or its
+             *     phonetic letter form ("1P31" for "1 Paul 31"). Computed at the last
+             *     sighting; if the unit's tag has changed since, it is re-checked
+             *     live against the new tag (whole tag or whole words inside it,
+             *     ignoring case and punctuation; phonetic forms are re-checked at
+             *     the next sighting). Such pending rows are not listed.
+             */
+            matches_current_tag: boolean;
+            /**
+             * Format: date-time
+             * @description Start time of the earliest call with this self-identification
+             */
+            first_seen: string;
+            /** Format: date-time */
+            last_seen: string;
+            /** @description Tag written to the unit on approval (proposed_tag or the override) */
+            applied_tag: string | null;
+            /** @description The unit's alpha tag before approval */
+            previous_tag: string | null;
+            /** @description The unit's alpha_tag_source before approval */
+            previous_tag_source: string | null;
+            /** Format: date-time */
+            decided_at: string | null;
+            /** @description Username or API key label of the reviewer (null in open/token mode) */
+            decided_by: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            evidence: components["schemas"]["UnitTagEvidence"][];
+        };
+        /** @description Background scanner configuration and backfill progress. */
+        UnitTagScannerStatus: {
+            /** @description Whether the scanner runs in this process (`UNIT_TAG_SUGGESTIONS`) */
+            enabled: boolean;
+            /**
+             * @description Review gate — `UNIT_TAG_SUGGESTIONS_MIN_CALLS`
+             * @example 3
+             */
+            min_calls: number;
+            /**
+             * Format: double
+             * @description Review gate — `UNIT_TAG_SUGGESTIONS_MIN_SHARE`
+             * @example 0.2
+             */
+            min_share: number;
+            /**
+             * Format: int64
+             * @description Highest transcription ID processed (0 if never run)
+             */
+            last_transcription_id: number;
+            /**
+             * Format: int64
+             * @description Highest transcription ID in the database; the scanner is caught up when equal
+             */
+            max_transcription_id: number;
+            /**
+             * Format: date-time
+             * @description Last time the scanner advanced (null if it never ran)
+             */
+            updated_at: string | null;
+        };
+        /** @description Optional approval body. Omit (or send `{}`) to apply `proposed_tag`. */
+        UnitTagSuggestionApprove: {
+            /**
+             * @description Tag to apply instead of `proposed_tag` (trimmed; must not be blank)
+             * @example BCFD Medic 12
+             */
+            alpha_tag?: string;
+        };
         HealthResponse: {
             /** @enum {string} */
             status: "healthy" | "degraded" | "unhealthy";
@@ -3290,6 +3586,23 @@ export interface components {
             limit: number;
             /** @example 0 */
             offset: number;
+        };
+        UnitTagSuggestionListResponse: {
+            suggestions: components["schemas"]["UnitTagSuggestion"][];
+            /** @example 12 */
+            total: number;
+            /** @example 50 */
+            limit: number;
+            /** @example 0 */
+            offset: number;
+            scanner: components["schemas"]["UnitTagScannerStatus"];
+        };
+        UnitTagSuggestionApproveResponse: {
+            suggestion: components["schemas"]["UnitTagSuggestion"];
+            unit: components["schemas"]["Unit"];
+        };
+        UnitTagSuggestionDismissResponse: {
+            suggestion: components["schemas"]["UnitTagSuggestion"];
         };
         UnitEventListResponse: {
             events: components["schemas"]["UnitEvent"][];
@@ -4304,6 +4617,25 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /**
+         * @description The suggestion has already been decided. `detail` carries the current
+         *     status, e.g. `status: approved`.
+         */
+        SuggestionNotPending: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "conflict",
+                 *       "error": "unit tag suggestion is approved, not pending",
+                 *       "detail": "status: approved"
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description Too many requests — rate limit exceeded */
         RateLimited: {
             headers: {
@@ -4330,6 +4662,8 @@ export interface components {
         talkgroupId: string;
         /** @description Unit ID: `system_id:unit_id` (e.g., `1:924003`) or plain `unit_id` */
         unitId: string;
+        /** @description Unit tag suggestion ID */
+        suggestionId: number;
         /** @description Start of time range (RFC 3339) */
         startTime: string;
         /** @description End of time range (RFC 3339) */
@@ -5632,6 +5966,135 @@ export interface operations {
             };
             404: components["responses"]["NotFound"];
             409: components["responses"]["Ambiguous"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listUnitTagSuggestions: {
+        parameters: {
+            query?: {
+                /** @description Filter by review status (`all` = every status). */
+                status?: "pending" | "approved" | "dismissed" | "all";
+                /** @description Filter by system ID (comma-separated for multiple). Alias `systems`. */
+                system_id?: string;
+                /** @description Filter by radio unit ID (comma-separated for multiple). Alias `units`. */
+                unit_id?: string;
+                /** @description Results per page */
+                limit?: components["parameters"]["limit"];
+                /** @description Page offset (number of results to skip) */
+                offset?: components["parameters"]["offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitTagSuggestionListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getUnitTagSuggestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Unit tag suggestion ID */
+                id: components["parameters"]["suggestionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitTagSuggestion"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    approveUnitTagSuggestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Unit tag suggestion ID */
+                id: components["parameters"]["suggestionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["UnitTagSuggestionApprove"];
+            };
+        };
+        responses: {
+            /** @description Approved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitTagSuggestionApproveResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Suggestion (or its unit) not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            409: components["responses"]["SuggestionNotPending"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    dismissUnitTagSuggestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Unit tag suggestion ID */
+                id: components["parameters"]["suggestionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dismissed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitTagSuggestionDismissResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["SuggestionNotPending"];
             500: components["responses"]["InternalError"];
         };
     };

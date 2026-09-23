@@ -224,4 +224,5 @@ Use `ErrorPanel` for in-place fetch errors with an optional retry action. Use `B
 |---------|------|---------------|
 | Dashboard (`/`) | Live monitoring | `FilterChip`, `EmptyState`, `ConnectionIndicator` |
 | Calls (`/calls`) | History/detail | `Banner` (time-window notice) |
+| Unit Tag Suggestions (`/units/suggestions`) | Review queue | `Banner`, `EmptyState`, `ErrorPanel`, `SkeletonCard`, toasts via `useToastStore` |
 | MainLayout | Global | `ToastContainer` |

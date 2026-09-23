@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { Command } from 'cmdk'
 import { cn } from '@/lib/utils'
 import { getTalkgroups, getUnits, searchTranscriptions } from '@/api/client'
+import { unitTagSuggestionService } from '@/api/services'
+import { usePendingUnitTagSuggestions } from '@/hooks/usePendingUnitTagSuggestions'
 import type { Talkgroup, Unit, TranscriptionSearchHit } from '@/api/types'
 import { getTalkgroupDisplayName, getUnitDisplayName, formatRelativeTime } from '@/lib/utils'
 
@@ -20,6 +22,11 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const [loading, setLoading] = useState(false)
   const [transcriptionLoading, setTranscriptionLoading] = useState(false)
   const transcriptionTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  // Probe the suggestions API while open (shared, cached request): on an engine
+  // without it the 404 re-renders the palette and hides the entry below, even
+  // when the Units and review pages haven't been visited this page load
+  usePendingUnitTagSuggestions(open)
 
   // Search talkgroups and units when search changes
   useEffect(() => {
@@ -195,6 +202,21 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
               <span>Go to Units</span>
               <kbd className="ml-auto text-xs text-muted-foreground">g u</kbd>
             </Command.Item>
+
+            {/* Hidden once the engine has shown it has no suggestions API (tr-engine before v0.10) */}
+            {!unitTagSuggestionService.isUnavailable() && (
+              <Command.Item
+                value="go-to-unit-tag-suggestions"
+                onSelect={() => runCommand(() => navigate('/units/suggestions'))}
+                className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm aria-selected:bg-accent"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z" />
+                  <path d="M7 7h.01" />
+                </svg>
+                <span>Review Unit Tag Suggestions</span>
+              </Command.Item>
+            )}
 
             <Command.Item
               value="go-to-affiliations"

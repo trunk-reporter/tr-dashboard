@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Pagination } from '@/components/ui/pagination'
 import { getUnits, getSystems, getUnitAffiliations } from '@/api/client'
 import type { Unit, System, Affiliation } from '@/api/types'
+import { usePendingUnitTagSuggestions } from '@/hooks/usePendingUnitTagSuggestions'
 import { useRealtimeStore } from '@/stores/useRealtimeStore'
 import { cn, getUnitDisplayName, getUnitTagObservations, formatUnitId, formatRelativeTime, getEventTypeLabel, getEventTypeColor } from '@/lib/utils'
 import { useFilterStore } from '@/stores/useFilterStore'
@@ -32,6 +33,15 @@ export default function Units() {
   const offset = (page - 1) * pageSize
 
   const unitIdHex = useFilterStore((s) => s.unitIdHex)
+
+  // Pending unit tag suggestions for the review-queue link. The link stays hidden
+  // until they load, on engines without the API (tr-engine before v0.10; not
+  // requested again once known), and when the scanner is off with nothing pending.
+  const pendingData = usePendingUnitTagSuggestions().data
+  const pendingSuggestions =
+    typeof pendingData?.total === 'number' && (pendingData.total > 0 || pendingData.scanner?.enabled !== false)
+      ? pendingData.total
+      : undefined
 
   // Realtime enrichment
   const unitEvents = useRealtimeStore((s) => s.unitEvents)
@@ -204,9 +214,30 @@ export default function Units() {
           <option value="unit_id:desc">ID High-Low</option>
         </select>
 
-        <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-          {totalCount.toLocaleString()} units
-        </span>
+        <div className="ml-auto flex items-center gap-3">
+          {pendingSuggestions !== undefined && (
+            <Link
+              to="/units/suggestions"
+              className={cn(
+                'inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-sm transition-colors',
+                pendingSuggestions > 0
+                  ? 'border-primary/50 text-primary hover:bg-primary/10'
+                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+              )}
+              title="Review unit tags heard on air"
+            >
+              Tag suggestions
+              {pendingSuggestions > 0 && (
+                <Badge className="px-1.5 py-0 text-[10px] tabular-nums">
+                  {pendingSuggestions.toLocaleString()}
+                </Badge>
+              )}
+            </Link>
+          )}
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {totalCount.toLocaleString()} units
+          </span>
+        </div>
       </div>
 
       {/* Results — dense rows */}

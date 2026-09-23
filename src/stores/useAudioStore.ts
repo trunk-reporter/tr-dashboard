@@ -20,6 +20,15 @@ export interface QueuedCall {
   tgAlphaTag?: string
   duration: number
   audioUrl: string
+  // Optional offset (seconds) to seek to once the audio loads, e.g. to jump to
+  // one unit's transmission. Set only by loadCall(call, { startAt }), so it
+  // never follows the call into history or the queue. A call that carries it
+  // is always reloaded, so replaying it that way seeks back to this point.
+  startAt?: number
+}
+
+export interface LoadCallOptions {
+  startAt?: number
 }
 
 // Audio retry configuration
@@ -60,7 +69,7 @@ interface AudioState {
   retryTimeoutId: ReturnType<typeof setTimeout> | null
 
   // Actions - called by UI
-  loadCall: (call: Call | QueuedCall) => void
+  loadCall: (call: Call | QueuedCall, options?: LoadCallOptions) => void
   requestPlay: () => void
   requestPause: () => void
   requestSeek: (time: number) => void
@@ -108,6 +117,18 @@ function toQueuedCall(call: Call | QueuedCall): QueuedCall {
   }
 }
 
+function withStartAt(call: QueuedCall, startAt: number | undefined): QueuedCall {
+  if (startAt !== undefined) {
+    return { ...call, startAt }
+  }
+  if (call.startAt === undefined) {
+    return call
+  }
+  const copy = { ...call }
+  delete copy.startAt
+  return copy
+}
+
 export const useAudioStore = create<AudioState>((set, get) => ({
   playbackState: 'idle',
   currentCall: null,
@@ -123,9 +144,11 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   retryCount: 0,
   retryTimeoutId: null,
 
-  loadCall: (call) => {
+  loadCall: (call, options) => {
     const state = get()
-    const queued = toQueuedCall(call)
+    // startAt applies only to the load that asks for it: a call replayed later
+    // (from history, previous, or the queue) starts from the beginning.
+    const queued = withStartAt(toQueuedCall(call), options?.startAt)
 
     // Clear any pending retry timeout
     if (state.retryTimeoutId) {

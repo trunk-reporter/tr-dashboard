@@ -120,8 +120,9 @@ export function AudioPlayer() {
     if (!audio) return
 
     if (currentCall) {
-      // Only reload if URL changed
-      if (currentUrlRef.current !== currentCall.audioUrl) {
+      // Only reload if URL changed, or the call asks to start at an offset
+      // (so replaying it seeks back to that point)
+      if (currentUrlRef.current !== currentCall.audioUrl || currentCall.startAt !== undefined) {
         currentUrlRef.current = currentCall.audioUrl
         playAttemptedRef.current = false
         audio.src = currentCall.audioUrl
@@ -171,6 +172,16 @@ export function AudioPlayer() {
       attemptPlay()
     }
   }, [attemptPlay])
+
+  // Apply the call's start offset once the duration is known (also re-applied
+  // after a retry reloads the element)
+  const handleLoadedMetadata = useCallback(() => {
+    const audio = audioRef.current
+    const startAt = useAudioStore.getState().currentCall?.startAt
+    if (!audio || !startAt || startAt <= 0) return
+    if (Number.isFinite(audio.duration) && startAt >= audio.duration) return
+    audio.currentTime = startAt
+  }, [])
 
   const handleTimeUpdate = useCallback(() => {
     const audio = audioRef.current
@@ -393,6 +404,7 @@ export function AudioPlayer() {
           ref={audioRef}
           playsInline
           onCanPlay={handleCanPlay}
+          onLoadedMetadata={handleLoadedMetadata}
           onTimeUpdate={handleTimeUpdate}
           onEnded={handleEnded}
           onError={handleError}
@@ -436,6 +448,7 @@ export function AudioPlayer() {
       <audio
         ref={audioRef}
         onCanPlay={handleCanPlay}
+        onLoadedMetadata={handleLoadedMetadata}
         onTimeUpdate={handleTimeUpdate}
         onEnded={handleEnded}
         onError={handleError}

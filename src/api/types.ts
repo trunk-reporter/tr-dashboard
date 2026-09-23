@@ -71,6 +71,10 @@ export type Recorder = Schema['Recorder'] & {
 }
 export type Affiliation = Schema['Affiliation']
 export type TalkgroupDirectoryEntry = Schema['TalkgroupDirectoryEntry']
+export type UnitTagSuggestion = Schema['UnitTagSuggestion']
+export type UnitTagSuggestionStatus = UnitTagSuggestion['status']
+export type UnitTagEvidence = Schema['UnitTagEvidence']
+export type UnitTagScannerStatus = Schema['UnitTagScannerStatus']
 
 // =============================================================================
 // Response Wrappers
@@ -118,6 +122,9 @@ export interface TranscriptionSearchResponse extends Omit<Schema['TranscriptionS
   results: TranscriptionSearchHit[]
 }
 export type TranscriptionQueueStats = Schema['TranscriptionQueueStats']
+export type UnitTagSuggestionListResponse = Schema['UnitTagSuggestionListResponse']
+export type UnitTagSuggestionApproveResponse = Schema['UnitTagSuggestionApproveResponse']
+export type UnitTagSuggestionDismissResponse = Schema['UnitTagSuggestionDismissResponse']
 export interface RecorderListResponse extends Omit<Schema['RecorderListResponse'], 'recorders'> {
   recorders: Recorder[]
 }
@@ -204,3 +211,4 @@ export type SystemPatch = Schema['SystemPatch']
 export type SitePatch = Schema['SitePatch']
 export type TalkgroupPatch = Schema['TalkgroupPatch']
 export type UnitPatch = Schema['UnitPatch']
+export type UnitTagSuggestionApprove = Schema['UnitTagSuggestionApprove']

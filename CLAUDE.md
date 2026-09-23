@@ -90,6 +90,7 @@ React Router v7 with all routes nested under `MainLayout` (provides sidebar, hea
 /talkgroups          → Talkgroup list
 /talkgroups/:id      → Talkgroup detail
 /units               → Unit list
+/units/suggestions   → Unit tag suggestion review queue (approve / edit / dismiss)
 /units/:id           → Unit detail
 /affiliations        → Live unit-talkgroup affiliation status
 /directory           → Reference talkgroup directory browser

@@ -13,6 +13,7 @@ const TalkgroupDetail = lazy(() => import('@/pages/TalkgroupDetail'))
 const TalkgroupAnalytics = lazy(() => import('@/pages/TalkgroupAnalytics'))
 const Units = lazy(() => import('@/pages/Units'))
 const UnitDetail = lazy(() => import('@/pages/UnitDetail'))
+const UnitTagSuggestions = lazy(() => import('@/pages/UnitTagSuggestions'))
 const Settings = lazy(() => import('@/pages/Settings'))
 const Affiliations = lazy(() => import('@/pages/Affiliations'))
 const TalkgroupDirectory = lazy(() => import('@/pages/TalkgroupDirectory'))
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="/talkgroups/:id" element={<Suspense fallback={<PageLoader />}><TalkgroupDetail /></Suspense>} />
         <Route path="/talkgroups/:id/analytics" element={<Suspense fallback={<PageLoader />}><TalkgroupAnalytics /></Suspense>} />
         <Route path="/units" element={<Suspense fallback={<PageLoader />}><Units /></Suspense>} />
+        <Route path="/units/suggestions" element={<Suspense fallback={<PageLoader />}><UnitTagSuggestions /></Suspense>} />
         <Route path="/units/:id" element={<Suspense fallback={<PageLoader />}><UnitDetail /></Suspense>} />
         <Route path="/systems" element={<Suspense fallback={<PageLoader />}><Recorders /></Suspense>} />
         <Route path="/systems/:id" element={<Suspense fallback={<PageLoader />}><SystemDetail /></Suspense>} />
