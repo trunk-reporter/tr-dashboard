@@ -134,6 +134,52 @@ export function getUnitDisplayName(unitId: number, alphaTag?: string, asHex?: bo
   return alphaTag || `Unit ${formatUnitId(unitId, asHex ?? false)}`
 }
 
+export interface UnitTagObservation {
+  kind: 'ota' | 'recorder'
+  label: string
+  value: string
+  firstSeen?: string
+  lastSeen?: string
+}
+
+/**
+ * Names tr-engine has observed for a unit besides its current alpha_tag: the
+ * raw over-the-air alias and the tag trunk-recorder reports. Only values that
+ * differ from alpha_tag are returned, and the recorder tag is skipped when it
+ * repeats the OTA alias.
+ */
+export function getUnitTagObservations(unit: {
+  readonly alpha_tag?: string
+  readonly recorder_alpha_tag?: string
+  readonly recorder_alpha_tag_seen?: string
+  readonly ota_alpha_tag?: string
+  readonly ota_alpha_tag_first_seen?: string
+  readonly ota_alpha_tag_last_seen?: string
+}): UnitTagObservation[] {
+  const current = unit.alpha_tag?.trim() ?? ''
+  const ota = unit.ota_alpha_tag?.trim() ?? ''
+  const recorder = unit.recorder_alpha_tag?.trim() ?? ''
+  const observations: UnitTagObservation[] = []
+  if (ota && ota !== current) {
+    observations.push({
+      kind: 'ota',
+      label: 'Radio alias (OTA)',
+      value: ota,
+      firstSeen: unit.ota_alpha_tag_first_seen,
+      lastSeen: unit.ota_alpha_tag_last_seen,
+    })
+  }
+  if (recorder && recorder !== current && recorder !== ota) {
+    observations.push({
+      kind: 'recorder',
+      label: 'Recorder-reported tag',
+      value: recorder,
+      lastSeen: unit.recorder_alpha_tag_seen,
+    })
+  }
+  return observations
+}
+
 export function getEventTypeLabel(eventType: string): string {
   const labels: Record<string, string> = {
     on: 'Registered',

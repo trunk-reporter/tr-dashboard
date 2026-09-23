@@ -15,6 +15,7 @@ import {
   getTalkgroupDisplayName,
   getSignalingTypeLabel,
   getSignalTypeLabel,
+  getUnitTagObservations,
 } from '@/lib/utils'
 import { useFilterStore } from '@/stores/useFilterStore'
 import { CopyableId } from '@/components/ui/copyable-id'
@@ -52,7 +53,14 @@ export default function UnitDetail() {
     setEditError(null)
     try {
       // A blank tag is omitted (as in Admin): the engine ignores it anyway.
-      const updated = await updateUnit(id, { alpha_tag: editAlphaTag.trim() ? editAlphaTag : undefined })
+      // A rename is also marked manual so the recorder's next reported tag
+      // doesn't overwrite it (only manual/csv tags outrank live MQTT tags).
+      // Engines with the CSV tag priority change (tr-engine #34) mark every
+      // rename manual themselves; older engines only do so when asked.
+      const updated = await updateUnit(
+        id,
+        editAlphaTag.trim() ? { alpha_tag: editAlphaTag, alpha_tag_source: 'manual' } : { alpha_tag: undefined },
+      )
       setUnit(updated)
       setEditing(false)
     } catch (err) {
@@ -118,6 +126,8 @@ export default function UnitDetail() {
     )
   }
 
+  const tagObservations = getUnitTagObservations(unit)
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -174,6 +184,39 @@ export default function UnitDetail() {
             {unit.system_name && `${unit.system_name} `}
             <span className="font-mono text-muted-foreground/70">({unit.system_id})</span>
           </p>
+        )}
+        {/* Names observed from the radio / trunk-recorder that differ from alpha_tag */}
+        {tagObservations.length > 0 && (
+          <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+            {tagObservations.map((obs) => (
+              <div key={obs.kind} className="flex flex-wrap items-center gap-x-2">
+                <span>{obs.label}:</span>
+                <span className="font-medium text-foreground">{obs.value}</span>
+                {obs.lastSeen && (
+                  <span
+                    className="text-muted-foreground/70"
+                    title={obs.firstSeen
+                      ? `First seen ${formatDateTime(obs.firstSeen)}, last seen ${formatDateTime(obs.lastSeen)}`
+                      : `Last reported ${formatDateTime(obs.lastSeen)}`}
+                  >
+                    last seen {formatRelativeTime(obs.lastSeen)}
+                  </span>
+                )}
+                {editing && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-5 px-1.5"
+                    onClick={() => setEditAlphaTag(obs.value)}
+                    disabled={saving || editAlphaTag === obs.value}
+                    title="Copy into the name field. Not saved until you click Save."
+                  >
+                    Use
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
