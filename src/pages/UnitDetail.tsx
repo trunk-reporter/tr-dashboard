@@ -51,7 +51,8 @@ export default function UnitDetail() {
     setSaving(true)
     setEditError(null)
     try {
-      const updated = await updateUnit(id, { alpha_tag: editAlphaTag })
+      // A blank tag is omitted (as in Admin): the engine ignores it anyway.
+      const updated = await updateUnit(id, { alpha_tag: editAlphaTag.trim() ? editAlphaTag : undefined })
       setUnit(updated)
       setEditing(false)
     } catch (err) {

@@ -54,7 +54,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Check whether first-run setup is needed
+         * @description Returns whether the instance has completed first-run admin setup.
+         *     Unauthenticated — always available when JWT auth is configured.
+         *     The dashboard calls this endpoint to decide whether to show the
+         *     admin setup flow or the regular login page.
+         */
+        get: operations["checkAuthSetup"];
         put?: never;
         /**
          * First-run admin creation
@@ -460,7 +467,7 @@ export interface paths {
         head?: never;
         /**
          * Update talkgroup metadata
-         * @description Updates mutable talkgroup fields (alpha_tag, description, group, tag, priority). Only provided fields are changed. When CSV_WRITEBACK is enabled and TR_DIR is configured with a talkgroupsFile, alpha_tag changes are also written back to trunk-recorder's talkgroup CSV file on disk.
+         * @description Updates mutable talkgroup fields (alpha_tag, description, group, tag, priority). Only provided fields are changed; empty strings and a negative priority are ignored (they don't clear anything). Changing any of them marks the talkgroup `alpha_tag_source: manual` (any alpha_tag_source in the same request is ignored), so neither MQTT ingest nor a talkgroup CSV re-import will overwrite it. An unknown alpha_tag_source value is rejected with 400. When CSV_WRITEBACK is enabled and TR_DIR is configured with a talkgroupsFile, alpha_tag changes are also written back to trunk-recorder's talkgroup CSV file on disk and, when that succeeds, to the talkgroup directory entry. Otherwise the talkgroup directory (the imported CSV) is not changed by edits.
          */
         patch: operations["updateTalkgroup"];
         trace?: never;
@@ -563,11 +570,61 @@ export interface paths {
         /**
          * Upload talkgroup CSV
          * @description Imports a trunk-recorder talkgroup CSV file into the talkgroup directory.
-         *     Accepts either `system_id` (must exist) or `system_name` (creates the
-         *     system if it doesn't exist). CSV format: Decimal, Hex, Alpha Tag, Mode,
-         *     Description, Tag, Category (header-aware, column order doesn't matter).
+         *     Accepts either `system_id` (must exist) or `system_name` (see the
+         *     parameter). CSV format: Decimal, Hex, Alpha Tag, Mode,
+         *     Description, Tag, Category (header-aware, column order doesn't matter;
+         *     a UTF-8 BOM is ignored).
+         *
+         *     The directory is then applied to heard talkgroups using the tag priority
+         *     manual > csv > mqtt: a non-empty CSV alpha tag replaces an MQTT-discovered
+         *     tag (and a previously imported CSV tag, so re-importing an edited CSV takes
+         *     effect) and marks the talkgroup `alpha_tag_source: csv`, after which MQTT
+         *     ingest no longer changes its alpha_tag/tag/group/description. For those
+         *     talkgroups non-empty CSV Tag/Category/Description/Mode/Priority values
+         *     also replace the current ones. Manually edited talkgroups are never
+         *     overwritten; the CSV only fills their empty fields. Talkgroups first heard
+         *     after the import pick up the CSV values on their first call or unit event.
+         *     CSV modes other than D, A, E, M, T (e.g. `DE`, `TE`) are kept in the
+         *     directory but not copied to the talkgroup.
          */
         post: operations["importTalkgroupDirectory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/unit-tags/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload unit tags CSV
+         * @description Imports a trunk-recorder unit tags CSV (the `unitTagsFile` format) into
+         *     the units table, for deployments where tr-engine can't read trunk-recorder's
+         *     files via `TR_DIR`. Accepts either `system_id` (must exist) or
+         *     `system_name` (see the parameter).
+         *
+         *     CSV format: two columns, `unit_id,alpha_tag`, no header required. A header
+         *     row (first row whose first column is not numeric), a UTF-8 BOM, blank
+         *     lines, quoted fields and extra columns are all accepted. Rows that can't be
+         *     parsed, have a non-numeric or out-of-range unit ID (not 1..2147483647), or have an empty tag
+         *     are counted in `skipped`. If a unit ID repeats, the last row wins.
+         *
+         *     Tags are stored with `alpha_tag_source: csv` using the priority
+         *     manual > csv > mqtt: they replace MQTT-discovered tags and previously
+         *     imported CSV tags, and MQTT ingest will not change them afterwards.
+         *     Manually edited units keep their tag. Units in the CSV that have not been
+         *     heard yet are created with no first/last seen time. The file is applied
+         *     in a single statement: either all rows are imported or, on a database
+         *     error (500), none are.
+         */
+        post: operations["importUnitTags"];
         delete?: never;
         options?: never;
         head?: never;
@@ -615,7 +672,7 @@ export interface paths {
         head?: never;
         /**
          * Update unit metadata
-         * @description Updates mutable unit fields (alpha_tag, alpha_tag_source). When CSV_WRITEBACK is enabled and TR_DIR is configured with a unitTagsFile, alpha_tag changes are also written back to trunk-recorder's unit CSV file on disk.
+         * @description Updates mutable unit fields (alpha_tag, alpha_tag_source). Setting a non-empty alpha_tag marks the unit `alpha_tag_source: manual` (any alpha_tag_source in the same request is ignored), so neither MQTT ingest nor a unit tags CSV re-import will overwrite the edit. An empty alpha_tag is ignored: it neither clears the tag nor marks it manual. An unknown alpha_tag_source value is rejected with 400. When CSV_WRITEBACK is enabled and TR_DIR is configured with a unitTagsFile, alpha_tag changes are also written back to trunk-recorder's unit CSV file on disk.
          */
         patch: operations["updateUnit"];
         trace?: never;
@@ -2210,8 +2267,11 @@ export interface components {
             /** @example Engine 1 */
             alpha_tag?: string;
             /**
-             * @description Source of the alpha tag (e.g., radioreference, manual)
-             * @example radioreference
+             * @description Where the alpha tag came from: `manual` (user edit), `csv` (unit tags
+             *     CSV via TR_DIR or `POST /unit-tags/import`), or `mqtt`. Omitted when
+             *     the tag was discovered from MQTT/audio metadata. Priority is
+             *     manual > csv > mqtt; lower-priority sources never overwrite higher ones.
+             * @example csv
              */
             alpha_tag_source?: string;
             /** Format: date-time */
@@ -2717,7 +2777,21 @@ export interface components {
             /**
              * @description Unit-attributed word timestamps and segments. The `words` array
              *     contains every word with timing and the radio unit that said it.
-             *     The `segments` array groups consecutive words by the same unit.
+             *     The `segments` array groups consecutive words by the same unit; a
+             *     change of diarization `speaker` does not start a new segment.
+             *
+             *     Both arrays are empty when the STT model returns no timestamps
+             *     (e.g. OpenAI `gpt-4o-transcribe`, `gpt-4o-mini-transcribe`,
+             *     `gpt-transcribe`, or the IMBE provider). When the model returns
+             *     only segment-level timestamps (OpenAI `gpt-4o-transcribe-diarize`,
+             *     or DeepInfra without word timestamps), word timings are
+             *     approximated by spreading each segment's words evenly across it.
+             *     Within a diarized speaker segment, words attributed to a unit
+             *     whose transmissions overlap the segment by less than 0.5 s in
+             *     total are moved to the unit the segment overlaps most. Words
+             *     already on that unit stay there even when its overlap is under
+             *     0.5 s (e.g. a short "Copy."). A segment that overlaps no
+             *     transmission keeps per-word attribution (nearest transmission).
              */
             words?: {
                 words?: components["schemas"]["AttributedWord"][];
@@ -2748,6 +2822,13 @@ export interface components {
              * @example Medic 83
              */
             src_tag?: string;
+            /**
+             * @description Speaker label from a diarizing STT model (OpenAI
+             *     `gpt-4o-transcribe-diarize` labels speakers `A`, `B`, ...).
+             *     Omitted when the model does not diarize.
+             * @example A
+             */
+            speaker?: string;
         };
         /** @description Consecutive words from the same radio unit */
         TranscriptionSegment: {
@@ -2758,6 +2839,13 @@ export interface components {
             src: number;
             /** @example Medic 83 */
             src_tag?: string;
+            /**
+             * @description Diarization speaker label, present only when every word in the
+             *     segment has the same label. Omitted when the STT model does not
+             *     diarize or the segment mixes speakers (see the words' `speaker`).
+             * @example A
+             */
+            speaker?: string;
             /** @example 0.12 */
             start: number;
             /** @example 1.8 */
@@ -2805,6 +2893,8 @@ export interface components {
                 src?: number;
                 /** @description Unit alpha tag. */
                 src_tag?: string;
+                /** @description Diarization speaker label, present only when every word in the segment has the same label; omitted when the STT model does not diarize or the segment mixes speakers. */
+                speaker?: string;
                 /** @description Segment start in seconds. */
                 start?: number;
                 /** @description Segment end in seconds. */
@@ -3019,7 +3109,14 @@ export interface components {
         /** @description Mutable talkgroup fields. Only provided fields are updated. */
         TalkgroupPatch: {
             alpha_tag?: string;
-            /** @description Source of the alpha_tag value (e.g. "manual"). When set to "manual", MQTT ingest will not overwrite the alpha_tag. */
+            /**
+             * @description Source of the alpha_tag value: `manual`, `csv`, `mqtt`, or `directory`.
+             *     Only takes effect when no other field is changed in the same request
+             *     (any field edit marks the talkgroup `manual`). Setting `csv` hands the
+             *     talkgroup back to the imported talkgroup CSV: its directory values are
+             *     re-applied on the next call. Setting `mqtt` lets MQTT ingest update it
+             *     again until a CSV entry applies.
+             */
             alpha_tag_source?: string;
             description?: string;
             group?: string;
@@ -3028,7 +3125,14 @@ export interface components {
         };
         /** @description Mutable unit fields. Only provided fields are updated. */
         UnitPatch: {
+            /** @description New alpha tag. Marks the unit `alpha_tag_source: manual`. An empty string is ignored. */
             alpha_tag?: string;
+            /**
+             * @description Source of the alpha_tag value: `manual`, `csv`, or `mqtt`. Only takes
+             *     effect when no non-empty alpha_tag is set in the same request. Setting `csv` or
+             *     `mqtt` releases a manual tag so a CSV re-import (or, for `mqtt`, MQTT
+             *     ingest) can update it again.
+             */
             alpha_tag_source?: string;
         };
         HealthResponse: {
@@ -4123,9 +4227,9 @@ export interface components {
             };
         };
         /**
-         * @description Ambiguous ID — the plain ID exists in multiple systems.
-         *     Response includes the list of matching systems to help the
-         *     client disambiguate.
+         * @description Ambiguous ID — the plain ID (or, for CSV imports, the system_name)
+         *     matches multiple systems. Response includes the list of matching
+         *     systems to help the client disambiguate.
          */
         Ambiguous: {
             headers: {
@@ -4256,6 +4360,40 @@ export interface operations {
                         /** @description Whether JWT login endpoints are available */
                         jwt_enabled: boolean;
                     };
+                };
+            };
+        };
+    };
+    checkAuthSetup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Setup status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description true when zero users exist (first-run setup pending) */
+                        needs_setup?: boolean;
+                        /** @description Total number of users in the database */
+                        user_count?: number;
+                    };
+                };
+            };
+            /** @description Database error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -5176,7 +5314,7 @@ export interface operations {
             query?: {
                 /** @description Target system ID (must exist). Mutually exclusive with system_name. */
                 system_id?: number;
-                /** @description Target system name (created if it doesn't exist). Mutually exclusive with system_id. */
+                /** @description Target system name. Mutually exclusive with system_id. Selects the non-deleted system whose name, or one of whose sites' short name (TR's shortName), equals it exactly. The system must already exist: systems are created when trunk-recorder first reports them (MQTT, upload, file watch or TR_DIR), so an unknown name fails with 404 and nothing is created. If several systems match, the request fails with 409 and lists them; use system_id instead. */
                 system_name?: string;
             };
             header?: never;
@@ -5208,12 +5346,70 @@ export interface operations {
                         total?: number;
                         /** @description System ID the talkgroups were imported into */
                         system_id?: number;
+                        /** @description Heard talkgroups changed by applying the directory (omitted when 0) */
+                        enriched?: number;
+                        /** @description Malformed rows or rows with a missing/invalid Decimal tgid (omitted when 0) */
+                        skipped?: number;
+                        /** @description Rows repeating a tgid seen earlier in the file; the last one wins (omitted when 0) */
+                        duplicates?: number;
                     };
                 };
             };
             400: components["responses"]["BadRequest"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Ambiguous"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    importUnitTags: {
+        parameters: {
+            query?: {
+                /** @description Target system ID (must exist). Mutually exclusive with system_name. */
+                system_id?: number;
+                /** @description Target system name. Mutually exclusive with system_id. Selects the non-deleted system whose name, or one of whose sites' short name (TR's shortName), equals it exactly. The system must already exist: systems are created when trunk-recorder first reports them (MQTT, upload, file watch or TR_DIR), so an unknown name fails with 404 and nothing is created. If several systems match, the request fails with 409 and lists them; use system_id instead. */
+                system_name?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description Unit tags CSV file (unit_id,alpha_tag)
+                     */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Import successful */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Number of rows imported; always equals total, since the import is all-or-nothing (manually tagged units are counted but keep their tag) */
+                        imported: number;
+                        /** @description Total valid rows in the CSV */
+                        total: number;
+                        /** @description System ID the unit tags were imported into */
+                        system_id: number;
+                        /** @description Rows skipped as malformed, with an invalid unit ID, or with an empty tag */
+                        skipped: number;
+                        /** @description Rows repeating a unit ID seen earlier in the file; the last one wins (omitted when 0) */
+                        duplicates?: number;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Ambiguous"];
             500: components["responses"]["InternalError"];
         };
     };

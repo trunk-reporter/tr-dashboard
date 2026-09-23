@@ -5,7 +5,7 @@
  * Regenerate with: npm run api:generate
  */
 
-import type { components } from './generated'
+import type { components, operations } from './generated'
 
 type Schema = components['schemas']
 
@@ -169,6 +169,8 @@ export interface SystemMergeRequest extends Omit<Schema['SystemMergeRequest'], '
   update_target_metadata?: boolean
 }
 export type SystemMergeResponse = Schema['SystemMergeResponse']
+export type UnitTagsImportResponse =
+  operations['importUnitTags']['responses'][200]['content']['application/json']
 export type MaintenanceConfig = Schema['MaintenanceConfig'] & {
   retention_calls?: string
 }
