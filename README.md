@@ -112,7 +112,7 @@ services:
       - "3000:3000"
 ```
 
-Then configure your proxy to route `/api/*`, `/audio/*`, and `/health/*` to tr-engine and everything else to `tr-dashboard:3000`. The key requirement is that `/api/events` (SSE) must have `flush_interval -1` or equivalent to avoid buffering.
+Then configure your proxy to route `/api/*`, `/audio/*`, and `/health/*` to tr-engine and everything else to `tr-dashboard:3000`. SSE is at `/api/v1/events/stream` — disable proxy buffering (`flush_interval -1` in Caddy, `proxy_buffering off` in nginx).
 
 ### Migrating from v0.9.x (Caddy-based image)
 
@@ -155,14 +155,17 @@ npm install
 
 ### Configure
 
-The dev server proxies API requests to tr-engine. If your backend requires authentication, create a `.env` file:
+Create a `.env` so the Vite dev server can proxy API requests to tr-engine:
 
 ```bash
 # .env
-TR_AUTH_TOKEN=your-auth-token-here
+TR_ENGINE_URL=http://localhost:8080   # required for /api and /health proxy
+# TR_AUTH_TOKEN=...                   # optional: inject bearer for token-mode backends
 ```
 
-The proxy target is configured in `vite.config.ts` (default: `https://tr-engine.luxprimatech.com`). Change this to point at your own tr-engine instance.
+Without `TR_ENGINE_URL`, the dev server does **not** proxy API calls (you will get 404s on `/api/*`).
+
+In **full** auth mode (engine has `ADMIN_PASSWORD`), leave `TR_AUTH_TOKEN` unset and use the dashboard login page. In **token** mode, either set `TR_AUTH_TOKEN` for the proxy or enter the token via the UI/Settings flow your engine expects. In **open** mode, no token is needed.
 
 ### Run
 
@@ -170,7 +173,7 @@ The proxy target is configured in `vite.config.ts` (default: `https://tr-engine.
 npm run dev
 ```
 
-Runs on `http://localhost:5173` with API proxy to the tr-engine backend.
+Runs on `http://localhost:5173` with `/api` and `/health` proxied to `TR_ENGINE_URL`.
 
 ### Build
 
@@ -184,27 +187,35 @@ npm run api:generate # Regenerate API types from OpenAPI spec
 
 Before marking implementation work complete, follow the project quality gates in [`docs/quality-gates.md`](docs/quality-gates.md).
 
-## Write Access
+## Authentication & Write Access
 
-tr-dashboard supports inline editing of talkgroup metadata (name, group, tag, priority, description) and unit names directly from their detail pages.
+The dashboard discovers auth requirements from tr-engine's `GET /api/v1/auth-init` (no Caddy token injection required).
 
-### How it works
+| Engine config | Mode | Dashboard behavior |
+|---------------|------|--------------------|
+| Neither `AUTH_TOKEN` nor `ADMIN_PASSWORD` | **open** | No login; all users can write |
+| `AUTH_TOKEN` only | **token** | Shared bearer token; configure proxy and/or Settings |
+| `ADMIN_PASSWORD` set | **full** | Login page for JWT (roles: viewer/editor/admin). Optional `AUTH_TOKEN` becomes a guest **read** token from auth-init |
 
-- If your tr-engine has no `WRITE_TOKEN` configured, editing works for everyone automatically.
-- If `WRITE_TOKEN` is set, users need to enter it in **Settings → Write Access** to enable editing. The token is stored in the browser's localStorage.
-- Without a valid write token, the Edit button still appears but saves will show an error message directing users to Settings.
+### Write access
+
+- **open** — edits allowed without credentials.
+- **full** — editors and admins can write after login. Viewers are read-only unless they still have a legacy write token saved in Settings.
+- **Legacy `WRITE_TOKEN`** — still accepted by tr-engine during deprecation. Users can store it under **Settings → Write Access** (localStorage). Prefer JWT roles or `tre_...` API keys for new deployments.
 
 ### Reverse proxy setup
 
-If you run tr-dashboard behind a reverse proxy that injects an auth token, make sure it **doesn't overwrite** the `Authorization` header when the browser sends one. The dashboard sends the write token as `Authorization: Bearer <token>` on write requests (PATCH/POST/PUT/DELETE).
+If your proxy injects a public read token, **do not overwrite** a browser-sent `Authorization` header (JWT login, user-entered token, or API key). Prefer conditional injection.
 
-**Caddy example** — use conditional injection so the read token is only added when the browser doesn't send its own:
+**Caddy example** (tr-engine listens on **8080**):
 
 ```caddyfile
 handle /api/* {
     @no_auth not header Authorization *
     request_header @no_auth Authorization "Bearer {$TR_AUTH_TOKEN}"
-    reverse_proxy tr-engine:8000
+    reverse_proxy tr-engine:8080 {
+        flush_interval -1
+    }
 }
 ```
 
@@ -218,7 +229,8 @@ location /api/ {
         set $auth $http_authorization;
     }
     proxy_set_header Authorization $auth;
-    proxy_pass http://tr-engine:8000;
+    proxy_pass http://tr-engine:8080;
+    proxy_buffering off;  # required for SSE /api/v1/events/stream
 }
 ```
 

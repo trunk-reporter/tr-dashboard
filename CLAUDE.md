@@ -1,6 +1,7 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository. Prefer AGENTS.md for active agent instructions when both exist; keep them in sync.
+
 
 ## Project Overview
 
@@ -15,7 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Backend
 
-tr-engine aggregates data from trunk-recorder radio systems. API documentation lives in `../tr-engine/docs/` (swagger at `/swagger/`, markdown in `docs/api/`).
+tr-engine aggregates data from trunk-recorder radio systems. Source of truth for the API is `../tr-engine/openapi.yaml` (Swagger UI on the engine at `/docs.html`).
 
 ## Development Commands
 
@@ -24,12 +25,12 @@ npm install           # Install dependencies
 npm run dev           # Start dev server on 0.0.0.0:5173
 npm run build         # Type-check (tsc -b) then build with Vite
 npm run lint          # Type-check only (tsc --noEmit)
-npm run api:generate  # Regenerate TypeScript types from ../tr-engine/openapi.yaml
+npm run api:generate  # Regenerate TypeScript types from OpenAPI spec
 ```
 
-There are no tests configured in this project. The `lint` command is the primary code quality check.
+There is no automated unit-test suite yet (`TODO.md` tracks vitest). `npm run lint` / `npm run build` are the primary quality checks. See `docs/quality-gates.md`.
 
-Vite proxies `/api` to `https://tr-api.luxprimatech.com` and `/api/events` to the SSE endpoint in dev mode.
+Dev proxy: set `TR_ENGINE_URL` in `.env` (e.g. `http://localhost:8080`). Vite then proxies `/api` and `/health` to that origin. Optional `TR_AUTH_TOKEN` injects a static bearer for token-mode engines.
 
 ## Tech Stack
 
@@ -81,38 +82,58 @@ src/
 
 ### Routing
 
-React Router v7 with all routes nested under `MainLayout` (provides sidebar, header, audio player):
+React Router v7. `/login` is public; all other routes sit under `RequireAuth` + `MainLayout` (sidebar, header, audio player). Lazy-loaded pages are wrapped in `ErrorBoundary`.
 
 ```
+/login               → Login (full auth mode)
 /                    → Dashboard (live monitoring + recent calls)
 /calls               → Call history browser
 /calls/:id           → Call detail with transmissions/audio
+/transcriptions      → Transcription search
 /talkgroups          → Talkgroup list
 /talkgroups/:id      → Talkgroup detail
+/talkgroups/:id/analytics → Talkgroup analytics
 /units               → Unit list
 /units/:id           → Unit detail
+/systems             → Recorders / systems overview
+/systems/:id         → System detail
 /affiliations        → Live unit-talkgroup affiliation status
 /directory           → Reference talkgroup directory browser
-/settings            → Color rules, favorites, display preferences
-/admin               → System merge, metadata editing, CSV import
+/call-groups         → Call groups browser
+/call-groups/:id     → Call group detail
+/investigate         → Investigate timeline
+/settings            → Colors, favorites, write token, display prefs
+/admin               → System merge, maintenance, CSV import
+/users               → User management (full auth / admin)
 ```
 
 ### API Layer (`src/api/`)
 
-- `client.ts`: Typed REST functions organized by domain (Systems, Talkgroups, Units, Calls, Affiliations, Admin). Base URL `/api/v1`. Uses `fetch` with a `request<T>()` wrapper.
+- `client.ts`: Typed REST functions + `request<T>()` wrapper. Base URL `/api/v1`. Injects JWT, legacy write token, or auth-init `read_token` as `Authorization: Bearer`.
+- `auth-init.ts`: Calls `GET /api/v1/auth-init` on load; drives open / token / full mode via `useAuthStore`.
 - `types.ts`: Hand-written types for API responses and SSE events.
-- `generated.ts`: Auto-generated from OpenAPI spec via `npm run api:generate`. Referenced by `types.ts`.
-- `eventsource.ts`: Singleton `SSEManager` using the `EventSource` API. Connects to `/api/events`. Auto-reconnect with exponential backoff. Typed event handlers for `call_start`, `call_update`, `call_end`, `unit_event`, `recorder_update`, `rate_update`. Methods: `connect()`, `disconnect()`, `reconnect()`.
+- `generated.ts`: Auto-generated from OpenAPI via `npm run api:generate`.
+- `eventsource.ts`: Singleton `SSEManager` → `GET /api/v1/events/stream`. Auto-reconnect with backoff. Handlers for `call_start`, `call_end`, `unit_event`, `recorder_update`, `rate_update`, etc. (`call_update` remains typed for compatibility but tr-engine currently does not emit it.)
+
+### Auth (`useAuthStore`)
+
+State machine: `idle → detecting → open | token | login-required | authenticated | error`.
+
+- **open** — no credentials; `canWrite()` true
+- **token** — shared bearer (proxy or stored token)
+- **full** — JWT login; write if role is editor/admin or legacy write token present
 
 ### State Management (Zustand Stores)
 
 | Store | File | Purpose | Persisted |
 |-------|------|---------|-----------|
-| `useRealtimeStore` | `stores/useRealtimeStore.ts` | SSE events, active calls `Map<number, Call>`, decode rates, recorders | No |
-| `useAudioStore` | `stores/useAudioStore.ts` | Playback state machine, queue, transmissions, history | No |
-| `useMonitorStore` | `stores/useMonitorStore.ts` | Monitored talkgroups `Set<system_id:tgid>`, monitoring toggle | localStorage |
-| `useTalkgroupColors` | `stores/useTalkgroupColors.ts` | Color rules, per-talkgroup overrides, hide/highlight modes | localStorage |
-| `useFilterStore` | `stores/useFilterStore.ts` | Selected systems, favorite talkgroups, search, time range | localStorage |
+| `useAuthStore` | `stores/useAuthStore.ts` | Auth mode, JWT, read/write tokens | writeToken only |
+| `useRealtimeStore` | `stores/useRealtimeStore.ts` | SSE events, active calls, decode rates, recorders | No |
+| `useAudioStore` | `stores/useAudioStore.ts` | Playback state machine, queue, transmissions | No |
+| `useMonitorStore` | `stores/useMonitorStore.ts` | Monitored talkgroups, monitoring toggle | localStorage |
+| `useTalkgroupColors` | `stores/useTalkgroupColors.ts` | Color rules, overrides, hide/highlight | localStorage |
+| `useFilterStore` | `stores/useFilterStore.ts` | Systems, favorites, search, time range | localStorage |
+| `useThemeStore` / alerts / toasts / etc. | `stores/*` | UI chrome and secondary features | varies |
 
 ### Key Architectural Patterns
 
@@ -175,28 +196,28 @@ Understanding the P25 trunked radio hierarchy is essential for this codebase:
 | butco | 340 | 4 | 1 | 1 |
 | warco | 34D | 1 | 13 | 17 |
 
-## API Conventions (tr-engine v0.7.3)
+## API Conventions (tr-engine)
 
-**REST + SSE Pattern:**
-- REST API (`/api/v1`) for CRUD operations and queries
-- SSE API (`/api/events`) for real-time event streaming
+**REST + SSE:**
+- REST under `/api/v1` for CRUD and queries
+- SSE at `/api/v1/events/stream` (not `/api/events`)
 
-**Key Endpoints:**
-- `GET /api/v1/systems` → `{systems: [...], count}` — logical systems
-- `GET /api/v1/talkgroups` → `{talkgroups: [...], total}`
-- `GET /api/v1/units` → `{units: [...], total}`
-- `GET /api/v1/calls` → `{calls: [...], total}`
-- `GET /api/v1/calls/:id` → `Call` with inline `src_list`, `freq_list`, `units`
-- `GET /api/v1/affiliations` → `{affiliations: [...], total, summary}`
-- `GET /api/v1/talkgroup-directory` → `{talkgroups: [...], total}`
-- `POST /api/v1/admin/merge-systems` → `SystemMergeResponse`
-- `PATCH /api/v1/talkgroups/:id` → Update talkgroup metadata
-- `PATCH /api/v1/units/:id` → Update unit metadata
-- `POST /api/v1/systems/:id/import-directory` → CSV talkgroup import
+**Auth discovery:** `GET /api/v1/auth-init` → `{ mode: open|token|full, read_token?, jwt_enabled }`
 
-**Data Conventions:**
-- Frequencies stored in Hz (not MHz)
-- Timestamps in ISO 8601 RFC3339 UTC format
+**Key endpoints (non-exhaustive):**
+- `GET /api/v1/systems`, `/talkgroups`, `/units`, `/calls`, `/affiliations`
+- `GET /api/v1/calls/:id` — call with inline `src_list` / `freq_list` when available
+- `GET /api/v1/transcriptions/search` — full-text transcription search
+- `GET /api/v1/talkgroup-directory`
+- `PATCH /api/v1/talkgroups/:id`, `PATCH /api/v1/units/:id`
+- `POST /api/v1/admin/systems/merge`, maintenance endpoints under `/api/v1/admin/*`
+
+Regenerate client types after engine OpenAPI changes: `npm run api:generate` (expects `../tr-engine/openapi.yaml`).
+
+**Data conventions:**
+- Frequencies in Hz (not MHz)
+- Timestamps ISO 8601 RFC3339 UTC
+- Composite keys `"system_id:tgid"` / `"system_id:unit_id"` in the UI
 - Pagination: `limit` (max 1000, default 50) + `offset`, response uses `total` field
 - Composite keys: `system_id:tgid` format (integer system_id)
 - Calls include inline `src_list` (transmissions), `freq_list` (frequencies), `units` (participating units)
