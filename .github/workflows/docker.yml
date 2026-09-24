@@ -137,7 +137,11 @@ jobs:
           VERSION="${GITHUB_REF#refs/tags/}"
           NOTES=""
           if [ -f CHANGELOG.md ]; then
-            NOTES=$(awk "/^## ${VERSION#v}[[:space:]]/,/^## [0-9]/" CHANGELOG.md | sed '$d')
+            # Print the lines under "## <version> ..." up to the next "## " heading.
+            # CHANGELOG.md is CRLF; index() matches the version literally, not as a regex.
+            NOTES=$(tr -d '\r' < CHANGELOG.md | awk -v ver="${VERSION#v}" '
+              /^## / { if (found) exit; if (index($0, "## " ver " ") == 1 || $0 == "## " ver) { found = 1; next } }
+              found { print }' | sed '/./,$!d')
           fi
           if [ -z "$NOTES" ]; then
             NOTES="**Docker image:** \`ghcr.io/${{ github.repository }}:${VERSION#v}\`"
