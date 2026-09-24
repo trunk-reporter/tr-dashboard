@@ -7,6 +7,7 @@ const ROUTE_TITLES: Record<string, string> = {
   '/calls': 'Calls',
   '/talkgroups': 'Talkgroups',
   '/units': 'Units',
+  '/units/suggestions': 'Unit Tag Suggestions',
   '/affiliations': 'Affiliations',
   '/directory': 'Directory',
   '/transcriptions': 'Transcriptions',

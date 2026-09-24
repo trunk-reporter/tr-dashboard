@@ -35,6 +35,12 @@ import type {
   TalkgroupPatch,
   UnitPatch,
   UnitTagsImportResponse,
+  UnitTagSuggestion,
+  UnitTagSuggestionStatus,
+  UnitTagSuggestionListResponse,
+  UnitTagSuggestionApprove,
+  UnitTagSuggestionApproveResponse,
+  UnitTagSuggestionDismissResponse,
 } from './types'
 
 import { useAuthStore, type AuthUser } from '@/stores/useAuthStore'
@@ -529,6 +535,43 @@ export async function getUnitAffiliations(
   params?: AffiliationQueryParams
 ): Promise<AffiliationListResponse> {
   return request(`/unit-affiliations${buildQueryString(params ?? {})}`)
+}
+
+// =============================================================================
+// Unit Tag Suggestions (review queue)
+// =============================================================================
+
+export interface UnitTagSuggestionQueryParams {
+  status?: UnitTagSuggestionStatus | 'all'
+  system_id?: string
+  unit_id?: string
+  limit?: number
+  offset?: number
+}
+
+export async function getUnitTagSuggestions(
+  params?: UnitTagSuggestionQueryParams
+): Promise<UnitTagSuggestionListResponse> {
+  return request(`/unit-tag-suggestions${buildQueryString(params ?? {})}`)
+}
+
+export async function getUnitTagSuggestion(id: number): Promise<UnitTagSuggestion> {
+  return request(`/unit-tag-suggestions/${id}`)
+}
+
+/** Approve a pending suggestion. Omit `body` to apply `proposed_tag`; pass `alpha_tag` to override it. */
+export async function approveUnitTagSuggestion(
+  id: number,
+  body?: UnitTagSuggestionApprove
+): Promise<UnitTagSuggestionApproveResponse> {
+  return request(`/unit-tag-suggestions/${id}/approve`, {
+    method: 'POST',
+    body: body ? JSON.stringify(body) : undefined,
+  })
+}
+
+export async function dismissUnitTagSuggestion(id: number): Promise<UnitTagSuggestionDismissResponse> {
+  return request(`/unit-tag-suggestions/${id}/dismiss`, { method: 'POST' })
 }
 
 // =============================================================================

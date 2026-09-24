@@ -93,6 +93,7 @@ React Router v7. `/login` is public; all other routes sit under `RequireAuth` + 
 /talkgroups/:id      → Talkgroup detail
 /talkgroups/:id/analytics → Talkgroup analytics
 /units               → Unit list
+/units/suggestions   → Unit tag suggestion review queue (approve / edit / dismiss)
 /units/:id           → Unit detail
 /systems             → Recorders / systems overview
 /systems/:id         → System detail

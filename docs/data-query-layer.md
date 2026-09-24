@@ -26,7 +26,8 @@ The returned state is the standard shape for server reads:
 - `isLoading`: first load with no cached data
 - `isFetching`: any in-flight request, including refreshes
 - `error` / `isError`: displayable error state
-- `refetch`: forced refresh for manual reload actions
+- `isPreviousData`: `data` still belongs to the previous key (e.g. right after a tab or filter change); treat it like loading when showing the old rows, counts or empty state would be misleading
+- `refetch`: forced refresh for manual reload actions; if the key changes before it resolves, its result is still returned to the caller but does not replace the new key's state
 
 Use explicit empty states when `!isLoading && data` exists but the collection is empty. Keep loading skeletons for `isLoading`, and preserve old `data` during background refreshes.
 

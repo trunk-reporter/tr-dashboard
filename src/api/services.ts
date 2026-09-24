@@ -6,8 +6,13 @@ import {
   getCallTransmissions,
   getSystems,
   getTalkgroups,
+  getUnitTagSuggestions,
+  approveUnitTagSuggestion,
+  dismissUnitTagSuggestion,
+  isMissingEndpoint,
   type CallQueryParams,
   type TalkgroupQueryParams,
+  type UnitTagSuggestionQueryParams,
 } from '@/api/client'
 import type {
   Call,
@@ -17,6 +22,9 @@ import type {
   SystemListResponse,
   TalkgroupListResponse,
   Transcription,
+  UnitTagSuggestionApproveResponse,
+  UnitTagSuggestionDismissResponse,
+  UnitTagSuggestionListResponse,
 } from '@/api/types'
 import type { QueryKey } from '@/api/query'
 
@@ -35,6 +43,10 @@ export const queryKeys = {
     list: (params?: CallQueryParams) => ['api', 'calls', 'list', params ?? {}] as const,
     detail: (id: number) => ['api', 'calls', 'detail', id] as const,
     related: (id: number) => ['api', 'calls', 'detail', id, 'related'] as const,
+  },
+  unitTagSuggestions: {
+    all: ['api', 'unit-tag-suggestions'] as const,
+    list: (params?: UnitTagSuggestionQueryParams) => ['api', 'unit-tag-suggestions', 'list', params ?? {}] as const,
   },
 } satisfies Record<string, unknown>
 
@@ -68,6 +80,28 @@ export const callService = {
 
     return { call, transmissions, frequencies, transcription }
   },
+}
+
+// Set once GET /unit-tag-suggestions turns out to be a missing route (tr-engine
+// before v0.10, see isMissingEndpoint). It only goes false -> true and lasts for
+// the page load, so a reload checks again after an engine upgrade.
+let unitTagSuggestionsMissing = false
+
+export const unitTagSuggestionService = {
+  /** True once the engine has shown it has no unit tag suggestions API: hide the feature and don't request it again. */
+  isUnavailable: (): boolean => unitTagSuggestionsMissing,
+  list: async (params?: UnitTagSuggestionQueryParams): Promise<UnitTagSuggestionListResponse> => {
+    try {
+      return await getUnitTagSuggestions(params)
+    } catch (err) {
+      if (isMissingEndpoint(err)) unitTagSuggestionsMissing = true
+      throw err
+    }
+  },
+  /** `alphaTag` overrides the proposed tag ("edit, then approve"); omit it to apply `proposed_tag`. */
+  approve: ({ id, alphaTag }: { id: number; alphaTag?: string }): Promise<UnitTagSuggestionApproveResponse> =>
+    approveUnitTagSuggestion(id, alphaTag !== undefined ? { alpha_tag: alphaTag } : undefined),
+  dismiss: ({ id }: { id: number }): Promise<UnitTagSuggestionDismissResponse> => dismissUnitTagSuggestion(id),
 }
 
 export function invalidateCallQueries(id?: number): QueryKey[] {
