@@ -12,8 +12,10 @@ import {
   getUnits,
   updateUnit,
   importTalkgroupDirectory,
+  importUnitTags,
   getMaintenanceStatus,
   runMaintenance,
+  isMissingEndpoint,
 } from '@/api/client'
 import type {
   System,
@@ -65,7 +67,9 @@ export default function Admin() {
       <Separator />
       <UnitEditSection />
       <Separator />
-      <CsvImportSection systems={systems} />
+      <TalkgroupDirectoryImportSection systems={systems} />
+      <Separator />
+      <UnitTagsImportSection systems={systems} />
     </div>
   )
 }
@@ -546,11 +550,90 @@ function UnitEditSection() {
 // CSV Import
 // =============================================================================
 
-function CsvImportSection({ systems }: { systems: System[] }) {
+interface CsvImportResult {
+  summary: string
+  notes: string[]
+}
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? '' : 's'}`
+}
+
+function importErrorMessage(err: unknown): string {
+  const status = err instanceof Error && 'status' in err ? (err as { status: number }).status : 0
+  // 401: no credentials sent (token mode without a write token); 403: read-only credentials
+  if (status === 401 || status === 403) {
+    return 'Write token required. Add it in Settings → Write Access.'
+  }
+  // Prefer the server's message (e.g. "system_id 5 not found", "CSV contains no valid ...")
+  const serverMsg = (err as { data?: { error?: unknown } } | null)?.data?.error
+  if (typeof serverMsg === 'string' && serverMsg) return serverMsg
+  return err instanceof Error ? err.message : 'Import failed'
+}
+
+function TalkgroupDirectoryImportSection({ systems }: { systems: System[] }) {
+  return (
+    <CsvImportCard
+      title="Talkgroup Directory Import"
+      description="Import talkgroup directory from a CSV file"
+      systems={systems}
+      onImport={async (systemId, file) => {
+        const res = await importTalkgroupDirectory(systemId, file)
+        return { summary: `Imported ${res.imported} of ${plural(res.total, 'row')}`, notes: [] }
+      }}
+    />
+  )
+}
+
+function UnitTagsImportSection({ systems }: { systems: System[] }) {
+  return (
+    <CsvImportCard
+      title="Unit Tags Import"
+      description="Import unit names from a trunk-recorder unit tags CSV (unit_id,alpha_tag)"
+      hint="Imported tags replace tags discovered over MQTT. Units edited by hand keep their tag."
+      systems={systems}
+      // POST /unit-tags/import is new; older engines (or a proxy that doesn't
+      // forward the route) answer with a bare 404/405 instead of a JSON error.
+      missingEndpointMessage="This tr-engine has no unit tags import route (POST /unit-tags/import). Upgrade tr-engine, or if it is already current, check that your reverse proxy forwards API requests to it."
+      onImport={async (systemId, file) => {
+        const res = await importUnitTags(systemId, file)
+        // The import is all-or-nothing: a failure is an error response, so
+        // imported always equals total here.
+        const notes: string[] = []
+        if (res.skipped > 0) {
+          notes.push(`Skipped ${plural(res.skipped, 'row')} (malformed, invalid unit ID, or empty tag)`)
+        }
+        if (res.duplicates) {
+          notes.push(`${plural(res.duplicates, 'duplicate unit ID')} (last row wins)`)
+        }
+        return { summary: `Imported ${res.imported} of ${plural(res.total, 'row')}`, notes }
+      }}
+    />
+  )
+}
+
+function CsvImportCard({
+  title,
+  description,
+  hint,
+  systems,
+  onImport,
+  missingEndpointMessage,
+}: {
+  title: string
+  description: string
+  hint?: string
+  systems: System[]
+  onImport: (systemId: number, file: File) => Promise<CsvImportResult>
+  /** Shown instead of the generic error when the engine has no such route (isMissingEndpoint). */
+  missingEndpointMessage?: string
+}) {
   const [systemId, setSystemId] = useState('')
   const [file, setFile] = useState<File | null>(null)
+  // Bumped after a successful import to remount (clear) the file input
+  const [fileInputKey, setFileInputKey] = useState(0)
   const [importing, setImporting] = useState(false)
-  const [result, setResult] = useState<{ imported: number; total: number } | null>(null)
+  const [result, setResult] = useState<CsvImportResult | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const handleImport = async () => {
@@ -560,11 +643,11 @@ function CsvImportSection({ systems }: { systems: System[] }) {
     setResult(null)
 
     try {
-      const res = await importTalkgroupDirectory(parseInt(systemId, 10), file)
-      setResult({ imported: res.imported, total: res.total })
+      setResult(await onImport(parseInt(systemId, 10), file))
       setFile(null)
+      setFileInputKey((k) => k + 1)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Import failed')
+      setError(missingEndpointMessage && isMissingEndpoint(err) ? missingEndpointMessage : importErrorMessage(err))
     } finally {
       setImporting(false)
     }
@@ -573,10 +656,14 @@ function CsvImportSection({ systems }: { systems: System[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>CSV Import</CardTitle>
-        <CardDescription>Import talkgroup directory from a CSV file</CardDescription>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {hint && (
+          <p className="text-xs text-muted-foreground">{hint}</p>
+        )}
+
         <div className="flex flex-wrap gap-4 items-end">
           <div>
             <label className="mb-1 block text-sm text-muted-foreground">System</label>
@@ -596,6 +683,7 @@ function CsvImportSection({ systems }: { systems: System[] }) {
           <div>
             <label className="mb-1 block text-sm text-muted-foreground">CSV File</label>
             <input
+              key={fileInputKey}
               type="file"
               accept=".csv"
               onChange={(e) => setFile(e.target.files?.[0] || null)}
@@ -615,9 +703,12 @@ function CsvImportSection({ systems }: { systems: System[] }) {
         )}
 
         {result && (
-          <p className="text-sm text-success">
-            Imported {result.imported} of {result.total} rows
-          </p>
+          <div className="text-sm space-y-0.5">
+            <p className="text-success">{result.summary}</p>
+            {result.notes.map((note) => (
+              <p key={note} className="text-warning">{note}</p>
+            ))}
+          </div>
         )}
       </CardContent>
     </Card>

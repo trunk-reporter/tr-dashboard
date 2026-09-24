@@ -34,6 +34,7 @@ import type {
   SitePatch,
   TalkgroupPatch,
   UnitPatch,
+  UnitTagsImportResponse,
 } from './types'
 
 import { useAuthStore, type AuthUser } from '@/stores/useAuthStore'
@@ -56,6 +57,16 @@ class ApiError extends Error {
     super(message)
     this.name = 'ApiError'
   }
+}
+
+/**
+ * True when the request hit no tr-engine route (an older engine, or a reverse
+ * proxy that doesn't forward it): a 404/405 without tr-engine's JSON `{error}`
+ * body, which its own handlers always send (e.g. "system_id 5 not found").
+ */
+export function isMissingEndpoint(err: unknown): boolean {
+  if (!(err instanceof ApiError) || (err.status !== 404 && err.status !== 405)) return false
+  return typeof (err.data as { error?: unknown } | undefined)?.error !== 'string'
 }
 
 // Decode JWT expiry without a library — just base64-decode the payload
@@ -438,6 +449,21 @@ export async function updateUnit(id: string | number, patch: UnitPatch): Promise
   return request(`/units/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(patch),
+  })
+}
+
+export async function importUnitTags(
+  systemIdOrName: number | string,
+  file: File
+): Promise<UnitTagsImportResponse> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const param = typeof systemIdOrName === 'number'
+    ? `system_id=${systemIdOrName}`
+    : `system_name=${encodeURIComponent(systemIdOrName)}`
+  return request(`/unit-tags/import?${param}`, {
+    method: 'POST',
+    body: formData,
   })
 }
 
