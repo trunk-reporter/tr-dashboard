@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.0-pre11 (2026-09-23)
+
+> [!WARNING]
+> **Untested pre-release.** This build has not been tested on a real deployment yet. It passed lint, a production build and a local Playwright smoke test against tr-engine v0.10.0-beta.1 and v0.9.11 on throwaway data only. The new features need tr-engine v0.10.0-beta.1 or newer; on older engines they stay hidden or show an upgrade message.
+
+### Features
+
+- **Unit tag suggestions review** — New `/units/suggestions` page to approve, edit or dismiss unit alpha tags that tr-engine suggests from transcriptions, with transcript excerpts and audio playback of the evidence. Linked from Units and the command palette. (trunk-reporter/tr-engine#56)
+- **Radio aliases on unit detail** — Unit detail shows the radio's over-the-air alias and the recorder-reported tag when they differ from the unit's name, with a "Use" button to copy either into the editor. (trunk-reporter/tr-engine#58)
+- **Unit tags CSV import** — Admin has a Unit Tags Import card next to the talkgroup directory import (now titled "Talkgroup Directory Import"). (trunk-reporter/tr-engine#34)
+
+### Bug Fixes
+
+- **Unit renames stick** — Renames from Unit detail and Admin are saved as manual, so the recorder's next reported tag no longer overwrites them on older engines.
+
 ## 1.0.0-pre10 (2026-04-22)
 
 ### Bug Fixes
