@@ -455,7 +455,14 @@ function UnitEditSection() {
     const key = `${unit.system_id}:${unit.unit_id}`
     setSaveStatus((prev) => ({ ...prev, [key]: 'saving' }))
     try {
-      await updateUnit(key, { alpha_tag: editAlphaTag || undefined })
+      // Mark a rename manual, as Unit detail does, so older engines don't let
+      // the recorder's next reported tag overwrite it.
+      await updateUnit(
+        key,
+        editAlphaTag.trim()
+          ? { alpha_tag: editAlphaTag, alpha_tag_source: 'manual' }
+          : { alpha_tag: editAlphaTag || undefined },
+      )
       setSaveStatus((prev) => ({ ...prev, [key]: 'saved' }))
       setEditingId(null)
       handleSearch()

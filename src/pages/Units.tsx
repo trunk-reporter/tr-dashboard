@@ -7,7 +7,7 @@ import { Pagination } from '@/components/ui/pagination'
 import { getUnits, getSystems, getUnitAffiliations } from '@/api/client'
 import type { Unit, System, Affiliation } from '@/api/types'
 import { useRealtimeStore } from '@/stores/useRealtimeStore'
-import { cn, getUnitDisplayName, formatUnitId, formatRelativeTime, getEventTypeLabel, getEventTypeColor } from '@/lib/utils'
+import { cn, getUnitDisplayName, getUnitTagObservations, formatUnitId, formatRelativeTime, getEventTypeLabel, getEventTypeColor } from '@/lib/utils'
 import { useFilterStore } from '@/stores/useFilterStore'
 import { SkeletonRow } from '@/components/ui/skeleton'
 
@@ -233,6 +233,7 @@ export default function Units() {
               const isActive = recentlyActiveUnits.has(unit.unit_id)
               const eventCount = eventCountByUnit.get(unit.unit_id) || 0
               const affiliation = affiliationMap.get(`${unit.system_id}:${unit.unit_id}`)
+              const tagObservations = getUnitTagObservations(unit)
               return (
                 <Link
                   key={`${unit.system_id}:${unit.unit_id}`}
@@ -250,7 +251,12 @@ export default function Units() {
                   )} />
 
                   {/* Name + ID inline */}
-                  <span className="font-medium text-sm truncate min-w-0 max-w-[180px]">
+                  <span
+                    className="font-medium text-sm truncate min-w-0 max-w-[180px]"
+                    title={tagObservations.length > 0
+                      ? tagObservations.map((obs) => `${obs.label}: ${obs.value}`).join('\n')
+                      : undefined}
+                  >
                     {getUnitDisplayName(unit.unit_id, unit.alpha_tag, unitIdHex)}
                   </span>
                   <span className="text-[11px] font-mono text-muted-foreground/60 shrink-0">

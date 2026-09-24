@@ -2289,6 +2289,46 @@ export interface components {
              */
             last_event_tg_tag?: string;
             /**
+             * @description Latest non-empty unit tag reported by trunk-recorder (`unit_alpha_tag`
+             *     in MQTT unit/call messages, or the srcList `tag` in watch/upload
+             *     modes), recorded even when a manual or CSV `alpha_tag` wins. This is
+             *     trunk-recorder's own resolved tag: its `unitTagsFile` entry if it has
+             *     one, otherwise the decoded over-the-air alias. Omitted if never reported.
+             * @example P338 FF1
+             */
+            readonly recorder_alpha_tag?: string;
+            /**
+             * Format: date-time
+             * @description When `recorder_alpha_tag` was last reported.
+             */
+            readonly recorder_alpha_tag_seen?: string;
+            /**
+             * @description Latest raw over-the-air unit alias, as reported separately from the
+             *     resolved tag: `unit_alpha_tag_ota` in MQTT unit/call messages (MQTT
+             *     plugin), or `srcList[].tag_ota` in trunk-recorder 5.2+ call JSON
+             *     (watch/upload modes). Latest known value only (not a history);
+             *     replaced when a different alias is reported. trunk-recorder reports
+             *     the latest alias it knows for the unit, so the seen times record when
+             *     tr-engine received that report, not necessarily a fresh decode.
+             *     Omitted until a source that sends it reports this unit.
+             * @example P338 FF1
+             */
+            readonly ota_alpha_tag?: string;
+            /**
+             * Format: date-time
+             * @description When tr-engine first recorded the current `ota_alpha_tag` value.
+             *     Resets when the alias changes. A late report of the same alias with
+             *     an older timestamp does not move it earlier, so it never reaches back
+             *     past an earlier alias change (archive import and system merge move it
+             *     earlier only when the incoming observation window overlaps).
+             */
+            readonly ota_alpha_tag_first_seen?: string;
+            /**
+             * Format: date-time
+             * @description When the current `ota_alpha_tag` value was last observed.
+             */
+            readonly ota_alpha_tag_last_seen?: string;
+            /**
              * @description Number of calls within the requested time window (only present on /talkgroups/{id}/units)
              * @example 42
              */
@@ -2526,6 +2566,13 @@ export interface components {
              * @example Engine 1
              */
             unit_alpha_tag?: string;
+            /**
+             * @description Latest known raw over-the-air alias for the unit (see
+             *     `Unit.ota_alpha_tag`). Only present in SSE payloads, and only when
+             *     an alias is known.
+             * @example P338 FF1
+             */
+            unit_ota_alpha_tag?: string;
             /** @example 1001 */
             tgid?: number;
             /**
