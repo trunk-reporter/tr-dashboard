@@ -3,7 +3,6 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { registerSW } from 'virtual:pwa-register'
 import { setUpdateSW } from './hooks/usePWAUpdate'
-import { QueryProvider } from './api/query'
 import App from './App'
 import './index.css'
 
@@ -27,10 +26,8 @@ if ('serviceWorker' in navigator) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <QueryProvider>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
-    </QueryProvider>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
   </StrictMode>
 )

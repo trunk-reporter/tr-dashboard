@@ -2,7 +2,8 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Command } from 'cmdk'
 import { cn } from '@/lib/utils'
-import { getTalkgroups, getUnits, searchTranscriptions } from '@/api/client'
+import { getTalkgroups, getUnits, searchTranscriptions, isUnavailable } from '@/api/client'
+import { useNavVisible } from '@/lib/access'
 import { unitTagSuggestionService } from '@/api/services'
 import { usePendingUnitTagSuggestions } from '@/hooks/usePendingUnitTagSuggestions'
 import type { Talkgroup, Unit, TranscriptionSearchHit } from '@/api/types'
@@ -23,10 +24,14 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const [transcriptionLoading, setTranscriptionLoading] = useState(false)
   const transcriptionTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
+  // Units, affiliations and recorders are hidden for restricted credentials,
+  // Admin and Access without the admin scope
+  const navVisible = useNavVisible()
+
   // Probe the suggestions API while open (shared, cached request): on an engine
   // without it the 404 re-renders the palette and hides the entry below, even
   // when the Units and review pages haven't been visited this page load
-  usePendingUnitTagSuggestions(open)
+  usePendingUnitTagSuggestions(open && navVisible('/units/suggestions'))
 
   // Search talkgroups and units when search changes
   useEffect(() => {
@@ -39,19 +44,25 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     const controller = new AbortController()
     setLoading(true)
 
-    Promise.all([
+    // Settled separately: unit search is unavailable to restricted credentials
+    // (getUnits short-circuits), and talkgroup results must still show.
+    Promise.allSettled([
       getTalkgroups({ search, limit: 20 }),
       getUnits({ search, limit: 10 }),
     ])
       .then(([tgRes, unitRes]) => {
-        if (!controller.signal.aborted) {
-          setTalkgroups(tgRes.talkgroups || [])
-          setUnits(unitRes.units || [])
+        if (controller.signal.aborted) return
+        if (tgRes.status === 'fulfilled') {
+          setTalkgroups(tgRes.value.talkgroups || [])
+        } else {
+          console.error('Talkgroup search error:', tgRes.reason)
+          setTalkgroups([])
         }
-      })
-      .catch((err) => {
-        if (!controller.signal.aborted) {
-          console.error('Search error:', err)
+        if (unitRes.status === 'fulfilled' && !isUnavailable(unitRes.value)) {
+          setUnits(unitRes.value.units || [])
+        } else {
+          if (unitRes.status === 'rejected') console.error('Unit search error:', unitRes.reason)
+          setUnits([])
         }
       })
       .finally(() => {
@@ -189,22 +200,24 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
               <kbd className="ml-auto text-xs text-muted-foreground">g t</kbd>
             </Command.Item>
 
-            <Command.Item
-              value="go-to-units"
-              onSelect={() => runCommand(() => navigate('/units'))}
-              className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm aria-selected:bg-accent"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 20a6 6 0 0 0-12 0" />
-                <circle cx="12" cy="10" r="4" />
-                <circle cx="12" cy="12" r="10" />
-              </svg>
-              <span>Go to Units</span>
-              <kbd className="ml-auto text-xs text-muted-foreground">g u</kbd>
-            </Command.Item>
+            {navVisible('/units') && (
+              <Command.Item
+                value="go-to-units"
+                onSelect={() => runCommand(() => navigate('/units'))}
+                className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm aria-selected:bg-accent"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 20a6 6 0 0 0-12 0" />
+                  <circle cx="12" cy="10" r="4" />
+                  <circle cx="12" cy="12" r="10" />
+                </svg>
+                <span>Go to Units</span>
+                <kbd className="ml-auto text-xs text-muted-foreground">g u</kbd>
+              </Command.Item>
+            )}
 
             {/* Hidden once the engine has shown it has no suggestions API (tr-engine before v0.10) */}
-            {!unitTagSuggestionService.isUnavailable() && (
+            {navVisible('/units/suggestions') && !unitTagSuggestionService.isUnavailable() && (
               <Command.Item
                 value="go-to-unit-tag-suggestions"
                 onSelect={() => runCommand(() => navigate('/units/suggestions'))}
@@ -218,34 +231,38 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
               </Command.Item>
             )}
 
-            <Command.Item
-              value="go-to-affiliations"
-              onSelect={() => runCommand(() => navigate('/affiliations'))}
-              className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm aria-selected:bg-accent"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-              </svg>
-              <span>Go to Affiliations</span>
-              <kbd className="ml-auto text-xs text-muted-foreground">g a</kbd>
-            </Command.Item>
+            {navVisible('/affiliations') && (
+              <Command.Item
+                value="go-to-affiliations"
+                onSelect={() => runCommand(() => navigate('/affiliations'))}
+                className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm aria-selected:bg-accent"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                </svg>
+                <span>Go to Affiliations</span>
+                <kbd className="ml-auto text-xs text-muted-foreground">g a</kbd>
+              </Command.Item>
+            )}
 
-            <Command.Item
-              value="go-to-systems"
-              onSelect={() => runCommand(() => navigate('/systems'))}
-              className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm aria-selected:bg-accent"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9" />
-                <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.4" />
-                <circle cx="12" cy="12" r="2" />
-                <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.4" />
-                <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19" />
-              </svg>
-              <span>Go to Systems</span>
-              <kbd className="ml-auto text-xs text-muted-foreground">g e</kbd>
-            </Command.Item>
+            {navVisible('/systems') && (
+              <Command.Item
+                value="go-to-systems"
+                onSelect={() => runCommand(() => navigate('/systems'))}
+                className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm aria-selected:bg-accent"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9" />
+                  <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.4" />
+                  <circle cx="12" cy="12" r="2" />
+                  <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.4" />
+                  <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19" />
+                </svg>
+                <span>Go to Systems</span>
+                <kbd className="ml-auto text-xs text-muted-foreground">g e</kbd>
+              </Command.Item>
+            )}
 
             <Command.Item
               value="go-to-directory"
@@ -282,17 +299,34 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
               <kbd className="ml-auto text-xs text-muted-foreground">g s</kbd>
             </Command.Item>
 
-            <Command.Item
-              value="go-to-admin"
-              onSelect={() => runCommand(() => navigate('/admin'))}
-              className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm aria-selected:bg-accent"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
-              </svg>
-              <span>Go to Admin</span>
-              <kbd className="ml-auto text-xs text-muted-foreground">g x</kbd>
-            </Command.Item>
+            {navVisible('/admin') && (
+              <Command.Item
+                value="go-to-admin"
+                onSelect={() => runCommand(() => navigate('/admin'))}
+                className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm aria-selected:bg-accent"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
+                </svg>
+                <span>Go to Admin</span>
+                <kbd className="ml-auto text-xs text-muted-foreground">g x</kbd>
+              </Command.Item>
+            )}
+
+            {navVisible('/access') && (
+              <Command.Item
+                value="go-to-access"
+                onSelect={() => runCommand(() => navigate('/access'))}
+                className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm aria-selected:bg-accent"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="7.5" cy="15.5" r="5.5" />
+                  <path d="m21 2-9.6 9.6" />
+                  <path d="m15.5 7.5 3 3L22 7l-3-3" />
+                </svg>
+                <span>Go to Access (API keys)</span>
+              </Command.Item>
+            )}
           </Command.Group>}
 
           {/* Talkgroup results */}

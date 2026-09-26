@@ -55,16 +55,18 @@ tr-engine
 
 - Generated OpenAPI types live in `src/api/generated.ts` and are never edited by hand.
 - Hand-written request helpers and endpoint functions live in `src/api/client.ts` or domain-specific files under `src/api/` as the module grows.
-- All API requests go through one request wrapper so auth retry, write-token fallback, error mapping, and base URL behavior are consistent.
+- All API requests go through one request wrapper so the API-key header, auth-error handling, the restricted-credential short-circuit, error mapping, and base URL behavior are consistent.
 - OpenAPI changes start in `tr-engine`; dashboard types are regenerated from the checked-in spec.
 
 ### Auth and session
 
-**Purpose:** Login state, JWT refresh, first-time setup, legacy token compatibility, role/write capability checks.
+> **Updated 2026-09-26:** tr-engine replaced logins, JWTs and shared tokens with API keys (tr-engine `docs/superpowers/specs/2026-09-26-api-key-auth-design.md`). There is no login, refresh or first-time setup any more.
 
-- UI reads capability state from a single auth/session module or store.
-- Components should not infer permissions from role names alone when the API can answer access control.
-- Token transport must avoid leaking JWTs into URLs for future audio work.
+**Purpose:** The stored API key, `GET /whoami` (scopes, `restricted`, the anonymous access policy), key entry, and capability checks.
+
+- UI reads capability state from a single auth module or store (`useAuthStore`: `hasScope`, `canEdit`, `isAdmin`, `restricted`).
+- Components gate on the scopes and `restricted` flag that `/whoami` reports, not on credential kinds.
+- The key only ever travels in the `Authorization` header; URLs (event stream, audio) carry short-lived tickets minted right before use.
 
 ### Realtime
 
@@ -80,11 +82,11 @@ tr-engine
 
 - The HTML audio element and its events remain the playback source of truth.
 - Audio state is global because playback crosses route boundaries.
-- Future secure audio work belongs here and in `tr-engine`; pages should not construct token-bearing audio URLs directly.
+- Audio URLs are built from `API_BASE` and get a ticket only inside the player, right before `src` is set; pages and queued items never hold credential-bearing URLs.
 
 ### Feature pages
 
-**Purpose:** Route-level product workflows: dashboard, calls, investigate timeline, systems, talkgroups, units, affiliations, directory, transcriptions, admin, settings, users.
+**Purpose:** Route-level product workflows: dashboard, calls, investigate timeline, systems, talkgroups, units, affiliations, directory, transcriptions, admin, access (API keys), settings.
 
 - Pages orchestrate data loading and compose domain components.
 - Reusable behavior should move down into domain components, API modules, hooks, or stores.
@@ -165,12 +167,12 @@ These issues should be created or linked under the next-gen dashboard epic. Prop
 
 1. **API boundary cleanup: remove raw request paths**
    - **Owner:** Dashboard/UI agent
-   - **Acceptance criteria:** All dashboard REST calls use the shared request wrapper; `importTalkgroupDirectory` and similar write paths preserve JWT refresh, write-token fallback, and consistent error handling; `npm run lint` passes.
+   - **Acceptance criteria:** All dashboard REST calls use the shared request wrapper; `importTalkgroupDirectory` and similar write paths send the API key header and use consistent error handling; `npm run lint` passes.
    - **Depends on:** This ADR.
 
 2. **Secure audio URL strategy**
    - **Owner:** tr-engine/API agent + Dashboard/UI agent
-   - **Acceptance criteria:** JWTs are no longer placed in audio query strings; the chosen mechanism is documented; call playback and queue navigation still work for JWT and legacy token deployments.
+   - **Acceptance criteria:** Long-lived credentials are never placed in audio query strings; the chosen mechanism is documented; call playback and queue navigation still work. (Done with the API-key redesign: listen-only tickets minted right before `src` is set, re-minted once on a media error.)
    - **Depends on:** API boundary cleanup.
 
 3. **Route-level code splitting**

@@ -197,6 +197,26 @@ export interface MaintenanceStatusResponse extends Omit<Schema['MaintenanceStatu
 export type MaintenanceRunResponse = MaintenanceRun
 
 // =============================================================================
+// Auth: whoami, API keys, anonymous access, tickets, audit log
+// =============================================================================
+
+export type Scope = Schema['Scope']
+export type Whoami = Schema['Whoami']
+export type Restriction = NonNullable<Schema['Restriction']>
+export type APIKey = Schema['APIKey']
+export type APIKeyCreate = Schema['APIKeyCreate']
+export type APIKeyCreated = Schema['APIKeyCreated']
+export type APIKeyPatch = Schema['APIKeyPatch']
+export type APIKeyListResponse = Schema['APIKeyListResponse']
+export type AnonymousAccessLevel = Schema['AnonymousAccessLevel']
+export type AnonymousAccess = Schema['AnonymousAccess']
+export type AnonymousAccessUpdate = Schema['AnonymousAccessUpdate']
+export type Ticket = Schema['Ticket']
+export type SSEAuthSignal = Schema['SSEAuthSignal']
+export type AuditLogEntry = Schema['AuditLogEntry']
+export type AuditLogResponse = Schema['AuditLogResponse']
+
+// =============================================================================
 // Error Types
 // =============================================================================
 

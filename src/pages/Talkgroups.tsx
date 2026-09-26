@@ -3,7 +3,7 @@ import { useSearchParams, Link } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Pagination } from '@/components/ui/pagination'
-import { getTalkgroups, getSystems, getEncryptionStats } from '@/api/client'
+import { getTalkgroups, getSystems, getEncryptionStats, isUnavailable } from '@/api/client'
 import { getSystemTypeLabel } from '@/lib/utils'
 import type { Talkgroup, System, TalkgroupEncryptionStat } from '@/api/types'
 import { useFilterStore } from '@/stores/useFilterStore'
@@ -121,8 +121,10 @@ export default function Talkgroups() {
         setAvailableGroups(Array.from(groups).sort())
         setAvailableTags(Array.from(tags).sort())
 
-        // Fetch encryption stats for all talkgroups
+        // Fetch encryption stats for all talkgroups (unavailable to
+        // restricted credentials: no request is made)
         getEncryptionStats().then((res) => {
+          if (isUnavailable(res)) return
           const map = new Map<string, TalkgroupEncryptionStat>()
           for (const stat of res.stats) {
             if (stat.system_id != null && stat.tgid != null) {

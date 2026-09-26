@@ -55,6 +55,7 @@ Full call metadata, signal quality, transcription with word-level timing, and tr
 - **Live monitoring** — Auto-play calls from selected talkgroups
 - **Talkgroup customization** — Configurable color rules with hide/highlight modes and wildcard matching
 - **Transcription display** — View call transcriptions with word-level timing
+- **API keys** — Connect with a tr-engine API key, or browse without one when the engine allows anonymous listening; admins manage keys, the anonymous access policy and the audit log on the Access page
 
 ## Tech Stack
 
@@ -123,10 +124,10 @@ Previous versions bundled Caddy inside the Docker image and accepted `TR_ENGINE_
 | Caddy bundled in image | Static-only image, bring your own proxy |
 | Port 80/443 | Port 3000 |
 | `TR_ENGINE_URL` env var | Proxy config routes `/api/*` to tr-engine |
-| `TR_AUTH_TOKEN` injected by Caddy | JWT auth via login page, or proxy-injected header |
+| `TR_AUTH_TOKEN` injected by Caddy | API key pasted in the dashboard, or tr-engine's anonymous access policy (see [Authentication](#authentication)) |
 | `SITE_ADDRESS` for auto-HTTPS | Configured in your proxy (Caddy/Traefik) |
 
-**To migrate:** Use one of the full-stack examples above (`examples/docker-compose.caddy.yml` for the closest equivalent to the old setup) or add tr-dashboard to your existing proxy config. If you were using `TR_AUTH_TOKEN`, configure your Caddy/nginx to inject the header — see [Reverse proxy setup](#reverse-proxy-setup).
+**To migrate:** Use one of the full-stack examples above (`examples/docker-compose.caddy.yml` for the closest equivalent to the old setup) or add tr-dashboard to your existing proxy config. Your proxy only routes requests; it never adds credentials (see [Authentication](#authentication)).
 
 ### Build from Source
 
@@ -160,12 +161,12 @@ Create a `.env` so the Vite dev server can proxy API requests to tr-engine:
 ```bash
 # .env
 TR_ENGINE_URL=http://localhost:8080   # required for /api and /health proxy
-# TR_AUTH_TOKEN=...                   # optional: inject bearer for token-mode backends
+# TR_API_KEY=tre_...                  # optional: dev proxy adds this key to requests without one
 ```
 
 Without `TR_ENGINE_URL`, the dev server does **not** proxy API calls (you will get 404s on `/api/*`).
 
-In **full** auth mode (engine has `ADMIN_PASSWORD`), leave `TR_AUTH_TOKEN` unset and use the dashboard login page. In **token** mode, either set `TR_AUTH_TOKEN` for the proxy or enter the token via the UI/Settings flow your engine expects. In **open** mode, no token is needed.
+`TR_API_KEY` is a development convenience: the Vite proxy adds it only to requests that carry no `Authorization` header, so a key you paste into the dashboard always wins. Without it, the dashboard asks for a key (or browses anonymously if the engine allows that).
 
 ### Run
 
@@ -187,52 +188,54 @@ npm run api:generate # Regenerate API types from OpenAPI spec
 
 Before marking implementation work complete, follow the project quality gates in [`docs/quality-gates.md`](docs/quality-gates.md).
 
-## Authentication & Write Access
+## Authentication
 
-The dashboard discovers auth requirements from tr-engine's `GET /api/v1/auth-init` (no Caddy token injection required).
+tr-dashboard needs **tr-engine with API keys** (the engine version that has `GET /api/v1/whoami`). Against an older engine it shows "This tr-engine doesn't support API keys yet — upgrade tr-engine". Upgrade the engine and the dashboard together.
 
-| Engine config | Mode | Dashboard behavior |
-|---------------|------|--------------------|
-| Neither `AUTH_TOKEN` nor `ADMIN_PASSWORD` | **open** | No login; all users can write |
-| `AUTH_TOKEN` only | **token** | Shared bearer token; configure proxy and/or Settings |
-| `ADMIN_PASSWORD` set | **full** | Login page for JWT (roles: viewer/editor/admin). Optional `AUTH_TOKEN` becomes a guest **read** token from auth-init |
+tr-engine authenticates client software, not people: there are no user accounts and no login page. On load, the dashboard asks `GET /api/v1/whoami` what it may do:
 
-### Write access
+- **With an API key** (pasted on the "Connect to tr-engine" screen or in **Settings → API key**), it sends `Authorization: Bearer <key>` on every request. The key is stored in this browser's localStorage only.
+- **Without a key**, it uses tr-engine's **anonymous access policy**. When the policy is `listen`, visitors browse read-only; when it is `off` (the default on a fresh install), the dashboard asks for a key.
 
-- **open** — edits allowed without credentials.
-- **full** — editors and admins can write after login. Viewers are read-only unless they still have a legacy write token saved in Settings.
-- **Legacy `WRITE_TOKEN`** — still accepted by tr-engine during deprecation. Users can store it under **Settings → Write Access** (localStorage). Prefer JWT roles or `tre_...` API keys for new deployments.
+What a key can do depends on its scope:
 
-### Reverse proxy setup
+| Scope | In the dashboard |
+|-------|------------------|
+| `listen` | Browse, search, live events and audio |
+| `edit` | Also edit talkgroup and unit tags, review unit tag suggestions |
+| `admin` | Also the Admin page (maintenance, merges, CSV imports) and the **Access** page |
+| `upload` only | Rejected: an upload key is for trunk-recorder, not a dashboard |
 
-If your proxy injects a public read token, **do not overwrite** a browser-sent `Authorization` header (JWT login, user-entered token, or API key). Prefer conditional injection.
+Keys and the anonymous policy can be **restricted** to some systems or talkgroups. The dashboard then hides what tr-engine can't serve under a restriction (units, affiliations, recorders, stats) and shows everything else, limited to the allowed talkgroups.
 
-**Caddy example** (tr-engine listens on **8080**):
+`EventSource` and `<audio>` can't send headers, so with a key the dashboard mints a short-lived, listen-only **ticket** (`POST /api/v1/tickets`) right before it opens the event stream or sets an audio `src`, and puts it in `?ticket=`. The key itself never appears in a URL.
 
-```caddyfile
-handle /api/* {
-    @no_auth not header Authorization *
-    request_header @no_auth Authorization "Bearer {$TR_AUTH_TOKEN}"
-    reverse_proxy tr-engine:8080 {
-        flush_interval -1
-    }
-}
+### Getting a key
+
+On the engine host:
+
+```bash
+tr-engine keys create --name "tr-dashboard at home" --scopes edit
+# Docker: docker compose exec -T tr-engine tr-engine keys create --name "tr-dashboard at home" --scopes edit
 ```
 
-**Nginx example:**
+The first start of a new tr-engine prints a `bootstrap admin` key to its log. Paste it into the dashboard, create a named admin key for yourself on the **Access** page, switch to it in Settings, and revoke `bootstrap admin`.
 
-```nginx
-location /api/ {
-    # Only set auth header if not provided by the browser
-    set $auth "Bearer your-read-token";
-    if ($http_authorization) {
-        set $auth $http_authorization;
-    }
-    proxy_set_header Authorization $auth;
-    proxy_pass http://tr-engine:8080;
-    proxy_buffering off;  # required for SSE /api/v1/events/stream
-}
-```
+### Access page (admin keys)
+
+`/access` lists, creates, edits and revokes API keys (the full key is shown once, when it is created), edits the anonymous access policy (off or listen, optionally limited to some systems or talkgroups, with talkgroups to exclude), and shows the audit log of changes made with keys.
+
+### Public dashboards
+
+To let anyone browse your dashboard, set tr-engine's anonymous access policy to `listen` (Access page, or `tr-engine access set --anonymous listen`), optionally restricted. **Don't** make a reverse proxy add a key to visitors' requests, and don't build a key into a page other people load: a key that reaches other people's browsers is public, and every visitor gets its access. Your proxy should only route `/api/*` to tr-engine.
+
+### Upgrading from AUTH_TOKEN / WRITE_TOKEN / logins
+
+- Remove any `Authorization` header injection from your Caddy/nginx config (older versions of this README suggested it).
+- A write token saved in Settings by an older dashboard is tried once as an API key: tr-engine imports `WRITE_TOKEN` (and a token-mode `AUTH_TOKEN`) as legacy keys on its first start. If the engine doesn't accept it, it is dropped quietly. Replace legacy keys with named keys.
+- The login page and the Users page are gone; give each person or client its own API key instead.
+
+See tr-engine's `docs/auth.md` and `docs/migrating-auth.md` for the engine side.
 
 ## Keyboard Shortcuts
 

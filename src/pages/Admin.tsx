@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -16,7 +17,11 @@ import {
   getMaintenanceStatus,
   runMaintenance,
   isMissingEndpoint,
+  isUnavailable,
+  describeError,
 } from '@/api/client'
+import { useIsAdmin } from '@/stores/useAuthStore'
+import { EmptyState } from '@/components/ui/empty-state'
 import type {
   System,
   Talkgroup,
@@ -25,10 +30,30 @@ import type {
   MaintenanceStatusResponse,
 } from '@/api/types'
 
+// Everything on this page (maintenance, merges, CSV imports) needs the admin scope
 export default function Admin() {
+  const isAdmin = useIsAdmin()
+  if (!isAdmin) {
+    return (
+      <EmptyState
+        title="Admin needs an admin key"
+        description="Maintenance, system merges and CSV imports need an API key with the admin scope."
+        action={
+          <Link to="/settings" className="text-sm text-primary hover:underline">
+            Use a different key in Settings
+          </Link>
+        }
+      />
+    )
+  }
+  return <AdminPage />
+}
+
+function AdminPage() {
   const [systems, setSystems] = useState<System[]>([])
   const [maintenance, setMaintenance] = useState<MaintenanceStatusResponse | null>(null)
   const [maintenanceRunning, setMaintenanceRunning] = useState(false)
+  const [maintenanceError, setMaintenanceError] = useState<string | null>(null)
 
   useEffect(() => {
     getSystems().then((res) => setSystems(res.systems)).catch(console.error)
@@ -37,12 +62,14 @@ export default function Admin() {
 
   const handleRunMaintenance = async () => {
     setMaintenanceRunning(true)
+    setMaintenanceError(null)
     try {
       await runMaintenance()
       const updated = await getMaintenanceStatus()
       setMaintenance(updated)
     } catch (err) {
       console.error('Maintenance run failed:', err)
+      setMaintenanceError(describeError(err, 'Maintenance run failed.'))
     } finally {
       setMaintenanceRunning(false)
     }
@@ -59,6 +86,7 @@ export default function Admin() {
         maintenance={maintenance}
         running={maintenanceRunning}
         onRun={handleRunMaintenance}
+        error={maintenanceError}
       />
       <Separator />
       <SystemMergeSection systems={systems} />
@@ -82,10 +110,12 @@ function MaintenanceSection({
   maintenance,
   running,
   onRun,
+  error,
 }: {
   maintenance: MaintenanceStatusResponse | null
   running: boolean
   onRun: () => void
+  error: string | null
 }) {
   return (
     <Card>
@@ -101,6 +131,7 @@ function MaintenanceSection({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {error && <p className="text-sm text-destructive">{error}</p>}
         {maintenance?.config && (
           <div>
             <p className="text-sm font-medium mb-2">Retention Settings</p>
@@ -184,7 +215,7 @@ function SystemMergeSection({ systems }: { systems: System[] }) {
       })
       setResult(res)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Merge failed')
+      setError(describeError(err, 'Merge failed'))
     } finally {
       setMerging(false)
     }
@@ -352,7 +383,7 @@ function TalkgroupEditSection() {
                     </div>
                     <div className="flex items-center gap-2">
                       {status === 'saved' && <span className="text-xs text-success">Saved</span>}
-                      {status === 'forbidden' && <span className="text-xs text-destructive">Write token required. Add it in Settings → Write Access.</span>}
+                      {status === 'forbidden' && <span className="text-xs text-destructive">Your key can't do this (needs edit).</span>}
                       {status === 'error' && <span className="text-xs text-destructive">Error</span>}
                       {isEditing ? (
                         <div className="flex gap-1">
@@ -446,7 +477,7 @@ function UnitEditSection() {
     if (!search.trim()) return
     setLoading(true)
     getUnits({ search, limit: 20 })
-      .then((res) => setUnits(res.units || []))
+      .then((res) => setUnits(isUnavailable(res) ? [] : res.units || []))
       .catch(console.error)
       .finally(() => setLoading(false))
   }
@@ -522,7 +553,7 @@ function UnitEditSection() {
                   </div>
                   <div className="flex items-center gap-2">
                     {status === 'saved' && <span className="text-xs text-success">Saved</span>}
-                    {status === 'forbidden' && <span className="text-xs text-destructive">Write token required. Add it in Settings → Write Access.</span>}
+                    {status === 'forbidden' && <span className="text-xs text-destructive">Your key can't do this (needs edit).</span>}
                     {status === 'error' && <span className="text-xs text-destructive">Error</span>}
                     {isEditing ? (
                       <div className="flex gap-1">
@@ -567,15 +598,9 @@ function plural(n: number, word: string): string {
 }
 
 function importErrorMessage(err: unknown): string {
-  const status = err instanceof Error && 'status' in err ? (err as { status: number }).status : 0
-  // 401: no credentials sent (token mode without a write token); 403: read-only credentials
-  if (status === 401 || status === 403) {
-    return 'Write token required. Add it in Settings → Write Access.'
-  }
-  // Prefer the server's message (e.g. "system_id 5 not found", "CSV contains no valid ...")
-  const serverMsg = (err as { data?: { error?: unknown } } | null)?.data?.error
-  if (typeof serverMsg === 'string' && serverMsg) return serverMsg
-  return err instanceof Error ? err.message : 'Import failed'
+  // Auth errors explain themselves ("Your key can't do this (needs admin)");
+  // otherwise prefer the server's message (e.g. "system_id 5 not found")
+  return describeError(err, err instanceof Error ? err.message : 'Import failed')
 }
 
 function TalkgroupDirectoryImportSection({ systems }: { systems: System[] }) {

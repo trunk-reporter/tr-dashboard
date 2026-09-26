@@ -13,6 +13,7 @@ import {
   type CallQueryParams,
   type TalkgroupQueryParams,
   type UnitTagSuggestionQueryParams,
+  type Unavailable,
 } from '@/api/client'
 import type {
   Call,
@@ -90,7 +91,8 @@ let unitTagSuggestionsMissing = false
 export const unitTagSuggestionService = {
   /** True once the engine has shown it has no unit tag suggestions API: hide the feature and don't request it again. */
   isUnavailable: (): boolean => unitTagSuggestionsMissing,
-  list: async (params?: UnitTagSuggestionQueryParams): Promise<UnitTagSuggestionListResponse> => {
+  /** Unavailable (without a request) for restricted credentials: the endpoint denies them */
+  list: async (params?: UnitTagSuggestionQueryParams): Promise<UnitTagSuggestionListResponse | Unavailable> => {
     try {
       return await getUnitTagSuggestions(params)
     } catch (err) {

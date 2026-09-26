@@ -4,7 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Pagination } from '@/components/ui/pagination'
-import { getUnitAffiliations, getSystems } from '@/api/client'
+import { getUnitAffiliations, getSystems, isUnavailable } from '@/api/client'
+import { useRestricted } from '@/stores/useAuthStore'
+import { RestrictedNotice } from '@/components/ui/restricted-notice'
 import type { Affiliation, System } from '@/api/types'
 import { formatRelativeTime, formatUnitId } from '@/lib/utils'
 import { useFilterStore } from '@/stores/useFilterStore'
@@ -20,6 +22,8 @@ export default function Affiliations() {
   const [loading, setLoading] = useState(true)
   const unitIdHex = useFilterStore((s) => s.unitIdHex)
   const [talkgroupCounts, setTalkgroupCounts] = useState<Record<string, number>>({})
+  // Affiliations deny restricted credentials: nothing is fetched or polled
+  const restricted = useRestricted()
 
   const page = parseInt(searchParams.get('page') || '1', 10)
   const pageSize = parseInt(searchParams.get('size') || String(DEFAULT_PAGE_SIZE), 10)
@@ -43,6 +47,7 @@ export default function Affiliations() {
       offset,
     })
       .then((res) => {
+        if (isUnavailable(res)) return
         setAffiliations(res.affiliations || [])
         setTotalCount(res.total)
         setTalkgroupCounts(res.summary?.talkgroup_counts || {})
@@ -52,12 +57,13 @@ export default function Affiliations() {
   }, [systemFilter, statusFilter, pageSize, offset])
 
   useEffect(() => {
+    if (restricted) return
     setLoading(true)
     fetchAffiliations()
 
     const interval = setInterval(fetchAffiliations, POLL_INTERVAL)
     return () => clearInterval(interval)
-  }, [fetchAffiliations])
+  }, [fetchAffiliations, restricted])
 
   const updateParam = useCallback(
     (key: string, value: string) => {
@@ -98,6 +104,10 @@ export default function Affiliations() {
   const topTalkgroups = Object.entries(talkgroupCounts)
     .sort(([, a], [, b]) => b - a)
     .slice(0, 10)
+
+  if (restricted) {
+    return <RestrictedNotice what="Affiliations" />
+  }
 
   return (
     <div className="space-y-6">

@@ -32,10 +32,10 @@ Tests are expected when code introduces parsing, filtering, sorting, state-machi
 
 Use the smallest checklist that covers the changed behavior. Include the checked items in the issue or PR.
 
-- Auth: verify open, token, and full-login paths relevant to the change; auth-init failures must show a visible user-facing error instead of a blank screen.
-- SSE: verify `/api/v1/events/stream` connects through the configured proxy, reconnects after interruption, and exposes connection loss in the UI where live state depends on it.
-- Live audio: verify playback start, blocked-autoplay recovery, stream or file load errors, retry behavior, and visible failure messaging.
-- Reverse proxy: verify `/api/*`, `/audio/*`, and `/health/*` route to `tr-engine`; verify SSE proxy buffering is disabled for the event stream.
+- Auth: verify the `/whoami` paths relevant to the change: anonymous access `off` (key screen), `listen` and restricted (browse; Deny-endpoint features hidden, no errors), a valid `listen`/`edit`/`admin` key, a rejected key, an upload-only key (refused), and an engine without `/whoami` (upgrade notice). Whoami failures must show a visible user-facing error instead of a blank screen.
+- SSE: verify `/api/v1/events/stream` connects through the configured proxy (with `?ticket=` when a key is stored, never the key itself), reconnects after interruption with a fresh ticket and `last_event_id`, and exposes connection loss in the UI where live state depends on it.
+- Live audio: verify playback start (audio URL from `API_BASE`, ticket added right before `src` when a key is stored), blocked-autoplay recovery, stream or file load errors, the one-time ticket re-mint on a media error, retry behavior, and visible failure messaging.
+- Reverse proxy: verify `/api/*`, `/audio/*`, and `/health/*` route to `tr-engine` and that the proxy adds no `Authorization` header; verify SSE proxy buffering is disabled for the event stream.
 - Generated API types: verify frontend request/response code uses `src/api/generated.ts` types rather than hand-written copies when a generated type exists.
 - Responsive UI: verify the affected route at mobile and desktop widths, with no clipped button text, overlapping controls, or unusable fixed panels.
 
@@ -44,7 +44,7 @@ Use the smallest checklist that covers the changed behavior. Include the checked
 Realtime, audio, and auth failures must be visible to users and debuggable by maintainers. New work in those areas should provide:
 
 - Visible connection state for live data or audio when the page depends on it.
-- Actionable error surfaces for auth-init, login, SSE, API fetch, and audio playback failures.
+- Actionable error surfaces for whoami, key entry, SSE, API fetch, and audio playback failures.
 - Console logs only as supplemental diagnostics, not as the only error signal.
 - Version/build metadata where a maintainer can find it, using existing version surfaces before adding new ones.
 - A path to collect a debug report or enough IDs, timestamps, and URLs for a maintainer to correlate with `tr-engine` logs.
@@ -57,7 +57,7 @@ Every implementation issue should end with a verification block like:
 Verification:
 - npm run lint
 - npm run build
-- Manual: auth-init failure shows an error banner; SSE reconnect indicator tested through Caddy.
+- Manual: whoami failure shows an error screen; SSE reconnect indicator tested through Caddy.
 ```
 
 If a gate cannot run, record the blocker, the risk, and the narrower check that was run instead.

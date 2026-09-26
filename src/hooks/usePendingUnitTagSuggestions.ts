@@ -1,6 +1,7 @@
 import type { UnitTagSuggestionQueryParams } from '@/api/client'
 import { useApiQuery } from '@/api/query'
 import { queryKeys, unitTagSuggestionService } from '@/api/services'
+import { useRestricted } from '@/stores/useAuthStore'
 
 // Only the total is needed
 const PENDING_PARAMS: UnitTagSuggestionQueryParams = { status: 'pending', limit: 1 }
@@ -10,12 +11,14 @@ const PENDING_PARAMS: UnitTagSuggestionQueryParams = { status: 'pending', limit:
  * status). It also probes for the API: on engines without it (tr-engine before
  * v0.10) the first 404 marks it unavailable (unitTagSuggestionService.isUnavailable)
  * and it isn't requested again this page load. Callers sharing it share one
- * cached request.
+ * cached request. Not requested for restricted credentials, which the
+ * endpoint denies.
  */
 export function usePendingUnitTagSuggestions(enabled = true) {
+  const restricted = useRestricted()
   return useApiQuery(
     queryKeys.unitTagSuggestions.list(PENDING_PARAMS),
     () => unitTagSuggestionService.list(PENDING_PARAMS),
-    { staleTime: 60_000, enabled: enabled && !unitTagSuggestionService.isUnavailable() }
+    { staleTime: 60_000, enabled: enabled && !restricted && !unitTagSuggestionService.isUnavailable() }
   )
 }

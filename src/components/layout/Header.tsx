@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -6,7 +5,6 @@ import { useRealtimeStore } from '@/stores/useRealtimeStore'
 import { useMonitorStore } from '@/stores/useMonitorStore'
 import { useAudioStore } from '@/stores/useAudioStore'
 import { useAuthStore } from '@/stores/useAuthStore'
-import { getHealth, logoutApi } from '@/api/client'
 import { formatDecodeRate, isNewerVersion } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { useUpdateStore } from '@/stores/useUpdateStore'
@@ -32,18 +30,15 @@ export function Header({ onToggleSidebar, onOpenCommand }: HeaderProps) {
   const latestVersion = useUpdateStore((s) => s.latestVersion)
   const updateUrl = useUpdateStore((s) => s.updateUrl)
 
-  const user = useAuthStore((s) => s.user)
-  const clearAuth = useAuthStore((s) => s.clearAuth)
-  const authState = useAuthStore((s) => s.authState)
-
-  const [apiVersion, setApiVersion] = useState<string | null>(null)
-
-  // Fetch API version on mount
-  useEffect(() => {
-    getHealth()
-      .then((health) => setApiVersion(health.version ?? null))
-      .catch(() => setApiVersion(null))
-  }, [])
+  const whoami = useAuthStore((s) => s.whoami)
+  const apiVersion = whoami?.version || null
+  const key = whoami?.key ?? null
+  // Highest scope the credential has, for the header badge
+  const accessLabel = whoami?.scopes.includes('admin')
+    ? 'admin'
+    : whoami?.scopes.includes('edit')
+      ? 'edit'
+      : 'listen'
 
   const activeCallCount = activeCalls.size
   const monitoredCount = monitoredTalkgroups.size
@@ -218,57 +213,32 @@ export function Header({ onToggleSidebar, onOpenCommand }: HeaderProps) {
             </span>
           </Badge>
 
-          {!user && authState === 'guest' && (
-            <div className="flex items-center gap-2 ml-1 border-l border-border pl-3">
+          <div className="flex items-center gap-2 ml-1 border-l border-border pl-3">
+            {key ? (
+              <button
+                onClick={() => navigate('/settings')}
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+                title={`API key ${key.prefix} — manage in Settings`}
+                data-testid="header-key"
+              >
+                <span className="hidden sm:inline max-w-[140px] truncate">{key.name}</span>
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                  {accessLabel}{whoami?.restricted ? ' · restricted' : ''}
+                </Badge>
+              </button>
+            ) : (
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-7 px-2 text-muted-foreground hover:text-foreground"
-                onClick={() => navigate('/login')}
-                title="Sign in for write access"
+                onClick={() => navigate('/settings')}
+                title="Browsing without a key. Add an API key in Settings for more access."
+                data-testid="header-add-key"
               >
-                Sign in
+                Add API key
               </Button>
-            </div>
-          )}
-
-          {user && (
-            <div className="flex items-center gap-2 ml-1 border-l border-border pl-3">
-              <span className="text-sm text-muted-foreground hidden sm:inline">
-                {user.username}
-              </span>
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                {user.role}
-              </Badge>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-muted-foreground hover:text-foreground"
-                onClick={async () => {
-                  await logoutApi()
-                  clearAuth()
-                  navigate('/login')
-                }}
-                title="Sign out"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                  <polyline points="16 17 21 12 16 7" />
-                  <line x1="21" x2="9" y1="12" y2="12" />
-                </svg>
-              </Button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </header>

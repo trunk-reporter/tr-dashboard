@@ -41,9 +41,19 @@ import type {
   UnitTagSuggestionApprove,
   UnitTagSuggestionApproveResponse,
   UnitTagSuggestionDismissResponse,
+  APIKey,
+  APIKeyCreate,
+  APIKeyCreated,
+  APIKeyPatch,
+  APIKeyListResponse,
+  AnonymousAccess,
+  AnonymousAccessUpdate,
+  AuditLogResponse,
+  Ticket,
 } from './types'
 
-import { useAuthStore, type AuthUser } from '@/stores/useAuthStore'
+import type { components } from './generated'
+import { useAuthStore } from '@/stores/useAuthStore'
 
 declare global {
   interface Window {
@@ -52,7 +62,8 @@ declare global {
 }
 
 export const API_BASE = window.__env?.VITE_API_BASE || import.meta.env.VITE_API_BASE || '/api/v1'
-const WRITE_METHODS = new Set(['POST', 'PATCH', 'PUT', 'DELETE'])
+
+type ErrorCode = components['schemas']['Error']['code']
 
 class ApiError extends Error {
   constructor(
@@ -62,6 +73,12 @@ class ApiError extends Error {
   ) {
     super(message)
     this.name = 'ApiError'
+  }
+
+  /** The engine's machine-readable error code, when the body carried one */
+  get code(): ErrorCode | undefined {
+    const code = (this.data as { code?: unknown } | undefined)?.code
+    return typeof code === 'string' ? (code as ErrorCode) : undefined
   }
 }
 
@@ -75,23 +92,74 @@ export function isMissingEndpoint(err: unknown): boolean {
   return typeof (err.data as { error?: unknown } | undefined)?.error !== 'string'
 }
 
-// Decode JWT expiry without a library — just base64-decode the payload
-function isTokenExpiringSoon(token: string, thresholdMs = 5 * 60 * 1000): boolean {
-  try {
-    const payload = token.split('.')[1]
-    if (!payload) return true
-    const decoded = JSON.parse(atob(payload))
-    if (!decoded.exp) return false
-    return decoded.exp * 1000 - Date.now() < thresholdMs
-  } catch {
-    // Malformed token — treat as expiring to force a refresh attempt
-    return true
+/** The scope named in an insufficient_scope message ("this operation needs the edit scope") */
+function neededScope(data: unknown): string | null {
+  const text = (data as { error?: unknown } | undefined)?.error
+  if (typeof text !== 'string') return null
+  const needs = text.match(/\b(?:needs?|requires?)\s+(?:the\s+)?["'`]?(admin|edit|listen|upload)\b/i)
+  if (needs) return needs[1].toLowerCase()
+  // Otherwise the last scope mentioned ("key has listen, operation wants edit")
+  const all = text.match(/\b(admin|edit|listen|upload)\b/gi)
+  return all ? all[all.length - 1].toLowerCase() : null
+}
+
+/**
+ * User-facing message for an auth error from the engine, or null for other
+ * errors. Pages show ApiError.message, so these read as explanations rather
+ * than HTTP status texts.
+ */
+function authErrorMessage(data: unknown): string | null {
+  const code = (data as { code?: unknown } | undefined)?.code
+  switch (code) {
+    case 'key_required':
+      return 'This needs an API key. Add one in Settings.'
+    case 'invalid_key':
+      return 'tr-engine rejected the API key (unknown, revoked or expired).'
+    case 'invalid_ticket':
+      return 'The streaming ticket was rejected; reload to get a new one.'
+    case 'insufficient_scope': {
+      const scope = neededScope(data)
+      return scope ? `Your key can't do this (needs ${scope}).` : "Your key can't do this."
+    }
+    case 'restricted_credential':
+      return "Not available: your access is limited to some systems or talkgroups."
+    default:
+      return null
   }
 }
 
-// Flag to prevent infinite refresh loops
-let isRefreshing = false
-let refreshPromise: Promise<boolean> | null = null
+/**
+ * Message for showing a failed request: the auth explanation for auth errors
+ * ("Your key can't do this (needs edit)"), else the engine's error text,
+ * else `fallback`.
+ */
+export function describeError(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) {
+    if (authErrorMessage(err.data)) return err.message
+    const text = (err.data as { error?: unknown } | undefined)?.error
+    if (typeof text === 'string' && text) return text
+  }
+  return fallback
+}
+
+/**
+ * Called on a 401 that means the credential itself is wrong (invalid_key), or
+ * that anonymous access went away while browsing without a key (key_required).
+ * Registered by api/auth.ts, which re-runs /whoami and shows the key screen;
+ * kept as a hook so this module doesn't import auth.ts.
+ */
+let authFailureHandler: (() => void) | null = null
+export function onAuthFailure(handler: () => void): void {
+  authFailureHandler = handler
+}
+
+function handleAuthFailure(err: ApiError): void {
+  if (err.status !== 401 || !authFailureHandler) return
+  const hasKey = !!useAuthStore.getState().apiKey
+  if (err.code === 'invalid_key' || (err.code === 'key_required' && !hasKey)) {
+    authFailureHandler()
+  }
+}
 
 async function request<T>(
   endpoint: string,
@@ -101,37 +169,15 @@ async function request<T>(
   const headers: Record<string, string> = {}
 
   // Let the browser set Content-Type for FormData (multipart boundary);
-  // otherwise default to JSON.
-  if (!(options?.body instanceof FormData)) {
+  // otherwise JSON bodies.
+  if (options?.body !== undefined && !(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json'
   }
 
-  // Proactively refresh token if it expires within 5 minutes
-  let { accessToken, writeToken, readToken } = useAuthStore.getState()
-  if (accessToken && isTokenExpiringSoon(accessToken)) {
-    const refreshed = await attemptRefresh()
-    if (refreshed) {
-      accessToken = useAuthStore.getState().accessToken
-    }
-  }
-
-  const method = (options?.method || 'GET').toUpperCase()
-
-  if (accessToken) {
-    // For write operations, prefer the write token if the JWT user is a viewer
-    // (viewers can't write via JWT, but the legacy write token grants admin access)
-    const userRole = useAuthStore.getState().user?.role
-    if (WRITE_METHODS.has(method) && writeToken && userRole === 'viewer') {
-      headers['Authorization'] = `Bearer ${writeToken}`
-    } else {
-      headers['Authorization'] = `Bearer ${accessToken}`
-    }
-  } else if (writeToken) {
-    // No JWT — write token has both read and write access
-    headers['Authorization'] = `Bearer ${writeToken}`
-  } else if (!WRITE_METHODS.has(method) && readToken) {
-    // No JWT, no write token, read operation — use read token from auth-init (guest access)
-    headers['Authorization'] = `Bearer ${readToken}`
+  // The key goes only in this header; nothing is sent without one.
+  const { apiKey } = useAuthStore.getState()
+  if (apiKey) {
+    headers['Authorization'] = `Bearer ${apiKey}`
   }
 
   const response = await fetch(url, {
@@ -142,32 +188,6 @@ async function request<T>(
     },
   })
 
-  // Handle 401: attempt token refresh, retry once
-  if (response.status === 401 && accessToken && !isRefreshing) {
-    const refreshed = await attemptRefresh()
-    if (refreshed) {
-      // Retry the original request with new token
-      const newToken = useAuthStore.getState().accessToken
-      const retryHeaders: Record<string, string> = { ...headers, ...(options?.headers as Record<string, string>) }
-      if (newToken) {
-        retryHeaders['Authorization'] = `Bearer ${newToken}`
-      }
-      const retryResponse = await fetch(url, {
-        ...options,
-        headers: retryHeaders,
-      })
-      if (!retryResponse.ok) {
-        let data: unknown
-        try { data = await retryResponse.json() } catch { /* ignore */ }
-        throw new ApiError(retryResponse.status, `API error: ${retryResponse.statusText}`, data)
-      }
-      return retryResponse.json()
-    }
-    // Refresh failed — clear auth and let RequireAuth handle the redirect
-    useAuthStore.getState().clearAuth()
-    throw new ApiError(401, 'session expired')
-  }
-
   if (!response.ok) {
     let data: unknown
     try {
@@ -175,10 +195,51 @@ async function request<T>(
     } catch {
       // ignore parse error
     }
-    throw new ApiError(response.status, `API error: ${response.statusText}`, data)
+    const err = new ApiError(response.status, authErrorMessage(data) ?? `API error: ${response.statusText}`, data)
+    handleAuthFailure(err)
+    throw err
   }
 
+  if (response.status === 204) {
+    return undefined as T
+  }
   return response.json()
+}
+
+// =============================================================================
+// Restricted credentials
+// =============================================================================
+
+/**
+ * Result of an API function for an endpoint that denies restricted
+ * credentials (`x-restricted: deny`: units, stats, recorders, ...). While
+ * whoami.restricted is true these functions return it without calling the
+ * engine; a 403 restricted_credential (the policy changed under us) also
+ * becomes this result.
+ */
+export interface Unavailable {
+  readonly unavailable: true
+  readonly reason: 'restricted'
+}
+
+export const UNAVAILABLE: Unavailable = Object.freeze({ unavailable: true, reason: 'restricted' })
+
+export function isUnavailable(value: unknown): value is Unavailable {
+  return typeof value === 'object' && value !== null && (value as { unavailable?: unknown }).unavailable === true
+}
+
+/** request() for an `x-restricted: deny` endpoint */
+async function denyRequest<T>(endpoint: string, options?: RequestInit): Promise<T | Unavailable> {
+  if (useAuthStore.getState().restricted) return UNAVAILABLE
+  try {
+    return await request<T>(endpoint, options)
+  } catch (err) {
+    if (err instanceof ApiError && err.code === 'restricted_credential') {
+      authFailureHandler?.()
+      return UNAVAILABLE
+    }
+    throw err
+  }
 }
 
 function buildQueryString(params: object): string {
@@ -190,106 +251,6 @@ function buildQueryString(params: object): string {
   }
   const query = searchParams.toString()
   return query ? `?${query}` : ''
-}
-
-// =============================================================================
-// Auth
-// =============================================================================
-
-export async function login(username: string, password: string): Promise<{ access_token: string; user: AuthUser }> {
-  const response = await fetch(`${API_BASE}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ username, password }),
-  })
-  if (!response.ok) {
-    let data: unknown
-    try { data = await response.json() } catch { /* ignore */ }
-    throw new ApiError(response.status, `Login failed: ${response.statusText}`, data)
-  }
-  return response.json()
-}
-
-export async function refreshAuth(): Promise<{ access_token: string; user: AuthUser } | null> {
-  try {
-    const response = await fetch(`${API_BASE}/auth/refresh`, {
-      method: 'POST',
-      credentials: 'include',
-    })
-    if (!response.ok) {
-      // Expected statuses: session expired / revoked / not found
-      if (response.status === 401 || response.status === 403 || response.status === 404) {
-        return null
-      }
-      // Unexpected server error — log it
-      console.error(`refreshAuth: unexpected ${response.status} ${response.statusText}`)
-      return null
-    }
-    return response.json()
-  } catch (err) {
-    // Network error (offline, DNS failure, etc.)
-    console.error('refreshAuth: network error', err)
-    return null
-  }
-}
-
-export async function setupFirstUser(username: string, password: string): Promise<{ access_token: string; user: AuthUser }> {
-  const response = await fetch(`${API_BASE}/auth/setup`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ username, password }),
-  })
-  if (!response.ok) {
-    let data: unknown
-    try { data = await response.json() } catch { /* ignore */ }
-    throw new ApiError(response.status, `Setup failed: ${response.statusText}`, data)
-  }
-  return response.json()
-}
-
-export async function checkNeedsSetup(): Promise<boolean> {
-  try {
-    const response = await fetch(`${API_BASE}/auth/setup`)
-    if (!response.ok) return false
-    const data = await response.json()
-    return data.needs_setup === true
-  } catch {
-    return false
-  }
-}
-
-export async function logoutApi(): Promise<void> {
-  try {
-    await fetch(`${API_BASE}/auth/logout`, {
-      method: 'POST',
-      credentials: 'include',
-    })
-  } catch {
-    // ignore — we're clearing local state regardless
-  }
-}
-
-async function attemptRefresh(): Promise<boolean> {
-  if (refreshPromise) return refreshPromise
-
-  isRefreshing = true
-  refreshPromise = (async () => {
-    const result = await refreshAuth()
-    if (result) {
-      useAuthStore.getState().setAuth(result.access_token, result.user)
-      return true
-    }
-    return false
-  })()
-
-  try {
-    return await refreshPromise
-  } finally {
-    isRefreshing = false
-    refreshPromise = null
-  }
 }
 
 // =============================================================================
@@ -324,8 +285,8 @@ export async function updateSystem(id: number, patch: SystemPatch): Promise<Syst
   })
 }
 
-export async function getP25Systems(): Promise<P25SystemListResponse> {
-  return request('/p25-systems')
+export async function getP25Systems(): Promise<P25SystemListResponse | Unavailable> {
+  return denyRequest('/p25-systems')
 }
 
 export async function getSite(id: number): Promise<Site> {
@@ -390,14 +351,14 @@ export async function getTalkgroupUnits(
     limit?: number
     offset?: number
   }
-): Promise<UnitListResponse> {
-  return request(`/talkgroups/${id}/units${buildQueryString(params ?? {})}`)
+): Promise<UnitListResponse | Unavailable> {
+  return denyRequest(`/talkgroups/${id}/units${buildQueryString(params ?? {})}`)
 }
 
 export async function getEncryptionStats(
   params?: { hours?: number; sysid?: string }
-): Promise<EncryptionStatsResponse> {
-  return request(`/talkgroups/encryption-stats${buildQueryString(params ?? {})}`)
+): Promise<EncryptionStatsResponse | Unavailable> {
+  return denyRequest(`/talkgroups/encryption-stats${buildQueryString(params ?? {})}`)
 }
 
 export async function getTalkgroupDirectory(
@@ -443,12 +404,12 @@ export interface UnitQueryParams {
   offset?: number
 }
 
-export async function getUnits(params?: UnitQueryParams): Promise<UnitListResponse> {
-  return request(`/units${buildQueryString(params ?? {})}`)
+export async function getUnits(params?: UnitQueryParams): Promise<UnitListResponse | Unavailable> {
+  return denyRequest(`/units${buildQueryString(params ?? {})}`)
 }
 
-export async function getUnit(id: string | number): Promise<Unit> {
-  return request(`/units/${id}`)
+export async function getUnit(id: string | number): Promise<Unit | Unavailable> {
+  return denyRequest(`/units/${id}`)
 }
 
 export async function updateUnit(id: string | number, patch: UnitPatch): Promise<Unit> {
@@ -481,8 +442,8 @@ export async function getUnitCalls(
     limit?: number
     offset?: number
   }
-): Promise<CallListResponse> {
-  return request(`/units/${id}/calls${buildQueryString(params ?? {})}`)
+): Promise<CallListResponse | Unavailable> {
+  return denyRequest(`/units/${id}/calls${buildQueryString(params ?? {})}`)
 }
 
 export async function getUnitEvents(
@@ -495,8 +456,8 @@ export async function getUnitEvents(
     limit?: number
     offset?: number
   }
-): Promise<UnitEventListResponse> {
-  return request(`/units/${id}/events${buildQueryString(params ?? {})}`)
+): Promise<UnitEventListResponse | Unavailable> {
+  return denyRequest(`/units/${id}/events${buildQueryString(params ?? {})}`)
 }
 
 export interface GlobalUnitEventParams {
@@ -515,8 +476,8 @@ export interface GlobalUnitEventParams {
 
 export async function getGlobalUnitEvents(
   params?: GlobalUnitEventParams
-): Promise<UnitEventListResponse> {
-  return request(`/unit-events${buildQueryString(params ?? {})}`)
+): Promise<UnitEventListResponse | Unavailable> {
+  return denyRequest(`/unit-events${buildQueryString(params ?? {})}`)
 }
 
 export interface AffiliationQueryParams {
@@ -533,8 +494,8 @@ export interface AffiliationQueryParams {
 
 export async function getUnitAffiliations(
   params?: AffiliationQueryParams
-): Promise<AffiliationListResponse> {
-  return request(`/unit-affiliations${buildQueryString(params ?? {})}`)
+): Promise<AffiliationListResponse | Unavailable> {
+  return denyRequest(`/unit-affiliations${buildQueryString(params ?? {})}`)
 }
 
 // =============================================================================
@@ -551,12 +512,12 @@ export interface UnitTagSuggestionQueryParams {
 
 export async function getUnitTagSuggestions(
   params?: UnitTagSuggestionQueryParams
-): Promise<UnitTagSuggestionListResponse> {
-  return request(`/unit-tag-suggestions${buildQueryString(params ?? {})}`)
+): Promise<UnitTagSuggestionListResponse | Unavailable> {
+  return denyRequest(`/unit-tag-suggestions${buildQueryString(params ?? {})}`)
 }
 
-export async function getUnitTagSuggestion(id: number): Promise<UnitTagSuggestion> {
-  return request(`/unit-tag-suggestions/${id}`)
+export async function getUnitTagSuggestion(id: number): Promise<UnitTagSuggestion | Unavailable> {
+  return denyRequest(`/unit-tag-suggestions/${id}`)
 }
 
 /** Approve a pending suggestion. Omit `body` to apply `proposed_tag`; pass `alpha_tag` to override it. */
@@ -613,32 +574,14 @@ export async function getCall(id: number): Promise<Call> {
   return request(`/calls/${id}`)
 }
 
-// Security tradeoff: <audio> elements cannot send Authorization headers, so
-// we pass the JWT as a query parameter. This exposes the token in server logs,
-// browser history, and Referrer headers. Mitigated by: read-only scope and
-// 1-hour JWT expiry. Long-term: consider opaque blob URLs or a server-side
-// audio proxy to avoid token-in-URL entirely.
-export function getCallAudioUrl(id: number): string {
-  const base = `${API_BASE}/calls/${id}/audio`
-  const token = urlSafeToken()
-  if (token) {
-    return `${base}?token=${encodeURIComponent(token)}`
-  }
-  return base
-}
-
 /**
- * Credential that may be embedded in a URL (EventSource, <audio src>), which
- * can't carry an Authorization header: the short-lived JWT when logged in,
- * otherwise the full-mode public read token, which auth-init hands to every
- * visitor and is therefore not a secret. A pasted shared token (token mode) is
- * never returned — it would leak into history, Referrer and proxy logs.
+ * The call's audio URL, built from API_BASE (never from the root-relative
+ * `audio_url`, which resolves against the dashboard's origin when
+ * VITE_API_BASE is absolute). It never carries a credential: AudioPlayer adds
+ * a ticket right before setting `src` (see api/tickets.ts).
  */
-export function urlSafeToken(): string {
-  const { accessToken, authMode, readToken } = useAuthStore.getState()
-  if (accessToken) return accessToken
-  if (authMode === 'full' && readToken) return readToken
-  return ''
+export function callAudioUrl(id: number): string {
+  return `${API_BASE}/calls/${id}/audio`
 }
 
 export async function getCallTransmissions(
@@ -718,8 +661,8 @@ export async function searchTranscriptions(
   return request(`/transcriptions/search${buildQueryString({ q, ...params })}`)
 }
 
-export async function getTranscriptionQueueStatus(): Promise<TranscriptionQueueStats> {
-  return request('/transcriptions/queue')
+export async function getTranscriptionQueueStatus(): Promise<TranscriptionQueueStats | Unavailable> {
+  return denyRequest('/transcriptions/queue')
 }
 
 // =============================================================================
@@ -745,23 +688,23 @@ export async function getCallGroup(id: number): Promise<CallGroupDetailResponse>
 // Recorders
 // =============================================================================
 
-export async function getRecorders(): Promise<RecorderListResponse> {
-  return request('/recorders')
+export async function getRecorders(): Promise<RecorderListResponse | Unavailable> {
+  return denyRequest('/recorders')
 }
 
 // =============================================================================
 // Statistics
 // =============================================================================
 
-export async function getStats(): Promise<StatsResponse> {
-  return request('/stats')
+export async function getStats(): Promise<StatsResponse | Unavailable> {
+  return denyRequest('/stats')
 }
 
 export async function getDecodeRates(params?: {
   start_time?: string
   end_time?: string
-}): Promise<DecodeRatesResponse> {
-  return request(`/stats/rates${buildQueryString(params ?? {})}`)
+}): Promise<DecodeRatesResponse | Unavailable> {
+  return denyRequest(`/stats/rates${buildQueryString(params ?? {})}`)
 }
 
 export async function getTalkgroupActivity(params?: {
@@ -773,8 +716,8 @@ export async function getTalkgroupActivity(params?: {
   sort?: string
   limit?: number
   offset?: number
-}): Promise<TalkgroupActivityResponse> {
-  return request(`/stats/talkgroup-activity${buildQueryString(params ?? {})}`)
+}): Promise<TalkgroupActivityResponse | Unavailable> {
+  return denyRequest(`/stats/talkgroup-activity${buildQueryString(params ?? {})}`)
 }
 
 // =============================================================================
@@ -797,38 +740,62 @@ export async function runMaintenance(): Promise<MaintenanceRunResponse> {
 }
 
 // =============================================================================
-// Users (admin)
+// Access: API keys, anonymous access policy, audit log (admin)
 // =============================================================================
 
-export interface UserResponse {
-  id: number
-  username: string
-  role: string
-  enabled: boolean
-  created_at: string
-  updated_at: string
+export async function listKeys(params?: { include_revoked?: boolean }): Promise<APIKeyListResponse> {
+  return request(`/keys${buildQueryString(params ?? {})}`)
 }
 
-export async function getUsers(): Promise<{ users: UserResponse[]; total: number }> {
-  return request('/users')
-}
-
-export async function createUser(data: { username: string; password: string; role: string }): Promise<UserResponse> {
-  return request('/users', {
+export async function createKey(body: APIKeyCreate): Promise<APIKeyCreated> {
+  return request('/keys', {
     method: 'POST',
-    body: JSON.stringify(data),
+    body: JSON.stringify(body),
   })
 }
 
-export async function updateUser(id: number, data: { role?: string; password?: string; enabled?: boolean }): Promise<UserResponse> {
-  return request(`/users/${id}`, {
+export async function updateKey(id: number, patch: APIKeyPatch): Promise<APIKey> {
+  return request(`/keys/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify(data),
+    body: JSON.stringify(patch),
   })
 }
 
-export async function deleteUser(id: number): Promise<void> {
-  await request(`/users/${id}`, { method: 'DELETE' })
+export async function revokeKey(id: number): Promise<void> {
+  await request(`/keys/${id}`, { method: 'DELETE' })
+}
+
+export async function getAnonymousAccess(): Promise<AnonymousAccess> {
+  return request('/anonymous-access')
+}
+
+export async function putAnonymousAccess(body: AnonymousAccessUpdate): Promise<AnonymousAccess> {
+  return request('/anonymous-access', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function getAuditLog(params?: {
+  limit?: number
+  offset?: number
+  key_id?: number
+  since?: string
+  until?: string
+}): Promise<AuditLogResponse> {
+  return request(`/admin/audit-log${buildQueryString(params ?? {})}`)
+}
+
+// =============================================================================
+// Tickets
+// =============================================================================
+
+/** POST /tickets with the stored key. Use getTicket() from api/tickets.ts, which caches. */
+export async function mintTicket(ttlSeconds: number): Promise<Ticket> {
+  return request('/tickets', {
+    method: 'POST',
+    body: JSON.stringify({ ttl_seconds: ttlSeconds }),
+  })
 }
 
 // =============================================================================

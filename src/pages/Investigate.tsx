@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { getCalls, searchTranscriptions } from '@/api/client'
 import type { Call } from '@/api/types'
-import { useAudioStore } from '@/stores/useAudioStore'
+import { useAudioStore, toQueuedCall } from '@/stores/useAudioStore'
 import { useRealtimeStore } from '@/stores/useRealtimeStore'
 import { Timeline } from '@/components/investigate/Timeline'
 import { DetailPanel } from '@/components/investigate/DetailPanel'
@@ -169,16 +169,7 @@ export default function Investigate() {
       // Seed history with earlier calls (most recent first) for previous button
       // Intentionally overwrites the history that loadCall just set — we want
       // talkgroup sequence history, not the previously-playing call
-      setHistory(sorted.slice(0, idx).reverse().map(c => ({
-        id: c.call_id,
-        callId: c.call_id,
-        systemId: c.system_id,
-        systemName: c.system_name,
-        tgid: c.tgid,
-        tgAlphaTag: c.tg_alpha_tag,
-        duration: c.duration ?? 0,
-        audioUrl: c.audio_url!,
-      })))
+      setHistory(sorted.slice(0, idx).reverse().map(toQueuedCall))
     } else {
       loadCall(call)
     }

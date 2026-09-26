@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { getSystem, getTalkgroups, getCalls, getRecorders, getStats, getDecodeRates } from '@/api/client'
+import { getSystem, getTalkgroups, getCalls, getRecorders, getStats, getDecodeRates, isUnavailable } from '@/api/client'
 import type { System, Talkgroup, Call, Recorder, SystemActivity, DecodeRate } from '@/api/types'
 import { useRealtimeStore } from '@/stores/useRealtimeStore'
 import { useAudioStore } from '@/stores/useAudioStore'
@@ -44,25 +44,45 @@ export default function SystemDetail() {
     setLoading(true)
     setError(null)
 
+    let cancelled = false
+    setRecorders([])
+    setActivity(null)
+    setDecodeRateHistory([])
+
+    // The page needs the system, its talkgroups and calls (restriction-enforced)
     Promise.all([
       getSystem(systemId),
       getTalkgroups({ system_id: String(systemId), limit: 1000 }),
       getCalls({ system_id: String(systemId), limit: 25, sort: '-start_time' }),
-      getRecorders(),
-      getStats(),
-      getDecodeRates(),
-    ]).then(([sys, tgRes, callRes, recRes, statsRes, drRes]) => {
+    ]).then(([sys, tgRes, callRes]) => {
+      if (cancelled) return
       setSystem(sys)
       setTalkgroups(tgRes.talkgroups)
       setCalls(callRes.calls)
-      setRecorders(recRes.recorders.filter(r => r.system_id === systemId))
-      setActivity(statsRes.system_activity?.find(a => a.system_id === systemId) ?? null)
-      setDecodeRateHistory((drRes.rates ?? []).filter(r => r.system_id === systemId))
       setLoading(false)
     }).catch(err => {
+      if (cancelled) return
       setError(err.message || 'Failed to load system')
       setLoading(false)
     })
+
+    // Recorders, activity and decode rates are extras: unavailable to
+    // restricted credentials (no request is made) and never fail the page
+    Promise.allSettled([getRecorders(), getStats(), getDecodeRates()])
+      .then(([recRes, statsRes, drRes]) => {
+        if (cancelled) return
+        if (recRes.status === 'fulfilled' && !isUnavailable(recRes.value)) {
+          setRecorders(recRes.value.recorders.filter(r => r.system_id === systemId))
+        }
+        if (statsRes.status === 'fulfilled' && !isUnavailable(statsRes.value)) {
+          setActivity(statsRes.value.system_activity?.find(a => a.system_id === systemId) ?? null)
+        }
+        if (drRes.status === 'fulfilled' && !isUnavailable(drRes.value)) {
+          setDecodeRateHistory((drRes.value.rates ?? []).filter(r => r.system_id === systemId))
+        }
+      })
+
+    return () => { cancelled = true }
   }, [systemId])
 
   // Refresh calls periodically

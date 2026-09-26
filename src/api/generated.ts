@@ -13,7 +13,13 @@ export interface paths {
         };
         /**
          * Health check
-         * @description Returns service health status. No authentication required.
+         * @description Returns service health status. Public: no credential needed.
+         *
+         *     Callers without an unrestricted key get a summary: `status`,
+         *     `version` and each check's status (`checks`). The full body (TR
+         *     instance list, audio stream details including the listen address,
+         *     uptime and the update check) is returned only to a key with
+         *     unrestricted `listen` or better.
          */
         get: operations["getHealth"];
         put?: never;
@@ -24,7 +30,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/auth-init": {
+    "/whoami": {
         parameters: {
             query?: never;
             header?: never;
@@ -32,128 +38,29 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Auth mode discovery
-         * @description Returns the engine's auth mode and any public read token.
-         *     Always available without authentication. Clients use this to
-         *     determine whether to prompt for a token, show a login form,
-         *     or skip auth entirely.
-         */
-        get: operations["getAuthInit"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/auth/setup": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Check whether first-run setup is needed
-         * @description Returns whether the instance has completed first-run admin setup.
-         *     Unauthenticated — always available when JWT auth is configured.
-         *     The dashboard calls this endpoint to decide whether to show the
-         *     admin setup flow or the regular login page.
-         */
-        get: operations["checkAuthSetup"];
-        put?: never;
-        /**
-         * First-run admin creation
-         * @description Creates the first admin user. Only works when zero users exist in the
-         *     database. Rate-limited to 5 attempts per minute per IP. Only available
-         *     when JWT auth is configured (JWT_SECRET or ADMIN_PASSWORD set).
+         * Describe the caller's credential
+         * @description Tells any client what its credential can do. Public: it needs no
+         *     credential, but it reads the `Authorization: Bearer` header when one
+         *     is sent and describes that key. It is not ticket-enabled
+         *     (`?ticket=` is ignored here).
          *
-         *     Uses an atomic INSERT to prevent race conditions where two concurrent
-         *     requests could both create admin users.
+         *     - With a valid key: `credential: "key"`, the key's own record in
+         *       `key`, and the effective scopes in `scopes`.
+         *     - With no credential: `credential: "anonymous"`, `key: null`, and
+         *       `scopes` from the anonymous access policy. Under policy `off` the
+         *       response is still 200, with `scopes: []`.
+         *     - With an unknown, revoked or expired key: 401 `invalid_key`, so a
+         *       client learns at once that its key is bad. It never falls back
+         *       to anonymous.
+         *
+         *     `anonymous` shows every caller only whether anonymous access is on
+         *     and whether it is restricted. The anonymous restriction itself
+         *     (which names talkgroups the operator considers sensitive) is only
+         *     available through the admin `GET /anonymous-access`.
+         *
+         *     Replaces the removed `GET /auth-init` and `GET /auth/me`.
          */
-        post: operations["authSetup"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/auth/login": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * User login
-         * @description Validates credentials and returns a JWT access token. Also sets an
-         *     httpOnly refresh cookie (`tr_refresh_token`). Rate-limited to 5
-         *     attempts per minute per IP.
-         */
-        post: operations["authLogin"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/auth/refresh": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Refresh access token
-         * @description Validates the httpOnly refresh cookie and returns a new JWT access token.
-         *     The refresh token has a 7-day expiry.
-         */
-        post: operations["authRefresh"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/auth/logout": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Logout
-         * @description Clears the refresh cookie. Returns 200 regardless of session state.
-         */
-        post: operations["authLogout"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/auth/me": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Current user info
-         * @description Returns the authenticated user's profile from the database.
-         */
-        get: operations["authMe"];
+        get: operations["getWhoami"];
         put?: never;
         post?: never;
         delete?: never;
@@ -162,7 +69,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/auth/keys": {
+    "/keys": {
         parameters: {
             query?: never;
             header?: never;
@@ -170,17 +77,32 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List own API keys
-         * @description Returns API keys owned by the authenticated user. Requires editor or admin role.
+         * List API keys
+         * @description Returns every API key, ordered by id. Revoked keys are left out
+         *     unless `include_revoked=true`. Plaintext keys are never returned;
+         *     only the display `prefix`.
          */
-        get: operations["listOwnKeys"];
+        get: operations["listKeys"];
         put?: never;
         /**
-         * Create API key
-         * @description Creates a new API key. The plaintext key is returned once in the response
-         *     and cannot be retrieved again. The key's role is capped at the caller's
-         *     own role level — an editor cannot create an admin key.
-         *     Requires editor or admin role.
+         * Create an API key
+         * @description Creates a key and returns it, including the plaintext `key`, which
+         *     is shown **exactly once** and cannot be retrieved again. Only its
+         *     SHA-256 hash is stored.
+         *
+         *     `scopes` holds at most one of `listen`/`edit`/`admin`, optionally
+         *     plus `upload` (for example `["listen"]`, `["edit"]`,
+         *     `["admin","upload"]`, `["upload"]`). `edit` implies `listen` and
+         *     `admin` implies both, so `["listen","edit"]` is rejected. Unknown
+         *     scope strings are rejected.
+         *
+         *     `restriction` is only allowed when `scopes` is exactly `["listen"]`,
+         *     and a key restriction that allows nothing is rejected
+         *     ("restriction allows nothing").
+         *
+         *     **A key that reaches other people's browsers is public.** Only put
+         *     a key into a web page that other people load if you would give
+         *     its access to every visitor.
          */
         post: operations["createKey"];
         delete?: never;
@@ -189,27 +111,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/auth/keys/{id}": {
+    "/keys/{id}": {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                /** @description API key ID */
+                id: components["parameters"]["keyId"];
+            };
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Get an API key
+         * @description Returns one key, including a revoked one.
+         */
+        get: operations["getKey"];
         put?: never;
         post?: never;
         /**
-         * Revoke own API key
-         * @description Deletes an API key owned by the authenticated user. Requires editor or admin role.
+         * Revoke an API key
+         * @description Revokes the key (sets `revoked_at`; the record is kept for the
+         *     audit trail). Idempotent: revoking a revoked key is also 204.
+         *     Requests with the key fail with 401 `invalid_key` from then on, its
+         *     tickets stop verifying, and its open streams close with the
+         *     `invalid_key` signal.
+         *
+         *     **Last-admin guard:** revoking the last active admin key is refused
+         *     with 409 `conflict`. (The `tr-engine keys revoke` CLI is not
+         *     subject to the guard.)
          */
-        delete: operations["deleteOwnKey"];
+        delete: operations["revokeKey"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Change an API key
+         * @description Partially updates a key. An **absent** field is left unchanged; an
+         *     explicit `null` clears `restriction`, `expires_at` or
+         *     `rate_limit_rps`. The plaintext never changes; to rotate a key,
+         *     create a new one and revoke the old one.
+         *
+         *     - Scopes and restriction are validated together, as on create. To
+         *       change the scopes of a restricted `["listen"]` key, send
+         *       `"restriction": null` in the same request.
+         *     - `expires_at` must be in the future.
+         *     - A revoked key cannot be changed (409).
+         *     - **Last-admin guard:** removing `admin` from the last active admin
+         *       key is refused with 409 `conflict`.
+         *
+         *     The change takes effect on the key's next request, and on open
+         *     event streams and audio WebSockets at once: they either pick up the
+         *     new scopes and restriction, or close with a signal when the key no
+         *     longer has `listen`. Outstanding tickets minted by the key are
+         *     verified against its new state.
+         */
+        patch: operations["updateKey"];
         trace?: never;
     };
-    "/auth/keys/all": {
+    "/anonymous-access": {
         parameters: {
             query?: never;
             header?: never;
@@ -217,11 +175,35 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List all API keys
-         * @description Returns all API keys across all users and service accounts. Admin only.
+         * Get the anonymous access policy
+         * @description Returns the policy that decides what a request with **no
+         *     credential** may do, including its restriction lists. Other
+         *     callers only see `{access, restricted}` in `GET /whoami`.
          */
-        get: operations["listAllKeys"];
-        put?: never;
+        get: operations["getAnonymousAccess"];
+        /**
+         * Set the anonymous access policy
+         * @description Replaces the anonymous access policy. **Both keys are required**: a
+         *     missing `restriction` is 400, and an explicit `"restriction": null`
+         *     clears it (unrestricted listening).
+         *
+         *     - `access: "off"` (the default on a fresh install): requests
+         *       without a credential get 401 `key_required` everywhere except
+         *       the public operations.
+         *     - `access: "listen"`: requests without a credential may use the
+         *       `listen` operations (never `x-key-required` ones), limited by
+         *       `restriction` when it is set.
+         *
+         *     A restriction that allows nothing is rejected ("use access: off
+         *     instead"). The restriction is stored even with `access: "off"`, so
+         *     it can be prepared in advance.
+         *
+         *     The change applies to new requests at once. Open anonymous event
+         *     streams and audio WebSockets pick it up at once too: they close
+         *     with the `key_required` signal when access is now `off`, and
+         *     otherwise continue under the new restriction.
+         */
+        put: operations["putAnonymousAccess"];
         post?: never;
         delete?: never;
         options?: never;
@@ -229,7 +211,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/auth/keys/service": {
+    "/tickets": {
         parameters: {
             query?: never;
             header?: never;
@@ -239,86 +221,48 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Create service account key
-         * @description Creates an API key that acts as its own identity, not linked to any user.
-         *     Used for frontend apps, bots, and integrations. Admin only.
+         * Mint a ticket for a URL
+         * @description Mints a short-lived, listen-only, signed **ticket** for the places
+         *     where a browser cannot send an `Authorization` header:
+         *     `EventSource`, `<audio src>` and `WebSocket`. Pass it as
+         *     `?ticket=<ticket>` on the three ticket-enabled operations:
+         *     `GET /events/stream`, `GET /audio/live` and
+         *     `GET /calls/{id}/audio` (and `HEAD` on the same paths). It is
+         *     ignored everywhere else.
+         *
+         *     Requires a **key** with `listen` (via `listen`, `edit` or `admin`):
+         *     anonymous callers get 401 `key_required` whatever the anonymous
+         *     policy says, and upload-only keys get 403 `insufficient_scope`.
+         *     Tickets cannot mint tickets.
+         *
+         *     - `ttl_seconds` is clamped to 60–3600 (default 600).
+         *     - `restriction` optionally **narrows** the ticket below the key's
+         *       own access, for example per end user in a multi-user backend.
+         *       It may hold at most 100 entries in total, and the encoded ticket
+         *       must fit in 2048 bytes; otherwise 400 `invalid_body` "ticket
+         *       restriction too large — narrow by system or mint several
+         *       tickets". A narrowing that allows nothing is accepted: the
+         *       ticket then sees nothing.
+         *     - The ticket stores only the narrowing. Every use applies the
+         *       minting key's **current** state: a revoked, expired or re-scoped
+         *       key invalidates its tickets, and a changed key restriction
+         *       applies to them at once.
+         *
+         *     Tickets are not single-use (audio elements make repeated Range
+         *     requests); a ticket is valid until it expires. An event stream or
+         *     audio WebSocket opened with a ticket is closed when the ticket
+         *     expires, with the `ticket_expired` signal; mint a new ticket and
+         *     reconnect. A single ticket cannot be revoked; stop minting, wait
+         *     for it to expire, or revoke the key.
+         *
+         *     The body is optional; an empty body mints a 600-second ticket with
+         *     no narrowing.
          */
-        post: operations["createServiceAccountKey"];
+        post: operations["createTicket"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
-        trace?: never;
-    };
-    "/auth/keys/{id}/any": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Revoke any API key
-         * @description Deletes any API key by ID regardless of ownership. Admin only.
-         */
-        delete: operations["deleteAnyKey"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/users": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List all users
-         * @description Returns all user accounts. Admin only.
-         */
-        get: operations["listUsers"];
-        put?: never;
-        /**
-         * Create user
-         * @description Creates a new user account. Admin only.
-         */
-        post: operations["createUser"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/users/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Delete user
-         * @description Deletes a user and cascades to their sessions and API keys.
-         *     Admin only. Cannot delete yourself or the last admin user.
-         */
-        delete: operations["deleteUser"];
-        options?: never;
-        head?: never;
-        /**
-         * Update user
-         * @description Partially update a user account (role, password, enabled status).
-         *     Admin only. Cannot demote or disable the last admin user.
-         *     Cannot demote or disable your own account.
-         */
-        patch: operations["updateUser"];
         trace?: never;
     };
     "/systems": {
@@ -802,8 +746,8 @@ export interface paths {
          *     best-effort CSV writeback when `CSV_WRITEBACK` is enabled. The unit's
          *     previous tag and source are recorded on the suggestion
          *     (`previous_tag`, `previous_tag_source`) with `decided_by`/`decided_at`.
-         *     Other suggestions for the same unit are left untouched. Requires write
-         *     access (same as `PATCH /units/{id}`).
+         *     Other suggestions for the same unit are left untouched. Requires the
+         *     `edit` scope (same as `PATCH /units/{id}`).
          */
         post: operations["approveUnitTagSuggestion"];
         delete?: never;
@@ -825,8 +769,8 @@ export interface paths {
          * Dismiss a unit alpha tag suggestion
          * @description Marks a **pending** suggestion `dismissed` without touching the unit.
          *     A dismissed candidate keeps accumulating evidence when seen again but
-         *     never returns to the pending queue. No request body. Requires write
-         *     access (same as `PATCH /units/{id}`).
+         *     never returns to the pending queue. No request body. Requires the
+         *     `edit` scope (same as `PATCH /units/{id}`).
          */
         post: operations["dismissUnitTagSuggestion"];
         delete?: never;
@@ -969,7 +913,22 @@ export interface paths {
         };
         /**
          * Stream call audio
-         * @description Streams the audio file for a call. Content-Type varies by source format.
+         * @description Streams the audio file for a call. Content-Type varies by source
+         *     format. Responses carry `Cache-Control: private`.
+         *
+         *     **Authentication:** `Authorization: Bearer <key>` when the client
+         *     can send headers, `?ticket=<ticket>` from `POST /tickets` for an
+         *     `<audio src>` element (which cannot), or no credential when the
+         *     anonymous access policy is `listen`. An audio element makes
+         *     repeated (Range) requests with the same URL; a ticket stays valid
+         *     for all of them until it expires, so mint one with some lifetime
+         *     left (for example at least 5 minutes) and mint a new one if
+         *     playback fails with an error.
+         *
+         *     A call outside a restricted credential's restriction is 404.
+         *
+         *     `audio_url` fields in API responses hold this path and never a
+         *     credential; see `Call.audio_url`.
          */
         get: operations["getCallAudio"];
         put?: never;
@@ -1236,14 +1195,21 @@ export interface paths {
          *     trunk-recorder's upload plugin at `POST /api/v1/call-upload` and it
          *     works out of the box.
          *
-         *     **Authentication:** Uploads are write operations. In full auth mode,
-         *     use an API key (`tre_...`) or an editor/admin JWT. In token mode,
-         *     use `AUTH_TOKEN`. The deprecated `WRITE_TOKEN` is still accepted for
-         *     legacy deployments. In addition to the standard `Authorization: Bearer`
-         *     header and `?token=` query parameter, this endpoint also accepts auth
-         *     via the `key` (rdio-scanner) or `api_key` (OpenMHz) multipart form
-         *     fields. This allows trunk-recorder upload plugins to authenticate
-         *     without custom header configuration.
+         *     **Authentication:** needs an API key with the `upload` scope
+         *     (create one with `tr-engine keys create --name "tr butco uploads"
+         *     --scopes upload`). Anonymous access never allows uploads, and
+         *     `listen`/`edit`/`admin` keys without `upload` are refused with 403
+         *     `insufficient_scope`. The key is read from, in order:
+         *
+         *     1. the `Authorization: Bearer <key>` header;
+         *     2. the multipart form field `key` (rdio-scanner plugin);
+         *     3. the multipart form field `api_key` (OpenMHz plugin).
+         *
+         *     Form fields are read from the multipart body only (never from the
+         *     URL), after the 50 MB upload size limit. A field that is present
+         *     but holds an unknown, revoked or expired key is 401 `invalid_key`;
+         *     the other field is not tried. Rejected uploads are logged with the
+         *     client IP, the form's system name and the reason.
          *
          *     **Format detection:** The endpoint inspects form field names to
          *     determine the upload format:
@@ -1269,7 +1235,7 @@ export interface paths {
          *     | `audioName` | string | No | Original filename |
          *     | `emergency` | boolean | No | Emergency flag |
          *     | `encrypted` | boolean | No | Encrypted flag |
-         *     | `key` | string | No | Auth token (alternative to Bearer header) |
+         *     | `key` | string | No | API key with the `upload` scope (alternative to the Bearer header) |
          *
          *     **OpenMHz format fields:**
          *
@@ -1284,7 +1250,7 @@ export interface paths {
          *     | `source_list` | JSON string | No | Array of source items |
          *     | `emergency` | integer | No | Emergency flag (0/1) |
          *     | `error_count` | integer | No | Decode error count |
-         *     | `api_key` | string | No | Auth token (alternative to Bearer header) |
+         *     | `api_key` | string | No | API key with the `upload` scope (alternative to the Bearer header) |
          */
         post: operations["uploadCall"];
         delete?: never;
@@ -1611,13 +1577,51 @@ export interface paths {
          *     > Use the [Live Events](/events.html) page or connect with
          *     > `curl` / `EventSource` instead.
          *
+         *     **Authentication:** one of
+         *     - `Authorization: Bearer <key>`, for clients that can send headers
+         *       (servers, scripts, `fetch`-based stream readers);
+         *     - `?ticket=<ticket>` from `POST /tickets`, for the browser
+         *       `EventSource`, which cannot send headers (mint the ticket right
+         *       before each connect; it takes precedence over a header);
+         *     - no credential, when the anonymous access policy is `listen`.
+         *
          *     **Connection behavior:**
          *     - Response uses `Content-Type: text/event-stream`
          *     - The server sends `X-Accel-Buffering: no` for nginx compatibility
          *     - A keepalive comment (`: keepalive`) is sent every 15 seconds
          *     - Each event includes a unique `id` field for gap recovery
-         *     - On reconnect, pass the last received ID via the `Last-Event-ID`
-         *       header to resume without missing events (buffered for 60 seconds)
+         *     - On reconnect, pass the last received ID to resume without missing
+         *       events (buffered for 60 seconds): in the `Last-Event-ID` header,
+         *       or, when re-creating an `EventSource` with a fresh ticket (which
+         *       cannot set that header), in the `last_event_id` query parameter.
+         *       The header wins when both are sent.
+         *     - A 429 (rate limited) ends a browser `EventSource` for good; back
+         *       off and reconnect yourself.
+         *
+         *     **Access re-checks and the `auth` signal:** the server re-checks
+         *     the stream's credential every 60 seconds and at once when a key,
+         *     the anonymous policy or a system merge changes. If the credential
+         *     changed but still has `listen`, the stream continues under the new
+         *     scopes and restriction. Otherwise, and when a ticket expires, the
+         *     server sends one final message and closes the stream:
+         *
+         *     ```
+         *     event: auth
+         *     data: {"code":"ticket_expired"}
+         *     ```
+         *
+         *     `code` is `invalid_key`, `key_required`, `insufficient_scope` or
+         *     `ticket_expired` (see `SSEAuthSignal`). On `ticket_expired`, mint a
+         *     new ticket and reconnect with `last_event_id`. On any other code,
+         *     do **not** reconnect automatically: call `GET /whoami` and ask for
+         *     a key or explain what changed. The `auth` message is always sent,
+         *     whatever the `types` filter says.
+         *
+         *     **Per-type access:** each event type needs a minimum scope, and
+         *     restricted credentials only receive events for talkgroups their
+         *     restriction allows (see `SSEEventType`). This is applied before the
+         *     filters below. Anonymous listeners and `listen`/`edit` keys never
+         *     receive `console` events.
          *
          *     **Event format:**
          *     ```
@@ -1639,12 +1643,14 @@ export interface paths {
          *     |-------|-------------|---------|
          *     | `call_start` | New call recording started | Call object (partial — no audio/transcription yet) |
          *     | `call_update` | Call updated (new transmission, freq change) | Call object (partial delta) |
-         *     | `call_end` | Call recording completed | Full Call object with audio_url |
+         *     | `call_end` | Call recording completed | Call summary: `call_id`, `system_id`, `tgid`, `tg_alpha_tag`, `unit`, `unit_alpha_tag`, `freq`, `start_time`, `stop_time`, `duration`, `emergency`, `encrypted`, plus ingest-path-specific fields. **No `audio_url`**: fetch `GET /calls/{call_id}` for the full call, or use `/api/v1/calls/{call_id}/audio` |
+         *     | `transcription` | Transcription finished | `call_id`, `system_id`, `tgid`, `text`, `word_count`, plus provider statistics |
          *     | `unit_event` | Unit lifecycle event | UnitEvent object |
          *     | `recorder_update` | Recorder state changed | Recorder object |
          *     | `rate_update` | Decode rate update | DecodeRate object |
          *     | `trunking_message` | P25 control channel message | TrunkingMessage object |
-         *     | `console` | TR console log message | ConsoleMessage object |
+         *     | `console` | TR console log message (`admin` keys only) | ConsoleMessage object |
+         *     | `auth` | Credential no longer allows the stream; the stream closes | SSEAuthSignal object |
          */
         get: operations["streamEvents"];
         put?: never;
@@ -1697,6 +1703,26 @@ export interface paths {
          *     **JSON text frames (client → server):**
          *     - Subscribe: `{"type": "subscribe", "tgids": [1001, 1002], "systems": [1]}`
          *     - Unsubscribe: `{"type": "unsubscribe"}`
+         *
+         *     **Authentication:** `Authorization: Bearer <key>` for clients that
+         *     can set headers on the upgrade request, `?ticket=<ticket>` from
+         *     `POST /tickets` for the browser `WebSocket` (which cannot), or no
+         *     credential when the anonymous access policy is `listen`. Any
+         *     `Origin` is accepted: there are no ambient credentials to protect.
+         *
+         *     **Restricted credentials** only ever receive audio for talkgroups
+         *     their restriction allows, whatever the subscribe message asks for.
+         *
+         *     **Close codes:** the server re-checks the connection's credential
+         *     every 60 seconds and at once when keys or the anonymous policy
+         *     change, and closes the socket when it no longer allows listening
+         *     or when its ticket expires:
+         *
+         *     | Close code | Reason (the code string) | What to do |
+         *     |---|---|---|
+         *     | 4401 | `ticket_expired` | Mint a new ticket and reconnect |
+         *     | 4401 | `invalid_key`, `key_required` | Don't reconnect automatically; call `GET /whoami` |
+         *     | 4403 | `insufficient_scope` | Don't reconnect automatically; call `GET /whoami` |
          */
         get: operations["streamAudioLive"];
         put?: never;
@@ -1773,7 +1799,7 @@ export interface paths {
         };
         /**
          * OpenAPI specification
-         * @description Returns the OpenAPI 3.0.3 YAML specification for this API. No authentication required.
+         * @description Returns the OpenAPI 3.0.3 YAML specification for this API. Public; no credential needed.
          */
         get: operations["getOpenAPISpec"];
         put?: never;
@@ -1809,6 +1835,12 @@ export interface paths {
          *
          *     Use `$1`, `$2`, etc. as parameter placeholders with the `params`
          *     array for safe value interpolation.
+         *
+         *     Needs the `admin` scope: raw SQL can read every table and cannot
+         *     honour a restriction. The query runs as the engine's own database
+         *     role; if that role is a superuser (or can read server files), a
+         *     query can too. Run the engine with a dedicated, non-superuser
+         *     database role.
          */
         post: operations["executeQuery"];
         delete?: never;
@@ -1844,6 +1876,13 @@ export interface paths {
          *     - Call groups may be consolidated (recordings that now share
          *       system_id + tgid + start_time get grouped)
          *     - Source system is deleted
+         *
+         *     - Restrictions on API keys and the anonymous access policy that
+         *       name the source system (in `systems`, `talkgroups` or
+         *       `exclude_talkgroups`) are rewritten to the target in the same
+         *       transaction, so a merge never widens access. Tickets whose
+         *       narrowing names the source system stop verifying
+         *       (`invalid_ticket`); clients mint new ones.
          *
          *     **Implications:**
          *     - Call IDs (database PKs) are stable — bookmarks don't break
@@ -1911,6 +1950,12 @@ export interface paths {
          *     Jobs are processed sequentially — if a job is already active, the
          *     new job is queued. All filter fields are optional; omitting all
          *     filters backfills every untranscribed call.
+         *
+         *     A job makes a single pass over the matching calls, newest first, and
+         *     hands each call to the transcription queue at most once. A call whose
+         *     transcription then fails (for example, because its audio file is
+         *     missing) stays untranscribed and is not retried by the same job; a
+         *     later job will pick it up again.
          */
         post: operations["submitTranscribeBackfill"];
         /**
@@ -1923,7 +1968,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/transcribe-backfill/{job_id}": {
+    "/admin/transcribe-backfill/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1957,7 +2002,7 @@ export interface paths {
          * @description Updates a single retention setting. The value is persisted to the
          *     `config_overrides` table and applied immediately to the live pipeline.
          *     Returns 409 if the key is locked by an environment variable.
-         *     Requires admin role.
+         *     Requires the `admin` scope.
          */
         put: operations["setMaintenanceConfig"];
         post?: never;
@@ -1982,7 +2027,7 @@ export interface paths {
          * @description Removes a DB-stored retention override and resets the setting to its
          *     environment variable value (if set) or coded default. Returns 409 if
          *     the key is locked by an environment variable.
-         *     Requires admin role.
+         *     Requires the `admin` scope.
          */
         delete: operations["deleteMaintenanceConfig"];
         options?: never;
@@ -2004,7 +2049,7 @@ export interface paths {
          *     database size is included. If a per-table stat fails, the table is
          *     omitted and an entry is added to `errors[]` — the rest of the
          *     response still returns.
-         *     Requires admin role.
+         *     Requires the `admin` scope.
          */
         get: operations["getStorageStats"];
         put?: never;
@@ -2033,9 +2078,103 @@ export interface paths {
          *     a partial count.
          *
          *     This action is irreversible.
-         *     Requires admin role.
+         *     Requires the `admin` scope.
          */
         post: operations["purgeTable"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/audit-log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List audit log entries
+         * @description Returns the audit log, newest first. One entry is recorded for
+         *     every request made with an API key to a matched route whose method
+         *     is not GET, HEAD or OPTIONS, including requests the handler itself
+         *     refused (the status is the one the client received). Requests
+         *     without a key, failed authentication, `POST /call-upload` and
+         *     `POST /tickets` are not recorded; they stay in the access log.
+         *
+         *     `actor` is the optional `X-Actor` request header, which a
+         *     multi-user client sends to name the end user it acted for. It is
+         *     recorded as given (control and format characters removed, at most
+         *     200 characters) and is never used for authorization. Render
+         *     `actor`, `key_name`, `path` and `request_id` as text only.
+         *
+         *     Entries are kept for `RETENTION_AUDIT_LOG` (default `8760h`, one
+         *     year) and purged by the daily maintenance run.
+         */
+        get: operations["listAuditLog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/debug-report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a diagnostic report to the debug receiver
+         * @description Combines the JSON body sent by the client (browser diagnostics)
+         *     with server-side diagnostics (version, uptime, sanitized
+         *     configuration, trunk-recorder `config.json` with secrets removed,
+         *     recent console logs, ingest and stream state) and forwards the
+         *     result to `DEBUG_REPORT_URL`. Secrets are redacted: values of keys
+         *     whose names contain `key`, `token`, `pass`, `secret`, `auth` or
+         *     `credential` (case-insensitive), and user info and query strings
+         *     of every URL-valued string, at any depth.
+         *
+         *     Because it makes the server send data to a third party, it needs
+         *     the `admin` scope. Returns 503 when `DEBUG_REPORT_DISABLE=true` or
+         *     no `DEBUG_REPORT_URL` is set. See `docs/debug-reports.md`.
+         */
+        post: operations["submitDebugReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Prometheus metrics
+         * @description Prometheus exposition format. Served at **`/metrics`** on the
+         *     engine's root (not under `/api/v1`), when `METRICS_ENABLED` is true
+         *     (the default); otherwise 404.
+         *
+         *     Requires an **API key** with `listen` in the `Authorization`
+         *     header: it is never public, whatever the anonymous access policy
+         *     says, and restricted keys are refused. Create a scrape key with
+         *     `tr-engine keys create --name prometheus --scopes listen` and set
+         *     it as the scrape job's bearer token (`authorization.credentials`
+         *     or `credentials_file` in `prometheus.yml`).
+         */
+        get: operations["getMetrics"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2101,55 +2240,343 @@ export interface components {
          * @enum {string}
          */
         RecState: "available" | "recording" | "idle" | "stopped";
-        UserSummary: {
-            id?: number;
-            username?: string;
-            /** @enum {string} */
-            role?: "viewer" | "editor" | "admin";
-        };
-        User: {
-            id?: number;
-            username?: string;
-            /** @enum {string} */
-            role?: "viewer" | "editor" | "admin";
-            enabled?: boolean;
-            display_name?: string;
-            /** Format: date-time */
-            last_login?: string | null;
-            /** Format: date-time */
-            created_at?: string;
-            /** Format: date-time */
-            updated_at?: string;
-        };
-        APIKey: {
-            id?: number;
-            /** @description First 12 characters of the key for identification */
-            key_prefix?: string;
-            /** @description Null for service accounts */
-            user_id?: number | null;
-            /** @enum {string} */
-            role?: "viewer" | "editor" | "admin";
-            label?: string;
-            is_service_account?: boolean;
-            /** Format: date-time */
-            created_at?: string;
-            /** Format: date-time */
-            last_used_at?: string | null;
-        };
-        APIKeyWithPlaintext: components["schemas"]["APIKey"] & {
+        /**
+         * @description What an API key may do:
+         *     - **listen**: read radio data (all data GETs), stream events and
+         *       audio, mint tickets
+         *     - **edit**: change radio metadata (talkgroup/unit tags,
+         *       transcription corrections and review states, re-transcription,
+         *       unit-tag-suggestion approve/dismiss); implies `listen`
+         *     - **admin**: everything else (keys, anonymous policy, system/site
+         *       identity edits, merges, maintenance, backfill, storage, SQL
+         *       query, page saving, CSV imports, debug report, console logs,
+         *       audit log); implies `edit` and `listen`
+         *     - **upload**: `POST /call-upload` only; implies nothing
+         * @enum {string}
+         */
+        Scope: "listen" | "edit" | "admin" | "upload";
+        /**
+         * @description Limits which radio data a `listen` credential can see. Only
+         *     `null` (or an omitted field) means unrestricted; a restriction
+         *     object is never treated as unrestricted.
+         *
+         *     A (system, talkgroup) pair is allowed when its talkgroup is set and
+         *     non-zero, **and** (`allow_all`, or the system is in `systems`, or
+         *     the pair is in `talkgroups`), **and** the pair is not in
+         *     `exclude_talkgroups`. Data without a talkgroup is never allowed to
+         *     a restricted credential. With `allow_all` false and `systems` and
+         *     `talkgroups` both empty, the restriction **allows nothing** (`{}`
+         *     is such a restriction): that is rejected on keys and on the
+         *     anonymous policy, and accepted on a ticket narrowing.
+         *
+         *     A system's metadata is visible when `allow_all` is true, the
+         *     system is in `systems`, or an entry of `talkgroups` belongs to it.
+         *
+         *     IDs need not exist yet. Duplicates are removed and arrays are
+         *     returned sorted. Each array holds at most 1000 entries (a ticket
+         *     narrowing at most 100 in total). Unknown fields are rejected. When
+         *     systems are merged, references to the merged-away system are
+         *     rewritten to the surviving one.
+         *
+         *     Operations marked `x-restricted: deny` refuse restricted
+         *     credentials with 403 `restricted_credential`; operations marked
+         *     `x-restricted: enforced` apply the restriction to what they return.
+         * @example {
+         *       "systems": [
+         *         1,
+         *         3
+         *       ],
+         *       "talkgroups": [
+         *         "2:9178",
+         *         "2:9179"
+         *       ],
+         *       "exclude_talkgroups": [
+         *         "1:5001"
+         *       ]
+         *     }
+         */
+        Restriction: {
             /**
-             * @description The full API key plaintext. Shown exactly once at creation —
-             *     cannot be retrieved again. Store it securely.
+             * @description Every talkgroup is a candidate (subject to
+             *     `exclude_talkgroups`). Cannot be combined with non-empty
+             *     `systems` or `talkgroups`. Default false.
              */
-            key?: string;
+            allow_all?: boolean;
+            /** @description Systems whose talkgroups are allowed */
+            systems?: number[];
+            /** @description Individually allowed talkgroups, as `system_id:tgid` */
+            talkgroups?: components["schemas"]["CompositeTalkgroupID"][];
+            /** @description Talkgroups that are never allowed, even when their system is */
+            exclude_talkgroups?: components["schemas"]["CompositeTalkgroupID"][];
+        } | null;
+        /**
+         * @description `system_id:tgid`, both positive integers
+         * @example 1:9178
+         */
+        CompositeTalkgroupID: string;
+        APIKey: {
+            /** @example 7 */
+            id: number;
+            /**
+             * @description What the key is for, e.g. "tr-dashboard at home" or "trunk-recorder butco uploads"
+             * @example tr-dashboard at home
+             */
+            name: string;
+            /**
+             * @description For display. `tre_` plus the next 8 characters of the key.
+             *     Legacy keys imported from an old `AUTH_TOKEN`/`WRITE_TOKEN`
+             *     show `legacy_` plus 6 hex characters of the key's hash, so no
+             *     character of the old secret is stored.
+             * @example tre_1a2b3c4d
+             */
+            prefix: string;
+            /**
+             * @description The key's scopes as granted (not expanded), sorted
+             * @example [
+             *       "edit"
+             *     ]
+             */
+            scopes: components["schemas"]["Scope"][];
+            /** @description Only on keys whose scopes are exactly `["listen"]`; `null` means unrestricted */
+            restriction: components["schemas"]["Restriction"];
+            /**
+             * Format: date-time
+             * @description When the key stops working; `null` means never
+             */
+            expires_at: string | null;
+            /**
+             * @description Per-key rate limit in requests per second (burst twice that,
+             *     at least 1). `null` means no per-key limit. Legacy keys are
+             *     always limited per client IP instead.
+             */
+            rate_limit_rps: number | null;
+            /** @description True for keys imported from an old `AUTH_TOKEN`/`WRITE_TOKEN` or with `tr-engine keys import` */
+            legacy: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description Last use, updated at most once a minute
+             */
+            last_used_at: string | null;
+            /** Format: date-time */
+            revoked_at: string | null;
+            /**
+             * @description Computed from `revoked_at` and `expires_at`
+             * @enum {string}
+             */
+            status: "active" | "expired" | "revoked";
+        };
+        /** @description A newly created key, with its plaintext */
+        APIKeyCreated: components["schemas"]["APIKey"] & {
+            /**
+             * @description The full key. Shown exactly once, here; it cannot be
+             *     retrieved again. Store it now. Send it as
+             *     `Authorization: Bearer <key>`.
+             */
+            key: string;
+        };
+        APIKeyCreate: {
+            name: string;
+            /**
+             * @description At most one of `listen`/`edit`/`admin`, optionally plus
+             *     `upload`. `["listen","edit"]` and unknown strings are rejected.
+             */
+            scopes: components["schemas"]["Scope"][];
+            /** @description Only allowed when `scopes` is exactly `["listen"]`; must allow something */
+            restriction?: components["schemas"]["Restriction"];
+            /**
+             * Format: date-time
+             * @description Must be in the future when set
+             */
+            expires_at?: string | null;
+            /** @description Must be greater than 0 when set */
+            rate_limit_rps?: number | null;
+        };
+        /**
+         * @description Absent fields are left unchanged. An explicit `null` clears
+         *     `restriction`, `expires_at` or `rate_limit_rps`.
+         */
+        APIKeyPatch: {
+            name?: string;
+            scopes?: components["schemas"]["Scope"][];
+            restriction?: components["schemas"]["Restriction"];
+            /** Format: date-time */
+            expires_at?: string | null;
+            rate_limit_rps?: number | null;
+        };
+        APIKeyListResponse: {
+            keys: components["schemas"]["APIKey"][];
+            total: number;
+        };
+        /**
+         * @description What a request with no credential may do: nothing (`off`, the
+         *     default on a fresh install) or use the `listen` operations that
+         *     are not `x-key-required`. It can never edit, administer or upload.
+         * @enum {string}
+         */
+        AnonymousAccessLevel: "off" | "listen";
+        /**
+         * @example {
+         *       "access": "listen",
+         *       "restriction": {
+         *         "allow_all": true,
+         *         "systems": [],
+         *         "talkgroups": [],
+         *         "exclude_talkgroups": [
+         *           "1:5001",
+         *           "1:5002"
+         *         ]
+         *       },
+         *       "updated_at": "2026-09-26T12:00:00Z"
+         *     }
+         */
+        AnonymousAccess: {
+            access: components["schemas"]["AnonymousAccessLevel"];
+            /** @description Applies to anonymous requests; `null` means unrestricted. Kept even when `access` is `off`. */
+            restriction: components["schemas"]["Restriction"];
+            /**
+             * Format: date-time
+             * @description Last change; `null` if the policy was never set
+             */
+            updated_at: string | null;
+        };
+        /** @description Both keys are required. `"restriction": null` clears the restriction. */
+        AnonymousAccessUpdate: {
+            access: components["schemas"]["AnonymousAccessLevel"];
+            restriction: components["schemas"]["Restriction"];
+        };
+        Whoami: {
+            /**
+             * @description What the request presented. `whoami` is not ticket-enabled, so never `ticket`.
+             * @enum {string}
+             */
+            credential: "key" | "anonymous";
+            /** @description The caller's key; `null` for anonymous callers */
+            key: components["schemas"]["WhoamiKey"];
+            /**
+             * @description Effective scopes, implications expanded, sorted: an `edit` key
+             *     shows `["edit","listen"]`. For an anonymous caller, `["listen"]`
+             *     when the anonymous policy is `listen`, otherwise `[]`.
+             */
+            scopes: components["schemas"]["Scope"][];
+            /**
+             * @description True if any restriction applies to this caller. When true,
+             *     operations marked `x-restricted: deny` answer 403
+             *     `restricted_credential`.
+             */
+            restricted: boolean;
+            /** @description The anonymous access policy, without its lists */
+            anonymous: {
+                access: components["schemas"]["AnonymousAccessLevel"];
+                restricted: boolean;
+            };
+            /**
+             * @description Engine version
+             * @example 0.10.0
+             */
+            version: string;
+        };
+        /** @description The caller's key; `null` for anonymous callers */
+        WhoamiKey: {
+            id: number;
+            name: string;
+            prefix: string;
+            /** @description The key's scopes as granted (not expanded) */
+            scopes: components["schemas"]["Scope"][];
+            /** @description The key's own restriction */
+            restriction: components["schemas"]["Restriction"];
+            /** Format: date-time */
+            expires_at: string | null;
+            legacy: boolean;
+        } | null;
+        TicketRequest: {
+            /**
+             * @description Lifetime in seconds, clamped to 60–3600. Default 600.
+             * @example 600
+             */
+            ttl_seconds?: number;
+            /**
+             * @description Optional narrowing, intersected with the minting key's current
+             *     restriction at every use. At most 100 entries in total. May
+             *     allow nothing. Omitted or `null`: no narrowing.
+             */
+            restriction?: components["schemas"]["Restriction"];
+        };
+        Ticket: {
+            /**
+             * @description `trt_<payload>.<mac>`. Treat it as opaque: pass it as
+             *     `?ticket=` (URL-encode it like any query value). It grants
+             *     `listen` only, and only on the ticket-enabled operations.
+             * @example trt_eyJrIjo3LCJlIjoxNzkwMDAwMDAwfQ.bWFjLWJ5dGVzLWhlcmU
+             */
+            ticket: string;
+            /** Format: date-time */
+            expires_at: string;
+        };
+        /**
+         * @description Payload of the `event: auth` message that `GET /events/stream`
+         *     sends right before it closes a stream because its credential no
+         *     longer allows it. On `ticket_expired`, mint a new ticket and
+         *     reconnect with `last_event_id`. On any other code, do **not**
+         *     reconnect automatically: call `GET /whoami` and ask for a key or
+         *     explain what changed.
+         * @example {
+         *       "code": "ticket_expired"
+         *     }
+         */
+        SSEAuthSignal: {
+            /** @enum {string} */
+            code: "invalid_key" | "key_required" | "insufficient_scope" | "ticket_expired";
+        };
+        AuditLogEntry: {
+            /** Format: int64 */
+            id: number;
+            /** Format: date-time */
+            time: string;
+            key_id: number;
+            /** @description The key's name when the request was made */
+            key_name: string;
+            /** @description The sanitized `X-Actor` header, if the client sent one. Informational only. */
+            actor: string | null;
+            /** @example PATCH */
+            method: string;
+            /**
+             * @description Request path, without the query string
+             * @example /api/v1/talkgroups/1:9178
+             */
+            path: string;
+            /**
+             * @description HTTP status the client received
+             * @example 200
+             */
+            status: number;
+            /** @description The request's `X-Request-ID` */
+            request_id: string;
+        };
+        AuditLogResponse: {
+            entries: components["schemas"]["AuditLogEntry"][];
+            total: number;
         };
         Error: {
             /**
-             * @description Machine-readable error code for programmatic handling
+             * @description Machine-readable error code for programmatic handling. Auth codes:
+             *     - `key_required` (401): no credential, and the anonymous access
+             *       policy doesn't allow this operation
+             *     - `invalid_key` (401): unknown, revoked or expired key
+             *     - `invalid_ticket` (401): malformed, expired or orphaned ticket,
+             *       or one that references a merged-away system
+             *     - `insufficient_scope` (403): the key lacks the needed scope
+             *     - `restricted_credential` (403): the credential is restricted and
+             *       this operation can't enforce that
+             *     - `service_unavailable` (503): also when the credential lookup
+             *       failed
+             *     - `forbidden` (403): from the auth layer, only for a route with no
+             *       auth policy (a server bug)
              * @example not_found
              * @enum {string}
              */
-            code: "bad_request" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "rate_limited" | "internal_error" | "service_unavailable" | "invalid_body" | "invalid_parameter" | "invalid_time_range" | "query_failed" | "ambiguous_id" | "duplicate" | "request_timeout";
+            code: "bad_request" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "rate_limited" | "internal_error" | "service_unavailable" | "invalid_body" | "invalid_parameter" | "invalid_time_range" | "query_failed" | "ambiguous_id" | "duplicate" | "request_timeout" | "key_required" | "invalid_key" | "invalid_ticket" | "insufficient_scope" | "restricted_credential";
             /** @example Resource not found */
             error: string;
             /** @description Additional context when available */
@@ -2533,7 +2960,13 @@ export interface components {
              */
             duration?: number;
             /**
-             * @description Relative URL to audio endpoint. Null for active calls.
+             * @description Path of this call's audio on the engine origin
+             *     (`/api/v1/calls/{id}/audio`), or null when there is no audio yet.
+             *     It never contains a credential. Resolve it against the engine's
+             *     base URL (not the page's origin, if the client is served from
+             *     elsewhere), and, when the client authenticates with a key and
+             *     cannot send headers (an `<audio>` element), append
+             *     `?ticket=<ticket>` from `POST /tickets`.
              * @example /api/v1/calls/48531/audio
              */
             audio_url?: string | null;
@@ -3350,7 +3783,9 @@ export interface components {
              */
             end: number;
             /**
-             * @description Call audio URL (same as `GET /calls/{id}/audio`; 404 if the call has no audio)
+             * @description Path of the call's audio on the engine origin (same as
+             *     `GET /calls/{id}/audio`; 404 if the call has no audio). Never
+             *     contains a credential; see `Call.audio_url` for how to use it.
              * @example /api/v1/calls/48531/audio
              */
             audio_url: string;
@@ -3431,7 +3866,11 @@ export interface components {
             previous_tag_source: string | null;
             /** Format: date-time */
             decided_at: string | null;
-            /** @description Username or API key label of the reviewer (null in open/token mode) */
+            /**
+             * @description Who decided: the name of the API key used, followed by
+             *     ` / <actor>` when the client sent an `X-Actor` header. Decisions
+             *     recorded by versions before API keys hold a username, or null.
+             */
             decided_by: string | null;
             /** Format: date-time */
             created_at: string;
@@ -3478,6 +3917,10 @@ export interface components {
              */
             alpha_tag?: string;
         };
+        /**
+         * @description Without an unrestricted `listen` (or better) key, only `status`,
+         *     `version` and `checks` are present.
+         */
         HealthResponse: {
             /** @enum {string} */
             status: "healthy" | "degraded" | "unhealthy";
@@ -3653,8 +4096,9 @@ export interface components {
             offset: number;
             summary: {
                 /**
-                 * @description Map of tgid → count of affiliated (non-off) units on that
-                 *     talkgroup. Computed over the full filtered set before pagination.
+                 * @description Map of `system_id:tgid` → count of affiliated (non-off) units
+                 *     on that talkgroup. Computed over the full filtered set before
+                 *     pagination.
                  */
                 talkgroup_counts?: {
                     [key: string]: number;
@@ -4017,6 +4461,7 @@ export interface components {
             priority?: number | null;
         };
         RecorderListResponse: {
+            /** @description Empty array (never null) when no recorder has reported yet */
             recorders: components["schemas"]["Recorder"][];
             /** @example 12 */
             total: number;
@@ -4025,15 +4470,39 @@ export interface components {
          * @description SSE event types pushed to clients:
          *     - **call_start**: new call recording began
          *     - **call_update**: call updated (new transmission, freq change)
-         *     - **call_end**: call recording completed, audio available
+         *     - **call_end**: call recording completed, audio available (the
+         *       payload is a call summary without `audio_url`)
+         *     - **transcription**: a call's transcription finished
          *     - **unit_event**: unit lifecycle event (on/off/join/call/end/signal/etc.)
          *     - **recorder_update**: recorder hardware state changed
          *     - **rate_update**: decode rate update from a system
          *     - **trunking_message**: P25 control channel message
          *     - **console**: trunk-recorder console log message
+         *
+         *     **Who receives each type.** Every event type needs a minimum scope,
+         *     and restricted credentials (restricted keys, restricted tickets, a
+         *     restricted anonymous policy) only receive events whose system and
+         *     talkgroup their restriction allows:
+         *
+         *     | Event type | Needs | Restricted credentials receive it |
+         *     |---|---|---|
+         *     | `console` | `admin` | never (admin keys are never restricted) |
+         *     | `call_start`, `call_update`, `call_end`, `transcription` | `listen` | only if the event has a system and a non-zero talkgroup that the restriction allows |
+         *     | `unit_event` | `listen` | only if the event has a system and a non-zero talkgroup that the restriction allows (so on/off and other events without a talkgroup are dropped) |
+         *     | `recorder_update`, `rate_update`, `trunking_message` | `listen` | never |
+         *     | any type added later | `admin` until classified | never |
+         *
+         *     These rules apply to live events and to events replayed on
+         *     reconnect, before the stream's own filters (`systems`, `tgids`,
+         *     `types`, ...). The anonymous access policy grants at most `listen`,
+         *     so anonymous listeners never receive `console` events.
+         *
+         *     The `auth` event (see `SSEAuthSignal`) is not a subscribable type;
+         *     it is sent to any stream that is about to be closed for auth
+         *     reasons.
          * @enum {string}
          */
-        SSEEventType: "call_start" | "call_update" | "call_end" | "unit_event" | "recorder_update" | "rate_update" | "trunking_message" | "console";
+        SSEEventType: "call_start" | "call_update" | "call_end" | "transcription" | "unit_event" | "recorder_update" | "rate_update" | "trunking_message" | "console";
         /**
          * @description Each SSE event is sent as three lines:
          *     ```
@@ -4044,19 +4513,29 @@ export interface components {
          *
          *     The SSE fields map to the browser's `EventSource` API:
          *     - `id` → `event.lastEventId` — unique event ID (`{unix_ms}-{seq}`),
-         *       pass as `Last-Event-ID` header on reconnect for gapless recovery
+         *       pass as the `Last-Event-ID` header or the `last_event_id` query
+         *       parameter on reconnect for gapless recovery
          *     - `event` → selects the `addEventListener` handler — one of the
          *       SSEEventType values (call_start, call_end, unit_event, etc.)
          *     - `data` → `event.data` — the JSON payload described below
          *
          *     The `data` field contains the **domain object directly**, not a
          *     wrapper. Its structure depends on the event type:
-         *     - `call_start` / `call_update` / `call_end`: Call object
+         *     - `call_start` / `call_update`: Call object (partial)
+         *     - `call_end`: call summary (`call_id`, `system_id`, `tgid`,
+         *       `tg_alpha_tag`, `unit`, `unit_alpha_tag`, `freq`, `start_time`,
+         *       `stop_time`, `duration`, `emergency`, `encrypted`, and fields
+         *       specific to the ingest path). It has **no `audio_url`**: fetch
+         *       `GET /calls/{call_id}`, or use `/api/v1/calls/{call_id}/audio`
+         *       (with `?ticket=` from a browser that holds a key).
+         *     - `transcription`: `call_id`, `system_id`, `tgid`, `text`,
+         *       `word_count`, plus provider statistics
          *     - `unit_event`: UnitEvent object
          *     - `recorder_update`: Recorder object
          *     - `rate_update`: DecodeRate object
          *     - `trunking_message`: TrunkingMessage object
          *     - `console`: ConsoleMessage object
+         *     - `auth`: SSEAuthSignal object (then the stream closes)
          *
          *     Server-side filtering metadata (system_id, site_id, tgid, unit_id)
          *     is used internally to match events against query params but is not
@@ -4362,17 +4841,26 @@ export interface components {
             job_id?: number;
             filters?: components["schemas"]["BackfillFilters"];
             /**
-             * @description Total calls to process in this job
+             * @description Number of calls this job covers: the matching untranscribed calls
+             *     counted when the job starts, raised if more calls become eligible
+             *     while it runs. `completed + failed` never exceeds it, but can
+             *     finish below it if some calls were transcribed by other means
+             *     first.
              * @example 342
              */
             total?: number;
             /**
-             * @description Number of calls successfully transcribed so far
+             * @description Number of distinct calls handed to the transcription queue so far.
+             *     Counts enqueues, not finished transcriptions: a call whose
+             *     transcription later fails (e.g. missing audio file) is still
+             *     counted here. Each call is counted at most once per job.
              * @example 57
              */
             completed?: number;
             /**
-             * @description Number of calls that failed transcription
+             * @description Number of distinct calls that could not be enqueued (call could not
+             *     be loaded, not supported by the STT provider, or transcription
+             *     queue full). Not retried within the job.
              * @example 2
              */
             failed?: number;
@@ -4515,7 +5003,9 @@ export interface components {
         /** @description Request body for manual table purge. */
         PurgeRequest: {
             /**
-             * @description Rows/partitions older than this duration will be deleted (Go duration, e.g. 48h, 7d)
+             * @description Rows/partitions older than this will be deleted. A Go duration
+             *     (`48h`) or a whole number of days (`7d`); at least `1h`. Zero,
+             *     negative or shorter values are rejected with 400.
              * @example 48h
              */
             older_than: string;
@@ -4599,8 +5089,29 @@ export interface components {
                 "application/json": components["schemas"]["AmbiguousError"];
             };
         };
-        /** @description Unauthorized — missing or invalid auth token */
+        /**
+         * @description No usable credential. `code` is `key_required` (no credential, and
+         *     the anonymous access policy doesn't allow this operation),
+         *     `invalid_key` (unknown, revoked or expired key) or `invalid_ticket`
+         *     (malformed, expired or orphaned ticket).
+         */
         Unauthorized: {
+            headers: {
+                /** @description Always `Bearer realm="tr-engine"` */
+                "WWW-Authenticate"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /**
+         * @description The credential is valid but not allowed here. `code` is
+         *     `insufficient_scope` (the message names the scope the operation
+         *     needs) or `restricted_credential` (the credential is restricted to
+         *     some systems or talkgroups, and this operation can't enforce that).
+         */
+        Forbidden: {
             headers: {
                 [name: string]: unknown;
             };
@@ -4608,8 +5119,11 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Forbidden — valid read token but write token required for this operation */
-        Forbidden: {
+        /**
+         * @description `service_unavailable`: the credential could not be checked (database
+         *     error or timeout). Never treated as anonymous; retry later.
+         */
+        AuthUnavailable: {
             headers: {
                 [name: string]: unknown;
             };
@@ -4636,9 +5150,11 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Too many requests — rate limit exceeded */
+        /** @description Too many requests — rate limit exceeded (`rate_limited`) */
         RateLimited: {
             headers: {
+                /** @description Seconds to wait before retrying */
+                "Retry-After"?: number;
                 [name: string]: unknown;
             };
             content: {
@@ -4656,6 +5172,15 @@ export interface components {
         };
     };
     parameters: {
+        /** @description API key ID */
+        keyId: number;
+        /**
+         * @description A ticket from `POST /tickets`, for clients that cannot send an
+         *     `Authorization` header (browser `EventSource`, `<audio>`,
+         *     `WebSocket`). Takes precedence over the header. A key is never
+         *     accepted here.
+         */
+        ticket: string;
         /** @description Call record database ID */
         callId: number;
         /** @description Talkgroup ID: `system_id:tgid` (e.g., `1:9178`) or plain `tgid` */
@@ -4713,7 +5238,7 @@ export interface operations {
             };
         };
     };
-    getAuthInit: {
+    getWhoami: {
         parameters: {
             query?: never;
             header?: never;
@@ -4722,247 +5247,43 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Auth mode info */
+            /** @description The caller's credential and effective access */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /**
-                         * @description - open: no auth required
-                         *     - token: shared API token required (not returned here)
-                         *     - full: JWT login available, optional public read token
-                         * @enum {string}
-                         */
-                        mode: "open" | "token" | "full";
-                        /** @description Public read token (only in full mode with AUTH_TOKEN set) */
-                        read_token?: string | null;
-                        /** @description Whether JWT login endpoints are available */
-                        jwt_enabled: boolean;
-                    };
+                    "application/json": components["schemas"]["Whoami"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            503: components["responses"]["AuthUnavailable"];
         };
     };
-    checkAuthSetup: {
+    listKeys: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Also return revoked keys */
+                include_revoked?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Setup status */
+            /** @description API keys */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        /** @description true when zero users exist (first-run setup pending) */
-                        needs_setup?: boolean;
-                        /** @description Total number of users in the database */
-                        user_count?: number;
-                    };
-                };
-            };
-            /** @description Database error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    authSetup: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    /** @description Admin username (normalized to lowercase) */
-                    username: string;
-                    password: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Admin user created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        message?: string;
-                        user?: components["schemas"]["UserSummary"];
-                    };
+                    "application/json": components["schemas"]["APIKeyListResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
-            /** @description Setup already completed — users exist */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            429: components["responses"]["RateLimited"];
-        };
-    };
-    authLogin: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    username: string;
-                    password: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Login successful */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @description JWT access token (1 hour expiry) */
-                        access_token?: string;
-                        user?: components["schemas"]["UserSummary"];
-                    };
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            /** @description Invalid credentials or account disabled */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            429: components["responses"]["RateLimited"];
-        };
-    };
-    authRefresh: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description New access token */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        access_token?: string;
-                        user?: components["schemas"]["UserSummary"];
-                    };
-                };
-            };
-            /** @description No refresh token or invalid/expired token */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    authLogout: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Logged out */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        status?: string;
-                    };
-                };
-            };
-        };
-    };
-    authMe: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Current user */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["User"];
-                };
-            };
-            /** @description Not authenticated */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    listOwnKeys: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description List of API keys */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["APIKey"][];
-                };
-            };
-            /** @description User authentication required (API keys cannot list keys) */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     createKey: {
@@ -4974,318 +5295,201 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    /** @description Human-readable name for the key */
-                    label: string;
-                    /**
-                     * @default viewer
-                     * @enum {string}
-                     */
-                    role?: "viewer" | "editor" | "admin";
-                };
+                "application/json": components["schemas"]["APIKeyCreate"];
             };
         };
         responses: {
-            /** @description API key created (plaintext shown once) */
+            /** @description Key created; `key` holds the plaintext, shown once */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["APIKeyWithPlaintext"];
+                    "application/json": components["schemas"]["APIKeyCreated"];
                 };
             };
             400: components["responses"]["BadRequest"];
-            /** @description Cannot create key with higher role than your own */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
-    deleteOwnKey: {
+    getKey: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                id: number;
+                /** @description API key ID */
+                id: components["parameters"]["keyId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Key revoked */
+            /** @description The key */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIKey"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    revokeKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description API key ID */
+                id: components["parameters"]["keyId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked */
             204: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Key not found or not owned by you */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    listAllKeys: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description List of all API keys */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["APIKey"][];
-                };
-            };
-            /** @description Admin access required */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    createServiceAccountKey: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    label: string;
-                    /**
-                     * @default viewer
-                     * @enum {string}
-                     */
-                    role?: "viewer" | "editor" | "admin";
-                };
-            };
-        };
-        responses: {
-            /** @description Service account key created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["APIKeyWithPlaintext"];
-                };
-            };
-            /** @description Admin access required */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    deleteAnyKey: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Key revoked */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Admin access required */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Key not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    listUsers: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description User list */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        users?: components["schemas"]["User"][];
-                        total?: number;
-                    };
-                };
-            };
-            /** @description Admin access required */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    createUser: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    username: string;
-                    password: string;
-                    /**
-                     * @default viewer
-                     * @enum {string}
-                     */
-                    role?: "viewer" | "editor" | "admin";
-                };
-            };
-        };
-        responses: {
-            /** @description User created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["User"];
-                };
-            };
             400: components["responses"]["BadRequest"];
-            /** @description Admin access required */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Username already exists */
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The last-admin guard applies */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
             };
         };
     };
-    deleteUser: {
+    updateKey: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description User deleted */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Admin access required, or last admin / self-delete protection */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description User not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    updateUser: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
+                /** @description API key ID */
+                id: components["parameters"]["keyId"];
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": {
-                    /** @enum {string} */
-                    role?: "viewer" | "editor" | "admin";
-                    password?: string;
-                    enabled?: boolean;
-                };
+                "application/json": components["schemas"]["APIKeyPatch"];
             };
         };
         responses: {
-            /** @description User updated */
+            /** @description The updated key */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["User"];
+                    "application/json": components["schemas"]["APIKey"];
                 };
             };
             400: components["responses"]["BadRequest"];
-            /** @description Admin access required, or last admin protection */
-            403: {
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The key is revoked, or the last-admin guard applies */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
             };
-            /** @description User not found */
-            404: {
+        };
+    };
+    getAnonymousAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The anonymous access policy */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["AnonymousAccess"];
+                };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    putAnonymousAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnonymousAccessUpdate"];
+            };
+        };
+        responses: {
+            /** @description The new policy */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnonymousAccess"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    createTicket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TicketRequest"];
+            };
+        };
+        responses: {
+            /** @description The ticket */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ticket"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["AuthUnavailable"];
         };
     };
     listSystems: {
@@ -5307,6 +5511,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -5331,6 +5537,8 @@ export interface operations {
                     "application/json": components["schemas"]["System"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
@@ -5361,6 +5569,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
@@ -5387,6 +5596,8 @@ export interface operations {
                     "application/json": components["schemas"]["Site"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
@@ -5417,6 +5628,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             /** @description short_name + instance_id conflicts with an existing site */
@@ -5450,6 +5662,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -5494,6 +5708,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -5518,6 +5734,8 @@ export interface operations {
                     "application/json": components["schemas"]["Talkgroup"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Ambiguous"];
             500: components["responses"]["InternalError"];
@@ -5549,6 +5767,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Ambiguous"];
@@ -5585,6 +5804,8 @@ export interface operations {
                     "application/json": components["schemas"]["CallListResponse"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Ambiguous"];
             500: components["responses"]["InternalError"];
@@ -5618,6 +5839,8 @@ export interface operations {
                     "application/json": components["schemas"]["UnitListResponse"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Ambiguous"];
             500: components["responses"]["InternalError"];
@@ -5647,6 +5870,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -5679,6 +5904,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /** @description Empty array (never null) when nothing matches */
                         talkgroups?: components["schemas"]["TalkgroupDirectoryEntry"][];
                         total?: number;
                         limit?: number;
@@ -5687,6 +5913,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -5737,6 +5965,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Ambiguous"];
@@ -5788,6 +6017,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Ambiguous"];
@@ -5834,6 +6064,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -5858,6 +6090,8 @@ export interface operations {
                     "application/json": components["schemas"]["Unit"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Ambiguous"];
             500: components["responses"]["InternalError"];
@@ -5889,6 +6123,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Ambiguous"];
@@ -5925,6 +6160,8 @@ export interface operations {
                     "application/json": components["schemas"]["CallListResponse"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Ambiguous"];
             500: components["responses"]["InternalError"];
@@ -5964,6 +6201,8 @@ export interface operations {
                     "application/json": components["schemas"]["UnitEventListResponse"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Ambiguous"];
             500: components["responses"]["InternalError"];
@@ -5999,6 +6238,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -6024,6 +6265,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
@@ -6152,6 +6395,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -6193,6 +6438,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -6248,6 +6495,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -6279,6 +6528,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -6303,13 +6554,23 @@ export interface operations {
                     "application/json": components["schemas"]["Call"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
     };
     getCallAudio: {
         parameters: {
-            query?: never;
+            query?: {
+                /**
+                 * @description A ticket from `POST /tickets`, for clients that cannot send an
+                 *     `Authorization` header (browser `EventSource`, `<audio>`,
+                 *     `WebSocket`). Takes precedence over the header. A key is never
+                 *     accepted here.
+                 */
+                ticket?: components["parameters"]["ticket"];
+            };
             header?: never;
             path: {
                 /** @description Call record database ID */
@@ -6322,6 +6583,7 @@ export interface operations {
             /** @description Audio stream */
             200: {
                 headers: {
+                    "Cache-Control"?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -6331,6 +6593,8 @@ export interface operations {
                     "audio/ogg": string;
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Not Found */
             404: {
                 headers: {
@@ -6372,6 +6636,9 @@ export interface operations {
                     "application/json": components["schemas"]["CallFrequencyListResponse"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
@@ -6397,6 +6664,9 @@ export interface operations {
                     "application/json": components["schemas"]["CallTransmissionListResponse"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
@@ -6422,6 +6692,8 @@ export interface operations {
                     "application/json": components["schemas"]["Transcription"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -6479,6 +6751,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
@@ -6507,6 +6780,8 @@ export interface operations {
                     };
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -6535,6 +6810,7 @@ export interface operations {
                     };
                 };
             };
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             /** @description Transcription queue full or not configured */
@@ -6569,6 +6845,7 @@ export interface operations {
                     "application/json": components["schemas"]["StatusChangeResponse"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
@@ -6594,6 +6871,7 @@ export interface operations {
                     "application/json": components["schemas"]["StatusChangeResponse"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
@@ -6619,6 +6897,7 @@ export interface operations {
                     "application/json": components["schemas"]["StatusChangeResponse"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
@@ -6661,6 +6940,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     getBatchTranscriptions: {
@@ -6685,6 +6966,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     getTranscriptionQueueStatus: {
@@ -6706,6 +6989,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     uploadCall: {
@@ -6779,9 +7064,9 @@ export interface operations {
                     error_count?: number;
                     /** @description Call duration in seconds (OpenMHz format) */
                     call_length?: number;
-                    /** @description Auth token (rdio-scanner format, alternative to Bearer header) */
+                    /** @description API key with the `upload` scope (rdio-scanner format; alternative to the Bearer header) */
                     key?: string;
-                    /** @description Auth token (OpenMHz format, alternative to Bearer header) */
+                    /** @description API key with the `upload` scope (OpenMHz format; alternative to the Bearer header) */
                     api_key?: string;
                 };
             };
@@ -6878,6 +7163,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -6902,6 +7189,8 @@ export interface operations {
                     "application/json": components["schemas"]["CallGroupDetailResponse"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
@@ -6925,6 +7214,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -6956,6 +7247,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -7004,6 +7297,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -7035,6 +7330,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -7064,6 +7361,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -7095,6 +7394,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -7128,6 +7429,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -7162,6 +7465,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -7194,6 +7499,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -7216,6 +7523,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -7253,6 +7562,8 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -7288,12 +7599,27 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
         };
     };
     streamEvents: {
         parameters: {
             query?: {
+                /**
+                 * @description A ticket from `POST /tickets`, for clients that cannot send an
+                 *     `Authorization` header (browser `EventSource`, `<audio>`,
+                 *     `WebSocket`). Takes precedence over the header. A key is never
+                 *     accepted here.
+                 */
+                ticket?: components["parameters"]["ticket"];
+                /**
+                 * @description Resume after this event ID, like the `Last-Event-ID` header
+                 *     (which wins when both are sent). For clients that re-create an
+                 *     `EventSource` with a fresh ticket and so cannot set the header.
+                 */
+                last_event_id?: string;
                 /** @description Comma-separated system IDs to subscribe to. Omit for all systems. */
                 systems?: string;
                 /**
@@ -7314,9 +7640,12 @@ export interface operations {
                 units?: string;
                 /**
                  * @description Comma-separated event types to subscribe to. Omit for all
-                 *     event types. Valid values: `call_start`, `call_update`,
-                 *     `call_end`, `unit_event`, `recorder_update`, `rate_update`,
-                 *     `trunking_message`, `console`.
+                 *     event types the credential may receive. Valid values:
+                 *     `call_start`, `call_update`, `call_end`, `transcription`,
+                 *     `unit_event`, `recorder_update`, `rate_update`,
+                 *     `trunking_message`, `console`. Asking for a type the credential
+                 *     may not receive is not an error; those events are simply not
+                 *     sent.
                  *
                  *     Supports compound syntax with `:` to filter on event
                  *     subtypes. For example, `unit_event:call` matches only unit
@@ -7329,7 +7658,10 @@ export interface operations {
                 /** @description If true, only push events with the emergency flag set. */
                 emergency_only?: boolean;
             };
-            header?: never;
+            header?: {
+                /** @description Resume after this event ID (sent automatically by `EventSource` on its own reconnects) */
+                "Last-Event-ID"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7348,27 +7680,23 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthUnavailable"];
         };
     };
     streamAudioLive: {
         parameters: {
             query?: {
                 /**
-                 * @description Authentication token. Alternative to the `Authorization: Bearer`
-                 *     header for WebSocket connections where custom headers are not
-                 *     supported.
+                 * @description A ticket from `POST /tickets`, for clients that cannot send an
+                 *     `Authorization` header (browser `EventSource`, `<audio>`,
+                 *     `WebSocket`). Takes precedence over the header. A key is never
+                 *     accepted here.
                  */
-                token?: string;
+                ticket?: components["parameters"]["ticket"];
             };
             header?: never;
             path?: never;
@@ -7383,15 +7711,8 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Live audio streaming not enabled (STREAM_LISTEN not configured) */
             404: {
                 headers: {
@@ -7401,6 +7722,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            429: components["responses"]["RateLimited"];
             /** @description Maximum audio stream clients reached */
             503: {
                 headers: {
@@ -7434,6 +7756,8 @@ export interface operations {
                     };
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Live audio streaming is not enabled */
             404: {
                 headers: {
@@ -7539,7 +7863,11 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Attempted to overwrite a protected core file */
+            401: components["responses"]["Unauthorized"];
+            /**
+             * @description `insufficient_scope` (the key is not an admin key), or an
+             *     attempt to overwrite a protected core file (`forbidden`)
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7647,6 +7975,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             /** @description Source or target system not found */
             404: {
@@ -7688,6 +8017,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Pipeline not running */
             503: {
                 headers: {
@@ -7758,6 +8088,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Pipeline not running */
             503: {
                 headers: {
@@ -7800,7 +8131,8 @@ export interface operations {
                          */
                         position?: number;
                         /**
-                         * @description Number of untranscribed calls matching filters
+                         * @description Number of untranscribed calls matching filters at
+                         *     submission. Recounted when the job starts.
                          * @example 342
                          */
                         total?: number;
@@ -7871,7 +8203,7 @@ export interface operations {
             header?: never;
             path: {
                 /** @description Backfill job ID */
-                job_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -8071,6 +8403,134 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["PurgeResponse"];
                 };
+            };
+        };
+    };
+    listAuditLog: {
+        parameters: {
+            query?: {
+                /** @description Results per page */
+                limit?: components["parameters"]["limit"];
+                /** @description Page offset (number of results to skip) */
+                offset?: components["parameters"]["offset"];
+                /** @description Only entries made with this key */
+                key_id?: number;
+                /** @description Only entries at or after this time (RFC 3339) */
+                since?: string;
+                /** @description Only entries before this time (RFC 3339) */
+                until?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Audit log entries, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditLogResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    submitDebugReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Report forwarded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @example true */
+                        ok?: boolean;
+                    };
+                };
+            };
+            /** @description The body could not be read or is not a JSON object */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error?: string;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The debug receiver could not be reached or rejected the report */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error?: string;
+                    };
+                };
+            };
+            /** @description Debug reports are disabled */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error?: string;
+                    };
+                };
+            };
+        };
+    };
+    getMetrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Metrics in the Prometheus text exposition format */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Metrics are not enabled (`METRICS_ENABLED` is false) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

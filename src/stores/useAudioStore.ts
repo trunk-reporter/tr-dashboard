@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { Call, CallTransmission } from '@/api/types'
-import { getCallAudioUrl, getCallTransmissions } from '@/api/client'
+import { callAudioUrl, getCallTransmissions } from '@/api/client'
 
 // Explicit state machine for audio playback
 export type PlaybackState =
@@ -19,6 +19,9 @@ export interface QueuedCall {
   tgid: number
   tgAlphaTag?: string
   duration: number
+  // `${API_BASE}/calls/{id}/audio`, never with a credential: AudioPlayer adds
+  // a fresh ticket right before it sets `src`, so a call that waits in the
+  // queue or history never holds an expired one.
   audioUrl: string
   // Optional offset (seconds) to seek to once the audio loads, e.g. to jump to
   // one unit's transmission. Set only by loadCall(call, { startAt }), so it
@@ -100,7 +103,7 @@ interface AudioState {
   loadTransmissions: (callId: number) => Promise<void>
 }
 
-function toQueuedCall(call: Call | QueuedCall): QueuedCall {
+export function toQueuedCall(call: Call | QueuedCall): QueuedCall {
   if ('audioUrl' in call) {
     return call
   }
@@ -113,7 +116,7 @@ function toQueuedCall(call: Call | QueuedCall): QueuedCall {
     tgid: call.tgid,
     tgAlphaTag: call.tg_alpha_tag,
     duration: call.duration ?? 0,
-    audioUrl: call.audio_url ?? getCallAudioUrl(call.call_id),
+    audioUrl: callAudioUrl(call.call_id),
   }
 }
 

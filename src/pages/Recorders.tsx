@@ -2,7 +2,8 @@ import { useEffect, useState, useMemo, useCallback } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { useRealtimeStore } from '@/stores/useRealtimeStore'
 import { useTalkgroupColors } from '@/stores/useTalkgroupColors'
-import { getRecorders, getHealth, getSystems, getStats, getDecodeRates } from '@/api/client'
+import { getRecorders, getHealth, getSystems, getStats, getDecodeRates, isUnavailable } from '@/api/client'
+import { useRestricted } from '@/stores/useAuthStore'
 import type { Recorder, HealthResponse, System, StatsResponse, SystemActivity, DecodeRate } from '@/api/types'
 import { formatDuration, formatFrequency, normalizeDecodeRate, cn } from '@/lib/utils'
 import { REFRESH_INTERVALS } from '@/lib/constants'
@@ -123,11 +124,14 @@ export default function Recorders() {
   const [historicalRates, setHistoricalRates] = useState<DecodeRate[]>([])
   const [loading, setLoading] = useState(true)
   const getCachedColor = useTalkgroupColors((s) => s.getCachedColor)
+  // Recorders, stats and decode rates deny restricted credentials: only the
+  // systems list (restriction-enforced) and health load, and nothing polls
+  const restricted = useRestricted()
 
-  // Fetch all data on mount
+  // Fetch all data on mount; each source settles on its own
   useEffect(() => {
     const startTime = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-    Promise.all([
+    Promise.allSettled([
       getRecorders(),
       getHealth(),
       getSystems(),
@@ -135,40 +139,49 @@ export default function Recorders() {
       getDecodeRates({ start_time: startTime }),
     ])
       .then(([recRes, healthRes, sysRes, statsRes, ratesRes]) => {
-        setApiRecorders(recRes.recorders || [])
-        setHealth(healthRes)
-        setSystems(sysRes.systems || [])
-        setStats(statsRes)
-        setHistoricalRates(ratesRes.rates || [])
+        if (recRes.status === 'fulfilled') {
+          if (!isUnavailable(recRes.value)) setApiRecorders(recRes.value.recorders || [])
+        } else console.error(recRes.reason)
+        if (healthRes.status === 'fulfilled') setHealth(healthRes.value)
+        else console.error(healthRes.reason)
+        if (sysRes.status === 'fulfilled') setSystems(sysRes.value.systems || [])
+        else console.error(sysRes.reason)
+        if (statsRes.status === 'fulfilled') {
+          if (!isUnavailable(statsRes.value)) setStats(statsRes.value)
+        } else console.error(statsRes.reason)
+        if (ratesRes.status === 'fulfilled') {
+          if (!isUnavailable(ratesRes.value)) setHistoricalRates(ratesRes.value.rates || [])
+        } else console.error(ratesRes.reason)
       })
-      .catch(console.error)
       .finally(() => setLoading(false))
   }, [])
 
   // Refresh recorders + health + stats every 30s
   useEffect(() => {
+    if (restricted) return
     const interval = setInterval(() => {
       Promise.all([getRecorders(), getHealth(), getStats()])
         .then(([recRes, healthRes, statsRes]) => {
-          setApiRecorders(recRes.recorders || [])
+          if (!isUnavailable(recRes)) setApiRecorders(recRes.recorders || [])
           setHealth(healthRes)
-          setStats(statsRes)
+          if (!isUnavailable(statsRes)) setStats(statsRes)
         })
         .catch(console.error)
     }, REFRESH_INTERVALS.STATS)
     return () => clearInterval(interval)
-  }, [])
+  }, [restricted])
 
   // Refresh historical decode rates every 5 minutes
   useEffect(() => {
+    if (restricted) return
     const interval = setInterval(() => {
       const startTime = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
       getDecodeRates({ start_time: startTime })
-        .then((res) => setHistoricalRates(res.rates || []))
+        .then((res) => { if (!isUnavailable(res)) setHistoricalRates(res.rates || []) })
         .catch(console.error)
     }, 5 * 60 * 1000)
     return () => clearInterval(interval)
-  }, [])
+  }, [restricted])
 
   // Map system_id → SystemActivity
   const systemActivityMap = useMemo(() => {
@@ -341,6 +354,11 @@ export default function Recorders() {
 
   return (
     <div className="space-y-4">
+      {restricted && (
+        <div className="rounded-lg border border-border bg-muted/30 px-4 py-2 text-sm text-muted-foreground">
+          Recorder, activity and decode-rate data aren't available: your access is limited to some systems or talkgroups.
+        </div>
+      )}
       {/* Header + summary */}
       <div className="flex flex-wrap items-center gap-4 lg:gap-6 rounded-lg border stat-bar-glass px-4 py-3">
         <h1 className="text-xl font-bold">Systems</h1>

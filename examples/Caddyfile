@@ -1,4 +1,9 @@
 {$DASHBOARD_HOST:dashboard.example.com} {
+	# Routing only. Never add an Authorization header here: a key that a proxy
+	# adds to visitors' requests is a key every visitor has. The dashboard
+	# sends its own API key; public browsing uses tr-engine's anonymous access
+	# policy (tr-engine access set --anonymous listen).
+
 	# API, audio, and health requests → tr-engine
 	handle /api/* {
 		reverse_proxy tr-engine:8080 {

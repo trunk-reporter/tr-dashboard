@@ -1,151 +1,144 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import type { components } from '@/api/generated'
 
-export interface AuthUser {
-  id: number
-  username: string
-  role: string
-}
-
-export type AuthMode = 'open' | 'token' | 'full'
+export type Scope = components['schemas']['Scope']
+export type Whoami = components['schemas']['Whoami']
 
 /**
- * Auth state machine:
- *   idle → detecting → open | token | guest | login-required | authenticated | error
- *   guest = full mode with a public read token: browse read-only, sign in for writes
- *   login-required → authenticated (on login)
- *   authenticated → login-required (on logout / session expiry)
- *   error → detecting (on retry)
+ * Auth status, decided by AuthGate from `GET /whoami`:
+ *   loading        → whoami in flight (first load or retry)
+ *   ready          → browse: with the stored key, or anonymously when the
+ *                    engine's anonymous access policy is `listen`
+ *   needs-key      → no key stored and anonymous access is `off`
+ *   invalid-key    → the stored key was rejected (401 invalid_key), can only
+ *                    upload, or was ignored by the engine
+ *   engine-too-old → /whoami is missing (404) or answered a 401 without an
+ *                    API-key error code: the engine predates API keys
+ *   error          → network failure or unexpected response; retryable
  */
-export type AuthState =
-  | 'idle'
-  | 'detecting'
-  | 'open'
-  | 'token'
-  | 'guest'
-  | 'login-required'
-  | 'authenticated'
-  | 'error'
+export type AuthStatus = 'loading' | 'ready' | 'needs-key' | 'invalid-key' | 'engine-too-old' | 'error'
 
-interface AuthStateStore {
-  authState: AuthState
-  authMode: AuthMode | null
-  jwtEnabled: boolean
-  readToken: string
-  accessToken: string
-  user: AuthUser | null
-  isAuthenticated: boolean
-  writeToken: string
-  errorMessage: string
+interface AuthStore {
+  /** The API key sent as `Authorization: Bearer`; '' when browsing without one */
+  apiKey: string
+  /**
+   * True while `apiKey` is a v2 `writeToken` carried over by the persist
+   * migration and not yet accepted by /whoami (it may be an imported legacy
+   * token, or a value the engine no longer knows). A rejected candidate is
+   * dropped silently instead of showing the key screen.
+   */
+  candidateKey: boolean
+  /** Latest /whoami for the current credential (the anonymous one while on the key screen) */
+  whoami: Whoami | null
+  status: AuthStatus
+  /** Explanation for invalid-key / error */
+  error: string
+  /** whoami.restricted, kept as a field so components can subscribe to it */
+  restricted: boolean
 
-  setDetecting: () => void
-  setOpen: (readToken: string) => void
-  setToken: (readToken: string) => void
-  setLoginRequired: () => void
-  setGuest: () => void
-  setAuthenticated: (accessToken: string, user: AuthUser) => void
-  setAuthInit: (mode: AuthMode, readToken: string, jwtEnabled: boolean) => void
-  setAuth: (accessToken: string, user: AuthUser) => void
-  clearAuth: () => void
+  setLoading: () => void
+  /** Store a key /whoami accepted, with its whoami */
+  setKey: (apiKey: string, whoami: Whoami) => void
+  /** Browse without a key (anonymous access `listen`), or land on needs-key when it is `off` */
+  setAnonymous: (whoami: Whoami) => void
+  /** Drop the stored key without deciding the status (callers re-run whoami) */
+  dropKey: () => void
+  setInvalidKey: (message: string, anonymous: Whoami | null) => void
+  setEngineTooOld: () => void
   setError: (message: string) => void
-  setAccessToken: (token: string) => void
-  setWriteToken: (token: string) => void
-  clearWriteToken: () => void
+  /** Refresh whoami for the current credential without changing status */
+  updateWhoami: (whoami: Whoami) => void
+
+  hasScope: (scope: Scope) => boolean
+  canEdit: () => boolean
   isAdmin: () => boolean
-  canWrite: () => boolean
 }
 
-export const useAuthStore = create<AuthStateStore>()(
+export function scopesAllow(whoami: Whoami | null, scope: Scope): boolean {
+  return !!whoami && whoami.scopes.includes(scope)
+}
+
+export const useAuthStore = create<AuthStore>()(
   persist(
     (set, get) => ({
-      authState: 'idle',
-      authMode: null,
-      jwtEnabled: false,
-      readToken: '',
-      accessToken: '',
-      user: null,
-      isAuthenticated: false,
-      writeToken: '',
-      errorMessage: '',
+      apiKey: '',
+      candidateKey: false,
+      whoami: null,
+      status: 'loading',
+      error: '',
+      restricted: false,
 
-      setDetecting: () => set({ authState: 'detecting' }),
+      setLoading: () => set({ status: 'loading', error: '' }),
 
-      setOpen: (readToken) =>
-        set({ authState: 'open', authMode: 'open', readToken, jwtEnabled: false }),
+      setKey: (apiKey, whoami) =>
+        set({ apiKey, candidateKey: false, whoami, restricted: whoami.restricted, status: 'ready', error: '' }),
 
-      setToken: (readToken) =>
-        set({ authState: 'token', authMode: 'token', readToken, jwtEnabled: false }),
-
-      setLoginRequired: () =>
-        set({ authState: 'login-required', authMode: 'full', jwtEnabled: true, readToken: '' }),
-
-      // Keeps the public read token from auth-init so guests can browse.
-      setGuest: () => set({ authState: 'guest', authMode: 'full', jwtEnabled: true }),
-
-      setAuthenticated: (accessToken, user) =>
+      setAnonymous: (whoami) =>
         set({
-          authState: 'authenticated',
-          authMode: 'full',
-          jwtEnabled: true,
-          accessToken,
-          user,
-          isAuthenticated: true,
+          apiKey: '',
+          candidateKey: false,
+          whoami,
+          restricted: whoami.restricted,
+          status: whoami.scopes.includes('listen') ? 'ready' : 'needs-key',
+          error: '',
         }),
 
-      setAuthInit: (mode, readToken, jwtEnabled) => {
-        if (mode === 'open') {
-          set({ authState: 'open', authMode: mode, readToken, jwtEnabled })
-        } else if (mode === 'token') {
-          set({ authState: 'token', authMode: mode, readToken, jwtEnabled })
-        } else if (mode === 'full' && jwtEnabled) {
-          // Stay in 'detecting' until RequireAuth has tried the refresh cookie;
-          // it then settles on authenticated, guest (public read token) or
-          // login-required. Jumping straight to login-required redirected
-          // guests to /login before that check finished.
-          set({ authState: 'detecting', authMode: mode, readToken, jwtEnabled })
-        } else {
-          set({ authState: 'open', authMode: mode, readToken, jwtEnabled })
-        }
-      },
+      dropKey: () => set({ apiKey: '', candidateKey: false }),
 
-      setAuth: (accessToken, user) =>
-        set({ accessToken, user, isAuthenticated: true, authState: 'authenticated' }),
+      setInvalidKey: (message, anonymous) =>
+        set({ status: 'invalid-key', error: message, whoami: anonymous, restricted: anonymous?.restricted ?? false }),
 
-      clearAuth: () =>
-        set({
-          accessToken: '', user: null, isAuthenticated: false,
-          authMode: null, readToken: '', jwtEnabled: false,
-          authState: 'idle', errorMessage: '',
-        }),
+      setEngineTooOld: () => set({ status: 'engine-too-old', error: '' }),
 
-      setError: (message) => set({ authState: 'error', errorMessage: message }),
+      setError: (message) => set({ status: 'error', error: message }),
 
-      setAccessToken: (token) => set({ accessToken: token }),
+      updateWhoami: (whoami) => set({ whoami, restricted: whoami.restricted }),
 
-      setWriteToken: (token) => set({ writeToken: token }),
-      clearWriteToken: () => set({ writeToken: '' }),
-
-      isAdmin: () => get().user?.role === 'admin',
-      canWrite: () => {
-        if (get().authMode === 'open') return true
-        const role = get().user?.role
-        return role === 'admin' || role === 'editor' || !!get().writeToken
-      },
+      hasScope: (scope) => scopesAllow(get().whoami, scope),
+      canEdit: () => scopesAllow(get().whoami, 'edit'),
+      isAdmin: () => scopesAllow(get().whoami, 'admin'),
     }),
     {
       name: 'tr-dashboard-auth',
+      version: 3,
       partialize: (state) => ({
-        writeToken: state.writeToken,
+        apiKey: state.apiKey,
+        candidateKey: state.candidateKey,
       }),
-      migrate: (persisted: any, version: number) => {
-        if (version === 0 && persisted && typeof persisted === 'object') {
-          return {
-            writeToken: persisted.writeToken || '',
-          }
+      // v0–v2 persisted only `writeToken` (a WRITE_TOKEN, a token-mode
+      // AUTH_TOKEN or an API key pasted in Settings). The engine may have
+      // imported it as a legacy key, so it becomes a candidate key that
+      // AuthGate keeps only if /whoami accepts it.
+      migrate: (persisted: unknown, version: number) => {
+        const old = (persisted && typeof persisted === 'object' ? persisted : {}) as Record<string, unknown>
+        if (version < 3) {
+          const token = typeof old.writeToken === 'string' ? old.writeToken.trim() : ''
+          return { apiKey: token, candidateKey: token !== '' }
         }
-        return persisted as AuthStateStore
+        return {
+          apiKey: typeof old.apiKey === 'string' ? old.apiKey : '',
+          candidateKey: old.candidateKey === true,
+        }
       },
-      version: 2,
     }
   )
 )
+
+/** Reactive scope check for components */
+export function useHasScope(scope: Scope): boolean {
+  return useAuthStore((s) => scopesAllow(s.whoami, scope))
+}
+
+export function useCanEdit(): boolean {
+  return useHasScope('edit')
+}
+
+export function useIsAdmin(): boolean {
+  return useHasScope('admin')
+}
+
+/** True when a restriction applies: Deny endpoints are unavailable */
+export function useRestricted(): boolean {
+  return useAuthStore((s) => s.restricted)
+}

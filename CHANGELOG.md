@@ -1,5 +1,37 @@
 # Changelog
 
+## Unreleased
+
+> [!IMPORTANT]
+> **Breaking: needs tr-engine with API keys.** This dashboard authenticates with tr-engine API keys (`GET /api/v1/whoami`). Against an older engine it shows "This tr-engine doesn't support API keys yet — upgrade tr-engine". Upgrade tr-engine and tr-dashboard together, and remove any reverse-proxy block that adds an `Authorization` header (see README "Authentication").
+
+### Features
+
+- **API keys** — The dashboard asks `GET /whoami` what it may do on load. With a key (pasted on the new "Connect to tr-engine" screen or in **Settings → API key**) it sends `Authorization: Bearer <key>`; without one it browses under tr-engine's anonymous access policy, and asks for a key when that is `off`. Upload-only keys are refused with an explanation. A rejected key shows the key screen, with "Continue without a key" when anonymous listening is allowed.
+- **Access page** (`/access`, admin keys) — List, create, edit and revoke API keys (the full key is shown once, with a copy button and a warning that keys in pages other people load are public), a warning while the `bootstrap admin` key is active, the anonymous access policy editor (off/listen, all talkgroups with exclusions or selected systems/talkgroups; an allow-nothing policy can't be saved), and the audit log. Linked in the sidebar for admins.
+- **Scope-based gating** — Edit buttons (talkgroup and unit tags, unit tag suggestions) need the `edit` scope; Admin and Access need `admin`. A 403 explains what is missing ("Your key can't do this (needs edit)").
+- **Restricted access** — When the key or the anonymous policy is limited to some systems or talkgroups, the dashboard skips the endpoints tr-engine denies such credentials (units, affiliations, recorders, stats, unit tag suggestions): their API functions return a typed "unavailable" result without a request, polling stops, and the Units, Affiliations, Systems (recorders) and suggestion entries leave the sidebar, command palette, Go To menu and shortcuts. Everything else still renders, limited to the allowed talkgroups.
+- **Tickets for the event stream and audio** — With a key, the dashboard mints a short-lived, listen-only ticket (`POST /tickets`) right before it opens the event stream or sets an audio `src`. The key never appears in a URL.
+
+### Bug Fixes
+
+- **Guests and token mode without a proxy** — Live events and audio work for key holders and anonymous visitors without any reverse-proxy token injection.
+- **Audio with an absolute `VITE_API_BASE`** — The player builds audio URLs from `API_BASE` instead of the engine's root-relative `audio_url`, which resolved against the dashboard's origin.
+- **Stale audio credentials** — Queued and history items no longer carry a credential captured when they were queued; the player adds a fresh ticket when it loads a call, and re-mints it once (restoring the position) after a media error.
+- **Event stream reconnects** — The stream reconnects itself with a fresh ticket, `last_event_id` (gapless) and backoff, instead of letting the browser retry an expired URL; it reconnects when the key is set, replaced or forgotten, and stops (re-checking `/whoami`) when tr-engine closes it for an auth reason.
+- **Home, system detail, talkgroup analytics, search** — Calls that tr-engine may deny no longer share a `Promise.all` with the page's main data, so a denied stats/recorders/units request can't blank the page.
+- **`/login` spinner, `canWrite()` over-reporting in token mode** — Gone with the login page and the token modes.
+
+### Removed
+
+- The login page, the Users page, `/login` and `/users` (both redirect), the login/refresh/logout/setup client functions and the users API, JWT/refresh-cookie handling (`credentials: 'include'`), and the read/write token state.
+- Dev proxy `TR_AUTH_TOKEN`; use `TR_API_KEY`, which is only added to requests without an `Authorization` header.
+
+### Upgrade notes
+
+- A write token saved in Settings by an older dashboard is tried once as an API key (tr-engine imports `WRITE_TOKEN` and a token-mode `AUTH_TOKEN` as legacy keys); if tr-engine doesn't accept it, it is dropped quietly.
+- Regenerated `src/api/generated.ts` from the new tr-engine `openapi.yaml`.
+
 ## 1.0.0-pre11 (2026-09-23)
 
 > [!WARNING]

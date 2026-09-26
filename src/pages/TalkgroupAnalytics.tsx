@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
-import { getTalkgroup, getTalkgroupCalls, getTalkgroupUnits, getUnitCalls, getUnitAffiliations, searchTranscriptions } from '@/api/client'
+import { getTalkgroup, getTalkgroupCalls, getTalkgroupUnits, getUnitCalls, getUnitAffiliations, searchTranscriptions, isUnavailable } from '@/api/client'
 import type { Talkgroup, Call, Unit, Affiliation, TranscriptionSearchHit } from '@/api/types'
 import { formatRelativeTime, formatDuration } from '@/lib/utils'
 
@@ -154,18 +154,28 @@ export default function TalkgroupAnalytics() {
           .catch(() => ({ results: [] as TranscriptionSearchHit[], total: 0, limit: 100, offset: 0 }))
       )
 
+    // Units and affiliations deny restricted credentials (the functions then
+    // return Unavailable without a request); they only add panels, so they
+    // never fail the page.
+    const unitsFetch = getTalkgroupUnits(id, { limit: 100 })
+      .then((res) => (isUnavailable(res) ? [] : res.units || []))
+      .catch((): Unit[] => [])
+    const affiliationsFetch = getUnitAffiliations({ tgid: tgidStr, status: 'affiliated', limit: 200 })
+      .then((res) => (isUnavailable(res) ? [] : res.affiliations || []))
+      .catch((): Affiliation[] => [])
+
     Promise.all([
       getTalkgroup(id),
       fetchAllCalls(id),
-      getTalkgroupUnits(id, { limit: 100 }),
-      getUnitAffiliations({ tgid: tgidStr, status: 'affiliated', limit: 200 }).catch(() => ({ affiliations: [] as Affiliation[], total: 0, limit: 200, offset: 0, summary: { talkgroup_counts: {} } })),
+      unitsFetch,
+      affiliationsFetch,
       transcriptionFetch,
     ])
-      .then(([tgRes, allCalls, unitsRes, affRes, txRes]) => {
+      .then(([tgRes, allCalls, units, affs, txRes]) => {
         setTalkgroup(tgRes)
         setCalls(allCalls)
-        setTgUnits(unitsRes.units || [])
-        setAffiliations(affRes.affiliations || [])
+        setTgUnits(units)
+        setAffiliations(affs)
         setTranscriptionHits(txRes.results || [])
       })
       .catch((err) => {
@@ -186,7 +196,9 @@ export default function TalkgroupAnalytics() {
     Promise.all(
       topUnits.map((u) =>
         getUnitCalls(`${talkgroup.system_id}:${u.unit_id}`, { limit: 1000 })
-          .then((res) => ({ unit_id: u.unit_id, alpha_tag: u.alpha_tag || '', system_id: talkgroup.system_id, calls: res.calls || [], total: res.total }))
+          .then((res) => isUnavailable(res)
+            ? { unit_id: u.unit_id, alpha_tag: u.alpha_tag || '', system_id: talkgroup.system_id, calls: [] as Call[], total: 0 }
+            : { unit_id: u.unit_id, alpha_tag: u.alpha_tag || '', system_id: talkgroup.system_id, calls: res.calls || [], total: res.total })
           .catch(() => ({ unit_id: u.unit_id, alpha_tag: u.alpha_tag || '', system_id: talkgroup.system_id, calls: [] as Call[], total: 0 }))
       )
     ).then((results) => {

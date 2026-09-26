@@ -29,7 +29,7 @@ npm run api:generate  # Regenerate TypeScript types from OpenAPI spec
 
 There is no automated unit-test suite yet (`TODO.md` tracks vitest). `npm run lint` / `npm run build` are the primary quality checks. See `docs/quality-gates.md`.
 
-Dev proxy: set `TR_ENGINE_URL` in `.env` (e.g. `http://localhost:8080`). Vite then proxies `/api` and `/health` to that origin. Optional `TR_AUTH_TOKEN` injects a static bearer for token-mode engines.
+Dev proxy: set `TR_ENGINE_URL` in `.env` (e.g. `http://localhost:8080`). Vite then proxies `/api` and `/health` to that origin. Optional `TR_API_KEY` is added as `Authorization: Bearer` only to proxied requests that carry no `Authorization` header (dev only; never inject keys in a deployment).
 
 ## Tech Stack
 
@@ -60,11 +60,14 @@ All imports use `@/` alias mapped to `src/`. Example: `import { cn } from '@/lib
 src/
 ├── api/
 │   ├── client.ts         # REST API client (fetch wrapper with typed functions)
+│   ├── auth.ts            # GET /whoami, auth status decisions, key connect/forget
+│   ├── tickets.ts         # Ticket cache for EventSource / <audio> URLs
 │   ├── types.ts           # TypeScript types (REST + SSE events)
 │   ├── generated.ts       # Auto-generated OpenAPI types (don't edit)
 │   └── eventsource.ts     # SSE event source manager singleton
 ├── stores/                # Zustand state stores
 ├── components/
+│   ├── auth/              # AuthGate, ConnectKey (key screen + KeyForm), ApiKeyCard, RestrictionEditor
 │   ├── layout/            # MainLayout, Header, Sidebar
 │   ├── audio/             # AudioPlayer, TransmissionTimeline
 │   ├── calls/             # CallCard, CallList, TranscriptionPreview
@@ -72,6 +75,7 @@ src/
 │   └── ui/                # shadcn/ui primitives (Button, Card, Badge, etc.)
 ├── pages/                 # Route page components
 ├── lib/
+│   ├── access.ts          # Nav visibility by scope / restriction (useNavVisible)
 │   ├── constants.ts       # Keyboard shortcuts, refresh intervals, colors
 │   └── utils.ts           # Formatters and display helpers (cn, formatFrequency, etc.)
 ├── App.tsx                # React Router route definitions
@@ -81,10 +85,9 @@ src/
 
 ### Routing
 
-React Router v7. `/login` is public; all other routes sit under `RequireAuth` + `MainLayout` (sidebar, header, audio player). Lazy-loaded pages are wrapped in `ErrorBoundary`.
+React Router v7. Every route sits under `AuthGate` + `MainLayout` (sidebar, header, audio player); `AuthGate` shows the key screen, the engine-too-old notice or an error screen instead when `/whoami` says so. Lazy-loaded pages are wrapped in `Suspense`. `App` keys the `QueryProvider` on the API key, so setting, replacing or forgetting the key remounts the pages with an empty cache.
 
 ```
-/login               → Login (full auth mode)
 /                    → Dashboard (live monitoring + recent calls)
 /calls               → Call history browser
 /calls/:id           → Call detail with transmissions/audio
@@ -102,32 +105,41 @@ React Router v7. `/login` is public; all other routes sit under `RequireAuth` + 
 /call-groups         → Call groups browser
 /call-groups/:id     → Call group detail
 /investigate         → Investigate timeline
-/settings            → Colors, favorites, write token, display prefs
-/admin               → System merge, maintenance, CSV import
-/users               → User management (full auth / admin)
+/settings            → API key card, colors, favorites, display prefs
+/admin               → System merge, maintenance, CSV import (admin scope)
+/access              → API keys, anonymous access policy, audit log (admin scope)
+/login, /users       → Removed; redirect to / and /access
 ```
 
 ### API Layer (`src/api/`)
 
-- `client.ts`: Typed REST functions + `request<T>()` wrapper. Base URL `/api/v1`. Injects JWT, legacy write token, or auth-init `read_token` as `Authorization: Bearer`.
-- `auth-init.ts`: Calls `GET /api/v1/auth-init` on load; drives open / token / full mode via `useAuthStore`.
+- `client.ts`: Typed REST functions + `request<T>()` wrapper. Base URL `API_BASE` (`/api/v1`, or `VITE_API_BASE`). Sends `Authorization: Bearer <apiKey>` when a key is stored and nothing otherwise (no cookies, no refresh). A 401 `invalid_key` (or `key_required` without a key) re-runs `/whoami` via the `onAuthFailure` hook; 401/403 auth errors get user-facing messages (`describeError`: "Your key can't do this (needs edit)"). Functions for `x-restricted: deny` endpoints (units, affiliations, unit tag suggestions, stats, recorders, encryption stats, talkgroup units, P25 systems, transcription queue) return `Promise<T | Unavailable>`: while `whoami.restricted` is true they short-circuit to `UNAVAILABLE` without a request, and a 403 `restricted_credential` also becomes `UNAVAILABLE`. Check with `isUnavailable()`. `callAudioUrl(id)` builds `${API_BASE}/calls/{id}/audio` (never from the root-relative `audio_url`).
+- `auth.ts`: `GET /whoami` (`fetchWhoami`), `initAuth`/`recheckAuth` (decide `useAuthStore.status`), `connectKey` (validate + store; rejects upload-only keys and the retired public token), `forgetKey`, `continueWithoutKey`.
+- `tickets.ts`: `getTicket({minRemaining, fresh})` caches one ticket per key (`POST /tickets`, 600 s); `mediaUrl(url)` appends one with ≥5 min left, the SSE manager asks for ≥60 s. Tickets are only added right before use (EventSource URL, `<audio src>`).
 - `types.ts`: Hand-written types for API responses and SSE events.
 - `generated.ts`: Auto-generated from OpenAPI via `npm run api:generate`.
-- `eventsource.ts`: Singleton `SSEManager` → `GET /api/v1/events/stream`. Auto-reconnect with backoff. Handlers for `call_start`, `call_end`, `unit_event`, `recorder_update`, `rate_update`, etc. (`call_update` remains typed for compatibility but tr-engine currently does not emit it.)
+- `eventsource.ts`: Singleton `SSEManager` → `GET /api/v1/events/stream`. With a key it mints a ticket right before every (re)connect (`?ticket=`). On `error` it closes and reconnects itself with a fresh ticket, `last_event_id` and backoff (1 s → 30 s); after 3 failures without an open it re-checks `/whoami`. `event: auth` → reconnect only for `ticket_expired`, otherwise stop and re-run `/whoami`. It subscribes to `apiKey` and reconnects when the key changes. Handlers for `call_start`, `call_end`, `unit_event`, `recorder_update`, `rate_update`, `console` (only admin keys receive it), etc. (`call_update` remains typed for compatibility but tr-engine currently does not emit it.)
 
 ### Auth (`useAuthStore`)
 
-State machine: `idle → detecting → open | token | login-required | authenticated | error`.
+tr-engine authenticates client software with API keys (scopes `listen` < `edit` < `admin`, plus `upload`); there are no users or logins. State: `{ apiKey, candidateKey, whoami, status, error, restricted }`, persisted as `tr-dashboard-auth` v3 (`apiKey`, `candidateKey` only; the v2 `writeToken` migrates to a *candidate* key that is kept only if `/whoami` accepts it with `listen`).
 
-- **open** — no credentials; `canWrite()` true
-- **token** — shared bearer (proxy or stored token)
-- **full** — JWT login; write if role is editor/admin or legacy write token present
+`status` (decided by `AuthGate` from `GET /whoami`):
+
+- **loading** — whoami in flight
+- **ready** — with the key, or anonymously when `whoami.anonymous.access` is `listen`
+- **needs-key** — no key and anonymous access `off` → full-page "Connect to tr-engine" key screen
+- **invalid-key** — 401 `invalid_key`, an upload-only key, or a value the engine ignored → key screen explaining why, plus "Continue without a key" when anonymous access is `listen`
+- **engine-too-old** — `/whoami` 404, or a 401 without an API-key error code → "upgrade tr-engine", never the key screen
+- **error** — network/unexpected response, with Retry
+
+Gating: `hasScope(scope)`, `canEdit()`, `isAdmin()` and reactive `useHasScope`/`useCanEdit`/`useIsAdmin`/`useRestricted`. Edit buttons (talkgroup/unit tags, unit tag suggestions) need `edit`; Admin and Access need `admin`. When `restricted`, Deny-endpoint data is skipped (`Unavailable`), its polling stops, and `lib/access.ts` (`useNavVisible`) hides Units, Affiliations, Systems (recorders) and unit suggestions from the sidebar, palette, Go To menu and shortcuts. Pages that mix Enforced and Deny calls load them separately (`Promise.allSettled`, or split) so Enforced data still renders.
 
 ### State Management (Zustand Stores)
 
 | Store | File | Purpose | Persisted |
 |-------|------|---------|-----------|
-| `useAuthStore` | `stores/useAuthStore.ts` | Auth mode, JWT, read/write tokens | writeToken only |
+| `useAuthStore` | `stores/useAuthStore.ts` | API key, `/whoami`, auth status, restricted | apiKey, candidateKey |
 | `useRealtimeStore` | `stores/useRealtimeStore.ts` | SSE events, active calls, decode rates, recorders | No |
 | `useAudioStore` | `stores/useAudioStore.ts` | Playback state machine, queue, transmissions | No |
 | `useMonitorStore` | `stores/useMonitorStore.ts` | Monitored talkgroups, monitoring toggle | localStorage |
@@ -202,7 +214,7 @@ Understanding the P25 trunked radio hierarchy is essential for this codebase:
 - REST under `/api/v1` for CRUD and queries
 - SSE at `/api/v1/events/stream` (not `/api/events`)
 
-**Auth discovery:** `GET /api/v1/auth-init` → `{ mode: open|token|full, read_token?, jwt_enabled }`
+**Auth discovery:** `GET /api/v1/whoami` (public) → `{ credential: key|anonymous, key, scopes (expanded), restricted, anonymous: {access: off|listen, restricted}, version }`; 401 `invalid_key` for a bad key. Keys go only in `Authorization: Bearer`; `?ticket=` (from `POST /tickets`) only on `/events/stream`, `/audio/live`, `/calls/{id}/audio`. Each operation's `x-scope`/`x-restricted` in `openapi.yaml` says what it needs. Admin endpoints: `/keys`, `/anonymous-access`, `/admin/audit-log`.
 
 **Key endpoints (non-exhaustive):**
 - `GET /api/v1/systems`, `/talkgroups`, `/units`, `/calls`, `/affiliations`
@@ -225,7 +237,7 @@ Regenerate client types after engine OpenAPI changes: `npm run api:generate` (ex
 - Signal/noise values of 999 are sentinel for "unknown" — display as "—"
 - Decode rates are 0-1 ratio (display as percentage)
 
-**SSE Event Types:** `call_start`, `call_update`, `call_end`, `unit_event`, `rate_update`, `recorder_update`
+**SSE Event Types:** `call_start`, `call_update`, `call_end`, `transcription`, `unit_event`, `rate_update`, `recorder_update`, `trunking_message`, `console` (admin keys only), plus the `auth` control event (`{code}`) sent before tr-engine closes a stream for auth reasons. Restricted credentials only get call/transcription/unit events for allowed talkgroups.
 
 **System Types:** `p25`, `smartnet`, `conventional`, `conventionalP25`, `conventionalDMR`, `conventionalSIGMF`
 

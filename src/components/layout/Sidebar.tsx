@@ -6,7 +6,7 @@ import { Separator } from '@/components/ui/separator'
 import { useRealtimeStore } from '@/stores/useRealtimeStore'
 import { useFilterStore } from '@/stores/useFilterStore'
 import { useMonitorStore } from '@/stores/useMonitorStore'
-import { useAuthStore } from '@/stores/useAuthStore'
+import { useNavVisible } from '@/lib/access'
 import { getTalkgroups } from '@/api/client'
 import {
   formatDecodeRate,
@@ -198,10 +198,10 @@ const navItems = [
   },
 ]
 
-// Users nav item (admin only)
-const usersNavItem = {
-  label: 'Users',
-  path: '/users',
+// Access nav item (API keys, anonymous access, audit log; admin only)
+const accessNavItem = {
+  label: 'Access',
+  path: '/access',
   icon: (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -214,16 +214,15 @@ const usersNavItem = {
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <line x1="19" x2="19" y1="8" y2="14" />
-      <line x1="22" x2="16" y1="11" y2="11" />
+      <circle cx="7.5" cy="15.5" r="5.5" />
+      <path d="m21 2-9.6 9.6" />
+      <path d="m15.5 7.5 3 3L22 7l-3-3" />
     </svg>
   ),
 }
 
 export function Sidebar({ collapsed, onNavigate }: SidebarProps) {
-  const userRole = useAuthStore((s) => s.user?.role)
+  const navVisible = useNavVisible()
   const decodeRates = useRealtimeStore((s) => s.decodeRates)
   const activeCalls = useRealtimeStore((s) => s.activeCalls)
   const favoriteTalkgroups = useFilterStore((s) => s.favoriteTalkgroups)
@@ -297,9 +296,9 @@ export function Sidebar({ collapsed, onNavigate }: SidebarProps) {
     return getTalkgroupDisplayName(parsed.tgid, name)
   }, [activeCallAlphaTags, fetchedAlphaTags])
 
-  const allNavItems = userRole === 'admin'
-    ? [...navItems, usersNavItem]
-    : navItems
+  // Units and Systems (recorders) are hidden for restricted credentials;
+  // Access only shows for admin keys
+  const allNavItems = [...navItems, accessNavItem].filter((item) => navVisible(item.path))
 
   if (collapsed) {
     return (

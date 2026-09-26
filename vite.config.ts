@@ -1,4 +1,4 @@
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig, loadEnv, type ProxyOptions } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -7,15 +7,29 @@ import pkg from './package.json'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const authToken = env.TR_AUTH_TOKEN || process.env.TR_AUTH_TOKEN || ''
+  const apiKey = env.TR_API_KEY || process.env.TR_API_KEY || ''
   const engineUrl = env.TR_ENGINE_URL
 
-  // When JWT auth is active, the browser sends its own Authorization header.
-  // Only inject the static auth token if TR_AUTH_TOKEN is set (legacy dev mode).
-  const proxyHeaders: Record<string, string> = {}
-  if (authToken) {
-    proxyHeaders['Authorization'] = `Bearer ${authToken}`
-  }
+  // Dev convenience: TR_API_KEY is added to proxied requests that carry no
+  // Authorization header, so a local dashboard works against a keyed engine
+  // without pasting a key. A key the browser sends (from Settings or the key
+  // screen) always wins. Development only: in a deployment, a proxy that adds
+  // a key to visitors' requests gives that key to every visitor.
+  const proxyTo = (target: string): ProxyOptions => ({
+    target,
+    changeOrigin: true,
+    ...(apiKey
+      ? {
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq, req) => {
+              if (!req.headers.authorization) {
+                proxyReq.setHeader('Authorization', `Bearer ${apiKey}`)
+              }
+            })
+          },
+        }
+      : {}),
+  })
 
   return {
     plugins: [
@@ -77,16 +91,8 @@ export default defineConfig(({ mode }) => {
       ...(engineUrl
         ? {
             proxy: {
-              '/api': {
-                target: engineUrl,
-                changeOrigin: true,
-                ...(authToken ? { headers: proxyHeaders } : {}),
-              },
-              '/health': {
-                target: engineUrl,
-                changeOrigin: true,
-                ...(authToken ? { headers: proxyHeaders } : {}),
-              },
+              '/api': proxyTo(engineUrl),
+              '/health': proxyTo(engineUrl),
             },
           }
         : {}),

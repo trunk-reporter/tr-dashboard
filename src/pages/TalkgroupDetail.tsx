@@ -3,7 +3,8 @@ import { useParams, Link } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { getTalkgroup, getTalkgroupCalls, updateTalkgroup, getEncryptionStats, getCachedSystemType } from '@/api/client'
+import { getTalkgroup, getTalkgroupCalls, updateTalkgroup, getEncryptionStats, getCachedSystemType, isUnavailable, describeError } from '@/api/client'
+import { useCanEdit } from '@/stores/useAuthStore'
 import type { Talkgroup, Call, TalkgroupPatch, TalkgroupEncryptionStat } from '@/api/types'
 import { useTranscriptionCache } from '@/stores/useTranscriptionCache'
 import { useFilterStore } from '@/stores/useFilterStore'
@@ -30,6 +31,8 @@ export default function TalkgroupDetail() {
   const [saving, setSaving] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<TalkgroupPatch>({})
+  // Tag edits need a key with the edit scope
+  const canEdit = useCanEdit()
 
   // Subscribe to state to trigger re-renders
   const favoriteTalkgroups = useFilterStore((s) => s.favoriteTalkgroups)
@@ -72,7 +75,9 @@ export default function TalkgroupDetail() {
         }
 
         // Fetch encryption stats for this talkgroup
+        // (unavailable to restricted credentials: no request is made)
         getEncryptionStats({ hours: 168 }).then((res) => {
+          if (isUnavailable(res)) return
           const stat = res.stats.find(
             (s) => s.system_id === tgRes.system_id && s.tgid === tgRes.tgid
           )
@@ -196,11 +201,7 @@ export default function TalkgroupDetail() {
       setTalkgroup(updated)
       setEditing(false)
     } catch (err) {
-      if (err instanceof Error && 'status' in err && (err as { status: number }).status === 403) {
-        setEditError('Write token required. Add it in Settings → Write Access.')
-      } else {
-        setEditError('Failed to save changes.')
-      }
+      setEditError(describeError(err, 'Failed to save changes.'))
       console.error('Failed to update talkgroup:', err)
     } finally {
       setSaving(false)
@@ -269,7 +270,7 @@ export default function TalkgroupDetail() {
                 Analytics
               </Button>
             </Link>
-            {!editing && (
+            {!editing && canEdit && (
               <Button variant="outline" onClick={startEdit}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
                   <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />

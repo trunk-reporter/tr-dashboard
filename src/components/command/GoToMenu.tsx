@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
-import { getTalkgroups, getUnits } from '@/api/client'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { getTalkgroups, getUnits, isUnavailable } from '@/api/client'
+import { useNavVisible } from '@/lib/access'
 import { getTalkgroupDisplayName, getUnitDisplayName } from '@/lib/utils'
 import type { Talkgroup, Unit } from '@/api/types'
 
@@ -21,6 +22,7 @@ const NAVIGATION_OPTIONS = [
   { key: 'I', label: 'Investigate', path: '/investigate' },
   { key: 'S', label: 'Settings', path: '/settings' },
   { key: 'X', label: 'Admin', path: '/admin' },
+  { key: 'K', label: 'Access', path: '/access' },
 ]
 
 export function GoToMenu({ open, onOpenChange, onNavigate }: GoToMenuProps) {
@@ -30,6 +32,14 @@ export function GoToMenu({ open, onOpenChange, onNavigate }: GoToMenuProps) {
   const [talkgroups, setTalkgroups] = useState<Talkgroup[]>([])
   const [units, setUnits] = useState<Unit[]>([])
   const [loading, setLoading] = useState(false)
+
+  // Units, affiliations and recorders are hidden for restricted credentials,
+  // Admin and Access without the admin scope
+  const navVisible = useNavVisible()
+  const navigationOptions = useMemo(
+    () => NAVIGATION_OPTIONS.filter((opt) => navVisible(opt.path)),
+    [navVisible]
+  )
 
   // Reset state when menu closes
   useEffect(() => {
@@ -54,19 +64,25 @@ export function GoToMenu({ open, onOpenChange, onNavigate }: GoToMenuProps) {
 
     // Debounce: wait 300ms after user stops typing
     const timeoutId = setTimeout(() => {
-      Promise.all([
+      // Settled separately: unit search is unavailable to restricted
+      // credentials (getUnits short-circuits), and talkgroups must still show.
+      Promise.allSettled([
         getTalkgroups({ search, limit: 5 }),
         getUnits({ search, limit: 5 }),
       ])
         .then(([tgRes, unitRes]) => {
-          if (!controller.signal.aborted) {
-            setTalkgroups(tgRes.talkgroups || [])
-            setUnits(unitRes.units || [])
+          if (controller.signal.aborted) return
+          if (tgRes.status === 'fulfilled') {
+            setTalkgroups(tgRes.value.talkgroups || [])
+          } else {
+            console.error('Talkgroup search error:', tgRes.reason)
+            setTalkgroups([])
           }
-        })
-        .catch((err) => {
-          if (!controller.signal.aborted) {
-            console.error('Search error:', err)
+          if (unitRes.status === 'fulfilled' && !isUnavailable(unitRes.value)) {
+            setUnits(unitRes.value.units || [])
+          } else {
+            if (unitRes.status === 'rejected') console.error('Unit search error:', unitRes.reason)
+            setUnits([])
           }
         })
         .finally(() => {
@@ -124,7 +140,7 @@ export function GoToMenu({ open, onOpenChange, onNavigate }: GoToMenuProps) {
 
       // Navigation shortcuts
       const key = e.key.toLowerCase()
-      const option = NAVIGATION_OPTIONS.find(opt => opt.key.toLowerCase() === key)
+      const option = navigationOptions.find(opt => opt.key.toLowerCase() === key)
 
       if (option) {
         e.preventDefault()
@@ -134,7 +150,7 @@ export function GoToMenu({ open, onOpenChange, onNavigate }: GoToMenuProps) {
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [open, onNavigate, onOpenChange])
+  }, [open, onNavigate, onOpenChange, navigationOptions])
 
   if (!open) return null
 
@@ -166,7 +182,7 @@ export function GoToMenu({ open, onOpenChange, onNavigate }: GoToMenuProps) {
           {showNavigation && (
             <div className="p-1">
               <div className="px-2 py-1 text-xs font-medium text-muted-foreground">Navigation</div>
-              {NAVIGATION_OPTIONS.map((option) => (
+              {navigationOptions.map((option) => (
                 <button
                   key={option.key}
                   onClick={() => onNavigate(option.path)}

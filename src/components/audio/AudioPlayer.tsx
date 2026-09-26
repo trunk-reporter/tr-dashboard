@@ -8,6 +8,8 @@ import { useAudioStore, selectIsPlaying, selectIsBlocked, selectRetryCount } fro
 import { cn, formatDuration, getTalkgroupDisplayName } from '@/lib/utils'
 import { KEYBOARD_SHORTCUTS, AUDIO } from '@/lib/constants'
 import { useMediaSession } from '@/hooks/useMediaSession'
+import { useAuthStore } from '@/stores/useAuthStore'
+import { mediaUrl, peekTicket, appendTicket, MEDIA_TICKET_MIN_REMAINING_MS } from '@/api/tickets'
 
 export function AudioPlayer() {
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -15,6 +17,13 @@ export function AudioPlayer() {
   const playAttemptedRef = useRef(false)
   // Ref to track the current audio URL to detect when we need to reload
   const currentUrlRef = useRef<string | null>(null)
+  // Bumped on every src change; an async ticket lookup that resolves after a
+  // newer one must not set src
+  const srcSeqRef = useRef(0)
+  // A media error re-mints the ticket once per loaded call
+  const ticketRetriedRef = useRef(false)
+  // Position to restore after reloading with a fresh ticket
+  const resumeAtRef = useRef<number | null>(null)
 
   const [showHistory, setShowHistory] = useState(false)
 
@@ -95,12 +104,26 @@ export function AudioPlayer() {
 
     // Set src only if truly empty (avoid reload — breaks iOS gesture chain)
     if (!audio.src || audio.src === window.location.href) {
-      audio.src = currentCall.audioUrl
-      audio.load()
-      // Wait for loadeddata then play within gesture context
-      audio.addEventListener('loadeddata', () => {
-        audio.play().catch(console.error)
-      }, { once: true })
+      const loadAndPlay = (src: string) => {
+        audio.src = src
+        audio.load()
+        // Wait for loadeddata then play within gesture context
+        audio.addEventListener('loadeddata', () => {
+          audio.play().catch(console.error)
+        }, { once: true })
+      }
+      // A cached ticket keeps this synchronous (inside the gesture); without
+      // one, mint first and hope the browser still allows play()
+      const cached = peekTicket(MEDIA_TICKET_MIN_REMAINING_MS)
+      if (cached || !useAuthStore.getState().apiKey) {
+        srcSeqRef.current++
+        loadAndPlay(appendTicket(currentCall.audioUrl, cached))
+      } else {
+        const seq = ++srcSeqRef.current
+        mediaUrl(currentCall.audioUrl).then((src) => {
+          if (srcSeqRef.current === seq) loadAndPlay(src)
+        })
+      }
       return
     }
 
@@ -125,11 +148,19 @@ export function AudioPlayer() {
       if (currentUrlRef.current !== currentCall.audioUrl || currentCall.startAt !== undefined) {
         currentUrlRef.current = currentCall.audioUrl
         playAttemptedRef.current = false
-        audio.src = currentCall.audioUrl
-        audio.load()
+        ticketRetriedRef.current = false
+        resumeAtRef.current = null
+        // The ticket is added here, right before src is set, never earlier
+        const seq = ++srcSeqRef.current
+        mediaUrl(currentCall.audioUrl).then((src) => {
+          if (srcSeqRef.current !== seq) return
+          audio.src = src
+          audio.load()
+        })
       }
     } else {
       currentUrlRef.current = null
+      srcSeqRef.current++
       audio.src = ''
     }
   }, [currentCall])
@@ -139,9 +170,14 @@ export function AudioPlayer() {
     const audio = audioRef.current
     if (!audio || !currentCall || retryCount === 0) return
 
-    // Force reload the audio element for retry
+    // Force reload the audio element for retry, with a ticket that has time left
     playAttemptedRef.current = false
-    audio.load()
+    const seq = ++srcSeqRef.current
+    mediaUrl(currentCall.audioUrl).then((src) => {
+      if (srcSeqRef.current !== seq) return
+      audio.src = src
+      audio.load()
+    })
   }, [retryCount, currentCall])
 
   // Handle playback state changes
@@ -177,6 +213,15 @@ export function AudioPlayer() {
   // after a retry reloads the element)
   const handleLoadedMetadata = useCallback(() => {
     const audio = audioRef.current
+    // Reloaded with a fresh ticket after a media error: go back to where it was
+    const resumeAt = resumeAtRef.current
+    if (audio && resumeAt !== null) {
+      resumeAtRef.current = null
+      if (resumeAt > 0 && (!Number.isFinite(audio.duration) || resumeAt < audio.duration)) {
+        audio.currentTime = resumeAt
+      }
+      return
+    }
     const startAt = useAudioStore.getState().currentCall?.startAt
     if (!audio || !startAt || startAt <= 0) return
     if (Number.isFinite(audio.duration) && startAt >= audio.duration) return
@@ -204,10 +249,28 @@ export function AudioPlayer() {
       console.error('Audio error:', error.code, error.message, 'URL:', currentCall?.audioUrl)
 
       // MEDIA_ERR_ABORTED (1) = user cancelled, ignore
-      if (error.code !== 1) {
-        playAttemptedRef.current = false
-        onError()
+      if (error.code === 1) return
+
+      // With a key, the ticket may have expired (e.g. seeking late in a long
+      // call) or been invalidated: mint a new one once and resume where it was.
+      const url = currentCall?.audioUrl
+      if (url && useAuthStore.getState().apiKey && !ticketRetriedRef.current) {
+        ticketRetriedRef.current = true
+        const wasPlaying = useAudioStore.getState().playbackState === 'playing'
+        resumeAtRef.current = audio.currentTime
+        const seq = ++srcSeqRef.current
+        mediaUrl(url, true).then((src) => {
+          if (srcSeqRef.current !== seq) return
+          playAttemptedRef.current = false
+          if (wasPlaying) useAudioStore.getState().onLoadStart()
+          audio.src = src
+          audio.load()
+        })
+        return
       }
+
+      playAttemptedRef.current = false
+      onError()
     }
   }, [currentCall?.audioUrl, onError])
 

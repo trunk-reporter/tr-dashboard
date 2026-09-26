@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Pagination } from '@/components/ui/pagination'
-import { getUnits, getSystems, getUnitAffiliations } from '@/api/client'
+import { getUnits, getSystems, getUnitAffiliations, isUnavailable } from '@/api/client'
+import { RestrictedNotice } from '@/components/ui/restricted-notice'
 import type { Unit, System, Affiliation } from '@/api/types'
 import { usePendingUnitTagSuggestions } from '@/hooks/usePendingUnitTagSuggestions'
 import { useRealtimeStore } from '@/stores/useRealtimeStore'
@@ -21,6 +22,8 @@ export default function Units() {
   const [affiliations, setAffiliations] = useState<Affiliation[]>([])
   const [loading, setLoading] = useState(true)
   const [totalCount, setTotalCount] = useState(0)
+  // The units endpoints deny restricted credentials
+  const [unavailable, setUnavailable] = useState(false)
   const [activeView, setActiveView] = useState(searchParams.get('view') === 'active')
 
   const page = parseInt(searchParams.get('page') || '1', 10)
@@ -37,7 +40,8 @@ export default function Units() {
   // Pending unit tag suggestions for the review-queue link. The link stays hidden
   // until they load, on engines without the API (tr-engine before v0.10; not
   // requested again once known), and when the scanner is off with nothing pending.
-  const pendingData = usePendingUnitTagSuggestions().data
+  const pendingResult = usePendingUnitTagSuggestions().data
+  const pendingData = isUnavailable(pendingResult) ? undefined : pendingResult
   const pendingSuggestions =
     typeof pendingData?.total === 'number' && (pendingData.total > 0 || pendingData.scanner?.enabled !== false)
       ? pendingData.total
@@ -78,7 +82,7 @@ export default function Units() {
   useEffect(() => {
     getSystems().then((res) => setSystems(res.systems)).catch(console.error)
     getUnitAffiliations({ status: 'affiliated', limit: 1000 })
-      .then((res) => setAffiliations(res.affiliations))
+      .then((res) => { if (!isUnavailable(res)) setAffiliations(res.affiliations) })
       .catch(console.error)
   }, [])
 
@@ -96,6 +100,10 @@ export default function Units() {
       offset,
     })
       .then((res) => {
+        if (isUnavailable(res)) {
+          setUnavailable(true)
+          return
+        }
         setUnits(res.units || [])
         setTotalCount(res.total)
       })
@@ -149,6 +157,10 @@ export default function Units() {
     },
     [searchParams, setSearchParams]
   )
+
+  if (unavailable) {
+    return <RestrictedNotice what="Units" />
+  }
 
   return (
     <div className="space-y-3">

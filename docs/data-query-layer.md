@@ -2,7 +2,7 @@
 
 Server data flows through three layers:
 
-1. `src/api/client.ts` owns HTTP transport, auth headers, refresh handling, and typed endpoint functions.
+1. `src/api/client.ts` owns HTTP transport, the API-key header, auth-error handling (401 `invalid_key` re-runs `/whoami`), the `Unavailable` short-circuit for endpoints that deny restricted credentials, and typed endpoint functions.
 2. `src/api/services.ts` defines domain services and stable `queryKeys` for pages and components.
 3. `src/api/query.ts` provides `QueryProvider`, `useApiQuery`, `useApiMutation`, cache invalidation, request de-duplication, stale-time handling, and normalized loading/error flags.
 
@@ -61,7 +61,7 @@ Use `refetch()` for explicit user refresh actions. Realtime stores may overlay l
 
 ## Zustand Boundary
 
-Zustand is for UI/client state: auth/session tokens, audio playback, filters, theme, thresholds, PWA update flags, alert settings, and realtime overlays. It should not be the default cache for REST responses.
+Zustand is for UI/client state: the API key and `/whoami` result, audio playback, filters, theme, thresholds, PWA update flags, alert settings, and realtime overlays. It should not be the default cache for REST responses.
 
 Existing exceptions:
 

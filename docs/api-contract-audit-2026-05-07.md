@@ -1,5 +1,7 @@
 # tr-engine API/Auth Contract Audit for Dashboard MVP
 
+> **Superseded for auth (2026-09-26).** tr-engine's API-key redesign removed `/auth-init`, `/auth/*`, `/users`, JWTs, `AUTH_TOKEN`/`WRITE_TOKEN` and `?token=`. The dashboard now uses `GET /whoami`, an API key in the `Authorization` header, the anonymous access policy, and tickets for the event stream and audio; see README.md "Authentication". The auth findings below describe the old model and are kept for history.
+
 Date: 2026-05-07
 Issue: AUG-15
 Repos audited:

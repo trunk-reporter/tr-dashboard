@@ -118,7 +118,7 @@ Header controls:
 - Monitor: local/session preference that affects live audio subscription and queue behavior.
 - Color: local visual preference with reset option.
 - Tags: server metadata if writable; local-only tags should be visually distinct until persistence is decided.
-- Edit: visible but disabled with explanatory tooltip in read-only token mode, or hidden in pure viewer mode if auth-init can expose capability.
+- Edit: shown only when `/whoami` reports the `edit` scope; hidden for anonymous visitors and `listen` keys.
 
 ## Talkgroup Detail
 
@@ -179,9 +179,10 @@ Toolbar actions:
 
 Permission behavior:
 
-- Viewer/read-only: show local favorite, monitor, and color controls. Hide or disable server-write actions with concise copy.
-- Write token: allow metadata edits and imports that map to normal write endpoints.
-- Admin/JWT: allow destructive or broad operations such as system merge, bulk overwrite, and source-priority changes.
+- Anonymous or `listen` key: show local favorite, monitor, and color controls. Hide or disable server-write actions with concise copy.
+- `edit` key: allow tag/metadata edits that map to the `edit` endpoints.
+- `admin` key: allow imports and destructive or broad operations such as system merge, bulk overwrite, and source-priority changes.
+- Restricted credentials (limited to some systems or talkgroups): hide unit-backed widgets, which tr-engine denies them.
 
 Import review:
 

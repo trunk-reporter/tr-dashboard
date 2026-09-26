@@ -13,7 +13,8 @@ import { useTranscriptionCache } from '@/stores/useTranscriptionCache'
 import { useMonitorStore } from '@/stores/useMonitorStore'
 import { useFilterStore } from '@/stores/useFilterStore'
 import { TranscriptionPreview } from '@/components/calls/TranscriptionPreview'
-import { getStats, getCalls, getRecorders, getHealth } from '@/api/client'
+import { getStats, getCalls, getRecorders, getHealth, isUnavailable } from '@/api/client'
+import { useRestricted } from '@/stores/useAuthStore'
 import { useTalkgroupColors } from '@/stores/useTalkgroupColors'
 import type { StatsResponse, Call, Recorder, HealthResponse } from '@/api/types'
 import {
@@ -62,6 +63,8 @@ export default function Dashboard() {
   const realtimeRecorders = useRealtimeStore((s) => s.recorders)
   const decodeRates = useRealtimeStore((s) => s.decodeRates)
   const connectionStatus = useRealtimeStore((s) => s.connectionStatus)
+  // Stats and recorders deny restricted credentials: don't fetch or poll them
+  const restricted = useRestricted()
 
   const [stats, setStats] = useState<StatsResponse | null>(null)
   const [recentCalls, setRecentCalls] = useState<Call[]>([])
@@ -120,22 +123,39 @@ export default function Dashboard() {
     })
   }, [])
 
-  // Fetch initial data
+  // Fetch initial data. Each source settles on its own: stats and recorders
+  // are unavailable to restricted credentials, and recent calls must render
+  // without them.
   useEffect(() => {
-    Promise.all([
+    Promise.allSettled([
       getStats(),
       getCalls({ sort: '-stop_time', deduplicate: true, limit: TARGET_CALLS }),
       getRecorders(),
       getHealth(),
     ])
       .then(([statsRes, callsRes, recordersRes, healthRes]) => {
-        setStats(statsRes)
-        setRecentCalls(dedupCalls(callsRes.calls || []))
-        setApiRecorders(recordersRes.recorders || [])
-        setHealth(healthRes)
-        fetchTranscriptionsForCalls(callsRes.calls || [])
+        if (statsRes.status === 'fulfilled') {
+          if (!isUnavailable(statsRes.value)) setStats(statsRes.value)
+        } else {
+          console.error(statsRes.reason)
+        }
+        if (callsRes.status === 'fulfilled') {
+          setRecentCalls(dedupCalls(callsRes.value.calls || []))
+          fetchTranscriptionsForCalls(callsRes.value.calls || [])
+        } else {
+          console.error(callsRes.reason)
+        }
+        if (recordersRes.status === 'fulfilled') {
+          if (!isUnavailable(recordersRes.value)) setApiRecorders(recordersRes.value.recorders || [])
+        } else {
+          console.error(recordersRes.reason)
+        }
+        if (healthRes.status === 'fulfilled') {
+          setHealth(healthRes.value)
+        } else {
+          console.error(healthRes.reason)
+        }
       })
-      .catch(console.error)
       .finally(() => setLoading(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -155,11 +175,12 @@ export default function Dashboard() {
 
   // Refresh stats periodically
   useEffect(() => {
+    if (restricted) return
     const interval = setInterval(() => {
-      getStats().then(setStats).catch(console.error)
+      getStats().then((res) => { if (!isUnavailable(res)) setStats(res) }).catch(console.error)
     }, REFRESH_INTERVALS.STATS)
     return () => clearInterval(interval)
-  }, [])
+  }, [restricted])
 
   // Refresh recent calls periodically
   useEffect(() => {
@@ -183,13 +204,14 @@ export default function Dashboard() {
 
   // Refresh recorders periodically
   useEffect(() => {
+    if (restricted) return
     const interval = setInterval(() => {
       getRecorders().then((res) => {
-        setApiRecorders(res.recorders || [])
+        if (!isUnavailable(res)) setApiRecorders(res.recorders || [])
       }).catch(console.error)
     }, REFRESH_INTERVALS.STATS)
     return () => clearInterval(interval)
-  }, [])
+  }, [restricted])
 
   // Merge API recorders with realtime updates
   const mergedRecorders = useMemo(() => {
@@ -267,15 +289,19 @@ export default function Dashboard() {
     <div className="space-y-4 page-enter">
       {/* Compact stats bar */}
       <div className="flex flex-wrap items-center gap-4 lg:gap-6 rounded-lg border stat-bar-glass card-glass px-4 py-3">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Recorders</span>
-          <span className="text-xl font-bold tabular-nums">{recordingCount}</span>
-          <span className="text-sm text-muted-foreground">/ {usedCount} / {totalCount}</span>
-          {recordingCount > 0 && (
-            <span className="h-2 w-2 rounded-full bg-live animate-pulse" />
-          )}
-        </div>
-        <div className="h-6 w-px bg-border hidden sm:block" />
+        {!restricted && (
+          <>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Recorders</span>
+              <span className="text-xl font-bold tabular-nums">{recordingCount}</span>
+              <span className="text-sm text-muted-foreground">/ {usedCount} / {totalCount}</span>
+              {recordingCount > 0 && (
+                <span className="h-2 w-2 rounded-full bg-live animate-pulse" />
+              )}
+            </div>
+            <div className="h-6 w-px bg-border hidden sm:block" />
+          </>
+        )}
         <Link to="/calls" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
           <span className="text-sm text-muted-foreground">24h</span>
           <span className="text-xl font-bold tabular-nums">

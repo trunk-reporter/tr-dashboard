@@ -4,7 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CallList } from '@/components/calls/CallList'
-import { getUnit, getUnitEvents, getUnitCalls, updateUnit } from '@/api/client'
+import { getUnit, getUnitEvents, getUnitCalls, updateUnit, isUnavailable, describeError } from '@/api/client'
+import { useCanEdit } from '@/stores/useAuthStore'
+import { RestrictedNotice } from '@/components/ui/restricted-notice'
 import type { Unit, UnitEvent, Call } from '@/api/types'
 import {
   formatDateTime,
@@ -28,6 +30,10 @@ export default function UnitDetail() {
   const [calls, setCalls] = useState<Call[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // Unit endpoints deny restricted credentials
+  const [unavailable, setUnavailable] = useState(false)
+  // Tag edits need a key with the edit scope
+  const canEdit = useCanEdit()
 
   // Inline edit state
   const [editing, setEditing] = useState(false)
@@ -64,11 +70,7 @@ export default function UnitDetail() {
       setUnit(updated)
       setEditing(false)
     } catch (err) {
-      if (err instanceof Error && 'status' in err && (err as { status: number }).status === 403) {
-        setEditError('Write token required. Add it in Settings → Write Access.')
-      } else {
-        setEditError('Failed to save changes.')
-      }
+      setEditError(describeError(err, 'Failed to save changes.'))
       console.error('Failed to update unit:', err)
     } finally {
       setSaving(false)
@@ -80,6 +82,7 @@ export default function UnitDetail() {
 
     setLoading(true)
     setError(null)
+    setUnavailable(false)
 
     // id is in format "system_id:unit_id" or plain "unit_id"
     Promise.all([
@@ -88,6 +91,10 @@ export default function UnitDetail() {
       getUnitCalls(id, { limit: 20 }),
     ])
       .then(([unitRes, eventsRes, callsRes]) => {
+        if (isUnavailable(unitRes) || isUnavailable(eventsRes) || isUnavailable(callsRes)) {
+          setUnavailable(true)
+          return
+        }
         setUnit(unitRes)
         setEvents(eventsRes.events)
         setCalls(callsRes.calls)
@@ -109,6 +116,10 @@ export default function UnitDetail() {
         Loading...
       </div>
     )
+  }
+
+  if (unavailable) {
+    return <RestrictedNotice what="Units" />
   }
 
   if (error || !unit) {
@@ -145,7 +156,7 @@ export default function UnitDetail() {
           {unit.alpha_tag_source && (
             <Badge variant="secondary" className="text-xs">Source: {unit.alpha_tag_source}</Badge>
           )}
-          {!editing && (
+          {!editing && canEdit && (
             <Button variant="outline" size="sm" onClick={startEdit}>
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
                 <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />

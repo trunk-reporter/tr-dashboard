@@ -11,6 +11,7 @@ import { useUpdateStore } from '@/stores/useUpdateStore'
 import { useThemeStore } from '@/stores/useThemeStore'
 import { getHealth } from '@/api/client'
 import { KEYBOARD_SHORTCUTS } from '@/lib/constants'
+import { useNavVisible } from '@/lib/access'
 import { usePageTitle } from '@/hooks/usePageTitle'
 import { useFaviconStatus } from '@/hooks/useFaviconStatus'
 import { useEmergencyNotifications } from '@/hooks/useEmergencyNotifications'
@@ -27,6 +28,7 @@ export function MainLayout() {
   const navigate = useNavigate()
 
   const checkForUpdate = useUpdateStore((s) => s.checkForUpdate)
+  const navVisible = useNavVisible()
 
   usePageTitle()
   useFaviconStatus()
@@ -111,13 +113,13 @@ export function MainLayout() {
     e.preventDefault()
     setGoToMenuOpen(false)
     navigate('/units')
-  })
+  }, { enabled: navVisible('/units') })
 
   useHotkeys(KEYBOARD_SHORTCUTS.GO_TO_AFFILIATIONS, (e) => {
     e.preventDefault()
     setGoToMenuOpen(false)
     navigate('/affiliations')
-  })
+  }, { enabled: navVisible('/affiliations') })
 
   useHotkeys(KEYBOARD_SHORTCUTS.GO_TO_DIRECTORY, (e) => {
     e.preventDefault()
@@ -135,7 +137,7 @@ export function MainLayout() {
     e.preventDefault()
     setGoToMenuOpen(false)
     navigate('/admin')
-  })
+  }, { enabled: navVisible('/admin') })
 
   // Escape to close menus
   useHotkeys(KEYBOARD_SHORTCUTS.ESCAPE, () => {

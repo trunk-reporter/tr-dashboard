@@ -7,6 +7,13 @@
 # Quick start:
 #   cp .env.example .env          (edit with your values)
 #   docker compose -f examples/docker-compose.caddy.yml up -d
+#
+# Access: tr-engine uses API keys. On its first start it prints a
+# "bootstrap admin" key to its log (docker compose logs tr-engine); paste it
+# into the dashboard, create named keys on the Access page, then revoke it.
+# Anonymous access is off by default; to let visitors browse without a key:
+#   docker compose exec -T tr-engine tr-engine access set --anonymous listen
+# The proxy never adds credentials to requests.
 
 services:
   caddy:

@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorPanel } from '@/components/ui/error-panel'
 import { Pagination } from '@/components/ui/pagination'
 import { SkeletonCard } from '@/components/ui/skeleton'
-import { API_BASE, ApiError, getCall, type UnitTagSuggestionQueryParams } from '@/api/client'
+import { API_BASE, ApiError, getCall, describeError, isUnavailable, type UnitTagSuggestionQueryParams } from '@/api/client'
 import { useApiMutation, useApiQuery } from '@/api/query'
 import { queryKeys, systemService, unitTagSuggestionService } from '@/api/services'
 import type {
@@ -19,7 +19,8 @@ import type {
   UnitTagSuggestionStatus,
 } from '@/api/types'
 import { useAudioStore, selectIsPlaying } from '@/stores/useAudioStore'
-import { useAuthStore } from '@/stores/useAuthStore'
+import { useCanEdit, useRestricted } from '@/stores/useAuthStore'
+import { RestrictedNotice } from '@/components/ui/restricted-notice'
 import { useFilterStore } from '@/stores/useFilterStore'
 import { useToastStore, type ToastVariant } from '@/stores/useToastStore'
 import { cn, formatDateTime, formatRelativeTime, formatUnitId, getTalkgroupDisplayName } from '@/lib/utils'
@@ -102,7 +103,7 @@ function describeActionError(err: unknown, action: PendingAction): { message: st
   if (err instanceof ApiError) {
     const data = err.data as Partial<ErrorResponse> | undefined
     if (err.status === 401 || err.status === 403) {
-      return { message: 'Write access required. Add a write token in Settings → Write Access.', variant: 'error', refetch: false }
+      return { message: describeError(err, "Your key can't do this (needs edit)."), variant: 'error', refetch: false }
     }
     if (err.status === 409) {
       const status = data?.detail?.replace(/^status:\s*/, '')
@@ -129,7 +130,10 @@ export default function UnitTagSuggestions() {
   const offset = (page - 1) * pageSize
 
   const unitIdHex = useFilterStore((s) => s.unitIdHex)
-  const canWrite = useAuthStore((s) => s.canWrite())
+  // Approve/dismiss need a key with the edit scope
+  const canWrite = useCanEdit()
+  // The suggestions endpoints deny restricted credentials
+  const restricted = useRestricted()
   const showToast = useToastStore((s) => s.show)
 
   const loadCall = useAudioStore((s) => s.loadCall)
@@ -158,7 +162,7 @@ export default function UnitTagSuggestions() {
   const listQuery = useApiQuery(
     queryKeys.unitTagSuggestions.list(listParams),
     () => unitTagSuggestionService.list(listParams),
-    { staleTime: 10_000, enabled: !unavailable }
+    { staleTime: 10_000, enabled: !unavailable && !restricted }
   )
 
   const approveMutation = useApiMutation(unitTagSuggestionService.approve, {
@@ -170,10 +174,11 @@ export default function UnitTagSuggestions() {
 
   const systems = systemsQuery.data?.systems || []
   // Scanner status is global, so the previous response is still accurate for it
-  const scanner = listQuery.data?.scanner
+  const listResult = isUnavailable(listQuery.data) ? undefined : listQuery.data
+  const scanner = listResult?.scanner
   // Right after a tab/filter/page change the hook still holds the previous key's
   // rows; don't show them (or their count/empty state) as if they were this view's
-  const listData = listQuery.isPreviousData ? undefined : listQuery.data
+  const listData = listQuery.isPreviousData ? undefined : listResult
   const allSuggestions = listData?.suggestions
   const suggestions = useMemo(
     () => (allSuggestions ?? []).filter((s) => !(s.status === 'pending' && decided.has(s.id))),
@@ -273,6 +278,10 @@ export default function UnitTagSuggestions() {
   const loading = !listData && !listQuery.error
   const loadError = listQuery.error
 
+  if (restricted || isUnavailable(listQuery.data)) {
+    return <RestrictedNotice what="Unit tag suggestions" />
+  }
+
   if (unavailable) {
     return (
       <div className="space-y-3">
@@ -357,7 +366,7 @@ export default function UnitTagSuggestions() {
             </Link>
           }
         >
-          Read-only access. Approving or dismissing suggestions needs an editor login or a write token.
+          Read-only access. Approving or dismissing suggestions needs an API key with the edit scope.
         </Banner>
       )}
 
