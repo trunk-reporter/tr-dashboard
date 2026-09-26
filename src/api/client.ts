@@ -619,15 +619,26 @@ export async function getCall(id: number): Promise<Call> {
 // 1-hour JWT expiry. Long-term: consider opaque blob URLs or a server-side
 // audio proxy to avoid token-in-URL entirely.
 export function getCallAudioUrl(id: number): string {
-  // Only embed short-lived JWT in URL; readToken may be long-lived/static and
-  // should not be leaked in query strings (browser history, Referrer, server logs).
-  // When no JWT is present, Caddy or the proxy injects the read token via header.
-  const { accessToken } = useAuthStore.getState()
   const base = `${API_BASE}/calls/${id}/audio`
-  if (accessToken) {
-    return `${base}?token=${encodeURIComponent(accessToken)}`
+  const token = urlSafeToken()
+  if (token) {
+    return `${base}?token=${encodeURIComponent(token)}`
   }
   return base
+}
+
+/**
+ * Credential that may be embedded in a URL (EventSource, <audio src>), which
+ * can't carry an Authorization header: the short-lived JWT when logged in,
+ * otherwise the full-mode public read token, which auth-init hands to every
+ * visitor and is therefore not a secret. A pasted shared token (token mode) is
+ * never returned — it would leak into history, Referrer and proxy logs.
+ */
+export function urlSafeToken(): string {
+  const { accessToken, authMode, readToken } = useAuthStore.getState()
+  if (accessToken) return accessToken
+  if (authMode === 'full' && readToken) return readToken
+  return ''
 }
 
 export async function getCallTransmissions(

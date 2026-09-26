@@ -11,7 +11,8 @@ export type AuthMode = 'open' | 'token' | 'full'
 
 /**
  * Auth state machine:
- *   idle → detecting → open | token | login-required | authenticated | error
+ *   idle → detecting → open | token | guest | login-required | authenticated | error
+ *   guest = full mode with a public read token: browse read-only, sign in for writes
  *   login-required → authenticated (on login)
  *   authenticated → login-required (on logout / session expiry)
  *   error → detecting (on retry)
@@ -21,6 +22,7 @@ export type AuthState =
   | 'detecting'
   | 'open'
   | 'token'
+  | 'guest'
   | 'login-required'
   | 'authenticated'
   | 'error'
@@ -40,6 +42,7 @@ interface AuthStateStore {
   setOpen: (readToken: string) => void
   setToken: (readToken: string) => void
   setLoginRequired: () => void
+  setGuest: () => void
   setAuthenticated: (accessToken: string, user: AuthUser) => void
   setAuthInit: (mode: AuthMode, readToken: string, jwtEnabled: boolean) => void
   setAuth: (accessToken: string, user: AuthUser) => void
@@ -76,6 +79,9 @@ export const useAuthStore = create<AuthStateStore>()(
       setLoginRequired: () =>
         set({ authState: 'login-required', authMode: 'full', jwtEnabled: true, readToken: '' }),
 
+      // Keeps the public read token from auth-init so guests can browse.
+      setGuest: () => set({ authState: 'guest', authMode: 'full', jwtEnabled: true }),
+
       setAuthenticated: (accessToken, user) =>
         set({
           authState: 'authenticated',
@@ -92,7 +98,11 @@ export const useAuthStore = create<AuthStateStore>()(
         } else if (mode === 'token') {
           set({ authState: 'token', authMode: mode, readToken, jwtEnabled })
         } else if (mode === 'full' && jwtEnabled) {
-          set({ authState: 'login-required', authMode: mode, readToken, jwtEnabled })
+          // Stay in 'detecting' until RequireAuth has tried the refresh cookie;
+          // it then settles on authenticated, guest (public read token) or
+          // login-required. Jumping straight to login-required redirected
+          // guests to /login before that check finished.
+          set({ authState: 'detecting', authMode: mode, readToken, jwtEnabled })
         } else {
           set({ authState: 'open', authMode: mode, readToken, jwtEnabled })
         }

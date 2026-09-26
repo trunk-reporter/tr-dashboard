@@ -11,7 +11,7 @@ export interface AuthInitResult {
 
 export async function detectAuthMode(): Promise<AuthInitResult | null> {
   const current = useAuthStore.getState()
-  if (current.authState === 'open' || current.authState === 'token' || current.authState === 'authenticated') {
+  if (current.authState === 'open' || current.authState === 'token' || current.authState === 'guest' || current.authState === 'authenticated') {
     return {
       mode: current.authMode!,
       readToken: current.readToken,

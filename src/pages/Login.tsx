@@ -27,6 +27,11 @@ export default function Login() {
 
   // Once we know login is needed, check if setup is required
   useEffect(() => {
+    if (authState === 'guest') {
+      // Guests reach this page from "Sign in"; users already exist.
+      setCheckingSetup(false)
+      return
+    }
     if (authState !== 'login-required') return
 
     checkNeedsSetup().then((needs) => {

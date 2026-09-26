@@ -13,6 +13,7 @@ export function RequireAuth({ children }: RequireAuthProps) {
   const errorMessage = useAuthStore((s) => s.errorMessage)
   const setAuth = useAuthStore((s) => s.setAuth)
   const setLoginRequired = useAuthStore((s) => s.setLoginRequired)
+  const setGuest = useAuthStore((s) => s.setGuest)
 
   const init = useCallback(async () => {
     const result = await detectAuthMode()
@@ -22,11 +23,14 @@ export function RequireAuth({ children }: RequireAuthProps) {
       const refreshResult = await refreshAuth()
       if (refreshResult) {
         setAuth(refreshResult.access_token, refreshResult.user)
+      } else if (result.readToken) {
+        // Public read token available: browse as a guest instead of forcing login.
+        setGuest()
       } else {
         setLoginRequired()
       }
     }
-  }, [setAuth, setLoginRequired])
+  }, [setAuth, setLoginRequired, setGuest])
 
   useEffect(() => {
     if (authState === 'idle') {
@@ -45,6 +49,7 @@ export function RequireAuth({ children }: RequireAuthProps) {
 
     case 'open':
     case 'token':
+    case 'guest':
       return <>{children}</>
 
     case 'authenticated':

@@ -34,6 +34,7 @@ export function Header({ onToggleSidebar, onOpenCommand }: HeaderProps) {
 
   const user = useAuthStore((s) => s.user)
   const clearAuth = useAuthStore((s) => s.clearAuth)
+  const authState = useAuthStore((s) => s.authState)
 
   const [apiVersion, setApiVersion] = useState<string | null>(null)
 
@@ -216,6 +217,20 @@ export function Header({ onToggleSidebar, onOpenCommand }: HeaderProps) {
                   : 'Disconnected'}
             </span>
           </Badge>
+
+          {!user && authState === 'guest' && (
+            <div className="flex items-center gap-2 ml-1 border-l border-border pl-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-muted-foreground hover:text-foreground"
+                onClick={() => navigate('/login')}
+                title="Sign in for write access"
+              >
+                Sign in
+              </Button>
+            </div>
+          )}
 
           {user && (
             <div className="flex items-center gap-2 ml-1 border-l border-border pl-3">

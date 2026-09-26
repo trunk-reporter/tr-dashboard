@@ -7,7 +7,7 @@ import type {
 } from './types'
 
 import { useAuthStore } from '@/stores/useAuthStore'
-import { API_BASE } from './client'
+import { API_BASE, urlSafeToken } from './client'
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
 
@@ -155,12 +155,13 @@ export class SSEManager {
     if (this.filters.types) params.set('types', this.filters.types)
     if (this.filters.emergency_only) params.set('emergency_only', 'true')
 
-    // Only embed short-lived JWT in URL; readToken may be long-lived/static and
-    // should not be leaked in query strings (browser history, Referrer, server logs).
-    // When no JWT is present, the proxy (Caddy) injects the read token via header.
-    const { accessToken } = useAuthStore.getState()
-    if (accessToken) {
-      params.set('token', accessToken)
+    // EventSource can't send headers, so the credential goes in the URL. Only
+    // short-lived JWTs and the full-mode public read token (served to every
+    // visitor by auth-init, so not a secret) are embedded; a pasted shared
+    // token stays out of URLs (browser history, Referrer, proxy logs).
+    const token = urlSafeToken()
+    if (token) {
+      params.set('token', token)
     }
 
     const query = params.toString()
