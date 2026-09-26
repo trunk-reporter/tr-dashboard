@@ -24,12 +24,13 @@ npm install           # Install dependencies
 npm run dev           # Start dev server on 0.0.0.0:5173
 npm run build         # Type-check (tsc -b) then build with Vite
 npm run lint          # Type-check only (tsc --noEmit)
+npm test              # Auth smoke checks, auth state and dev proxy tests (Node 20.19+ or 22.12+, no browser)
 npm run api:generate  # Regenerate TypeScript types from OpenAPI spec
 ```
 
-There is no automated unit-test suite yet (`TODO.md` tracks vitest). `npm run lint` / `npm run build` are the primary quality checks. See `docs/quality-gates.md`.
+There is no general unit-test suite yet (`TODO.md` tracks vitest). `npm test` runs `scripts/smoke-auth-audio.mjs` (static checks), `scripts/test-auth-state.mjs` (auth/store behaviour: key input, expiry dates, cross-tab key sync, credential-change reset, clipboard fallback; modules loaded through Vite's SSR loader with a fake window/fetch) and `scripts/test-dev-proxy.mjs` (the dev proxy adds `TR_API_KEY` only for this machine's own tab, `vite preview` never). `npm run lint` / `npm run build` are the primary quality checks. See `docs/quality-gates.md`.
 
-Dev proxy: set `TR_ENGINE_URL` in `.env` (e.g. `http://localhost:8080`). Vite then proxies `/api` and `/health` to that origin. Optional `TR_API_KEY` is added as `Authorization: Bearer` only to proxied requests that carry no `Authorization` header (dev only; never inject keys in a deployment).
+Dev proxy: set `TR_ENGINE_URL` in `.env` (e.g. `http://localhost:8080`). Vite then proxies `/api` and `/health` to that origin. Optional `TR_API_KEY` (a `listen` key) is added as `Authorization: Bearer` only to proxied requests that carry no `Authorization` header and come from this machine's own tab (`mayAddDevKey`: loopback client, same-origin; the dev server listens on `0.0.0.0`, so LAN clients and cross-site requests get no key). `vite preview` has its own proxy that never adds it. Dev only; never inject keys in a deployment.
 
 ## Tech Stack
 
@@ -85,7 +86,7 @@ src/
 
 ### Routing
 
-React Router v7. Every route sits under `AuthGate` + `MainLayout` (sidebar, header, audio player); `AuthGate` shows the key screen, the engine-too-old notice or an error screen instead when `/whoami` says so. Lazy-loaded pages are wrapped in `Suspense`. `App` keys the `QueryProvider` on the API key, so setting, replacing or forgetting the key remounts the pages with an empty cache.
+React Router v7. Every route sits under `AuthGate` + `MainLayout` (sidebar, header, audio player); `AuthGate` shows the key screen, the engine-too-old notice or an error screen instead when `/whoami` says so. Lazy-loaded pages are wrapped in `Suspense`. `App` keys the `QueryProvider` on the API key and `useCredentialEpoch`, so setting, replacing or forgetting the key remounts the pages with an empty cache (and reconnects the event stream); `installCredentialReset()` (`stores/credentialState.ts`) also clears the Zustand state bound to the old credential (player call/queue/history, SSE active calls/unit events/decode rates/recorders, transcription cache, alert history; alert rules stay). A later `/whoami` for the same key (or no key) that shows narrower access (`accessNarrowed`: a scope lost, a restriction added or changed, the key rejected) counts as a credential change too: it clears that state and bumps the epoch. tr-engine applies such changes to open streams in place and filters out the call_end of calls on newly excluded talkgroups, so `initializeRealtimeConnection` also drops active calls that `GET /calls/active` no longer lists (`resyncActiveCalls`, on every stream (re)open and every 60 s while calls are active).
 
 ```
 /                    → Dashboard (live monitoring + recent calls)
@@ -114,7 +115,7 @@ React Router v7. Every route sits under `AuthGate` + `MainLayout` (sidebar, head
 ### API Layer (`src/api/`)
 
 - `client.ts`: Typed REST functions + `request<T>()` wrapper. Base URL `API_BASE` (`/api/v1`, or `VITE_API_BASE`). Sends `Authorization: Bearer <apiKey>` when a key is stored and nothing otherwise (no cookies, no refresh). A 401 `invalid_key` (or `key_required` without a key) re-runs `/whoami` via the `onAuthFailure` hook; 401/403 auth errors get user-facing messages (`describeError`: "Your key can't do this (needs edit)"). Functions for `x-restricted: deny` endpoints (units, affiliations, unit tag suggestions, stats, recorders, encryption stats, talkgroup units, P25 systems, transcription queue) return `Promise<T | Unavailable>`: while `whoami.restricted` is true they short-circuit to `UNAVAILABLE` without a request, and a 403 `restricted_credential` also becomes `UNAVAILABLE`. Check with `isUnavailable()`. `callAudioUrl(id)` builds `${API_BASE}/calls/{id}/audio` (never from the root-relative `audio_url`).
-- `auth.ts`: `GET /whoami` (`fetchWhoami`), `initAuth`/`recheckAuth` (decide `useAuthStore.status`), `connectKey` (validate + store; rejects upload-only keys and the retired public token), `forgetKey`, `continueWithoutKey`.
+- `auth.ts`: `GET /whoami` (`fetchWhoami`), `initAuth`/`recheckAuth` (decide `useAuthStore.status`), `connectKey` (cleans the pasted value with `lib/apiKeyInput.ts` — invisible characters and quotes dropped, non-ASCII refused with a key-specific message — then validates + stores; rejects upload-only keys and the retired public token), `forgetKey`, `continueWithoutKey`, `installCrossTabKeySync` (a key set, replaced or forgotten in another tab is adopted via the `storage` event and re-checked, so no tab writes a stale key back). After every `await`, `resolveAuth` and `forgetKey` apply their answer only if the stored key is still the one they started with, so a key connected meanwhile is never reported as rejected or forgotten.
 - `tickets.ts`: `getTicket({minRemaining, fresh})` caches one ticket per key (`POST /tickets`, 600 s); `mediaUrl(url)` appends one with ≥5 min left, the SSE manager asks for ≥60 s. Tickets are only added right before use (EventSource URL, `<audio src>`).
 - `types.ts`: Hand-written types for API responses and SSE events.
 - `generated.ts`: Auto-generated from OpenAPI via `npm run api:generate`.

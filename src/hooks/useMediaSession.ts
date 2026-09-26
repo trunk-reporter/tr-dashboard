@@ -10,7 +10,13 @@ export function useMediaSession(audioRef: React.RefObject<HTMLAudioElement | nul
 
   // Update metadata when current call changes
   useEffect(() => {
-    if (!('mediaSession' in navigator) || !currentCall) return
+    if (!('mediaSession' in navigator)) return
+    if (!currentCall) {
+      // Nothing loaded (e.g. the player was reset after a key change): don't
+      // leave the previous call on the lock screen / OS media controls
+      navigator.mediaSession.metadata = null
+      return
+    }
 
     navigator.mediaSession.metadata = new MediaMetadata({
       title: currentCall.tgAlphaTag || `TG ${currentCall.tgid}`,

@@ -5,7 +5,15 @@ import { AuthGate } from '@/components/auth/AuthGate'
 import { PageLoader } from '@/components/ui/page-loader'
 import { QueryProvider } from '@/api/query'
 import { useAuthStore } from '@/stores/useAuthStore'
+import { installCredentialReset, useCredentialEpoch } from '@/stores/credentialState'
+import { installCrossTabKeySync } from '@/api/auth'
 import Dashboard from '@/pages/Dashboard'
+
+// A key set, replaced or forgotten (or narrower access for the same key)
+// clears the player, stream data and alert history (stores outside React
+// Query), and key changes made in other tabs are followed.
+installCredentialReset()
+installCrossTabKeySync()
 
 const Calls = lazy(() => import('@/pages/Calls'))
 const CallDetail = lazy(() => import('@/pages/CallDetail'))
@@ -29,12 +37,15 @@ const Investigate = lazy(() => import('@/pages/Investigate'))
 
 
 export default function App() {
-  // A new or forgotten key remounts the pages with an empty query cache, so
-  // nothing fetched with the previous credential is shown under the new one.
+  // A new or forgotten key, or narrower access for the same key (the epoch),
+  // remounts the pages with an empty query cache and reconnects the event
+  // stream, so nothing fetched with the previous credential is shown under
+  // the new one (installCredentialReset above covers the Zustand stores).
   const apiKey = useAuthStore((s) => s.apiKey)
+  const epoch = useCredentialEpoch((s) => s.epoch)
 
   return (
-    <QueryProvider key={apiKey}>
+    <QueryProvider key={`${epoch}:${apiKey}`}>
       <Routes>
         <Route element={<AuthGate><MainLayout /></AuthGate>}>
           <Route path="/" element={<Dashboard />} />

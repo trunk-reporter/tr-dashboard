@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { copyText } from '@/lib/clipboard'
 
 interface CopyableIdProps {
   value: string
@@ -12,7 +13,9 @@ export function CopyableId({ value, label, className }: CopyableIdProps) {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(value).then(() => {
+    // navigator.clipboard is missing over plain HTTP; copyText falls back
+    void copyText(value).then((result) => {
+      if (result !== 'copied') return
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     })

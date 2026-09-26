@@ -16,6 +16,15 @@ const sse = read('src/api/eventsource.ts')
 const player = read('src/components/audio/AudioPlayer.tsx')
 const audioStore = read('src/stores/useAudioStore.ts')
 const sources = [client, store, auth, tickets, sse, player, audioStore]
+const access = read('src/pages/Access.tsx')
+const keyInput = read('src/lib/apiKeyInput.ts')
+const picker = read('src/components/calls/TalkgroupMultiSelect.tsx')
+const restrictionEditor = read('src/components/auth/RestrictionEditor.tsx')
+const app = read('src/App.tsx')
+const composeExamples = ['examples/docker-compose.caddy.yml', 'examples/docker-compose.traefik.yml'].map((p) => [p, read(p)])
+const readme = read('README.md')
+/** Lines that copy an example .env: Compose reads .env from the compose file's directory (examples/) */
+const envCopies = [readme, ...composeExamples.map(([, text]) => text)].flatMap((t) => t.split(/\r?\n/).filter((l) => /\bcp\b.*\.env\.example/.test(l)))
 
 const checks = [
   ['store v3 persists only the API key', store.includes('version: 3') && store.includes('apiKey: state.apiKey') && !store.includes('writeToken: state.writeToken')],
@@ -35,6 +44,18 @@ const checks = [
   ['audio URL is built from API_BASE, not audio_url', audioStore.includes('audioUrl: callAudioUrl(call.call_id)') && client.includes('`${API_BASE}/calls/${id}/audio`')],
   ['player adds the ticket right before src', player.includes('mediaUrl(currentCall.audioUrl)') && player.includes('audio.src = src')],
   ['player re-mints the ticket once on a media error', player.includes('ticketRetriedRef') && player.includes('mediaUrl(url, true)')],
+  // Date-only key expiry is 00:00 UTC, like `tr-engine keys create --expires` and admin.html
+  ['key expiry dates mean 00:00 UTC and must be in the future', keyInput.includes('T00:00:00Z') && !access.includes('T23:59:59Z') && access.includes('expiryDateProblem(')],
+  ['pasted keys are cleaned before /whoami', auth.includes('cleanPastedKey(raw)') && auth.includes('isSendableKey(key)')],
+  ['key changes in other tabs are followed', auth.includes("addEventListener('storage'") && app.includes('installCrossTabKeySync()')],
+  ['a credential change clears the player and stream state', app.includes('installCredentialReset()')],
+  ['the show-once key copy has a fallback', access.includes('copyText(created.key, keyTextRef.current)') && !access.includes('navigator.clipboard')],
+  ['talkgroup pickers have their own accessible names', picker.includes('htmlFor={inputId}') && picker.includes('id={inputId}') && picker.includes('aria-label={`Remove ') &&
+    restrictionEditor.includes('label="Individually allowed talkgroups"') && restrictionEditor.includes('label="Excluded talkgroups (never allowed)"')],
+  // Plain `docker compose` from the repo root reads the root docker-compose.yml (tr-dashboard only)
+  ['example compose notes name their compose file', composeExamples.every(([p, text]) =>
+    text.split('\n').filter((l) => l.startsWith('#') && l.includes('docker compose ') && !l.includes(' up -d')).every((l) => l.includes(`docker compose -f ${p} `)))],
+  ['example quick starts copy .env next to their compose file', envCopies.length >= 4 && envCopies.every((l) => l.includes('cp examples/.env.example examples/.env '))],
 ]
 
 let failed = false

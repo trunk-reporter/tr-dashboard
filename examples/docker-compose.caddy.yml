@@ -4,15 +4,19 @@
 #   /api/*, /audio/*, /health/*  →  tr-engine:8080
 #   everything else              →  tr-dashboard:3000
 #
-# Quick start:
-#   cp .env.example .env          (edit with your values)
+# Quick start, from the repository root (Compose reads .env from this
+# file's directory, examples/, not from the current directory):
+#   cp examples/.env.example examples/.env   (edit with your values)
 #   docker compose -f examples/docker-compose.caddy.yml up -d
 #
 # Access: tr-engine uses API keys. On its first start it prints a
-# "bootstrap admin" key to its log (docker compose logs tr-engine); paste it
-# into the dashboard, create named keys on the Access page, then revoke it.
+# "bootstrap admin" key to its log; paste it into the dashboard, create named
+# keys on the Access page, then revoke it. Run these from the repository root
+# with the same -f as above (plain `docker compose` would use the root
+# docker-compose.yml, which has no tr-engine service):
+#   docker compose -f examples/docker-compose.caddy.yml logs tr-engine | grep -A3 "no admin API key existed"
 # Anonymous access is off by default; to let visitors browse without a key:
-#   docker compose exec -T tr-engine tr-engine access set --anonymous listen
+#   docker compose -f examples/docker-compose.caddy.yml exec -T tr-engine tr-engine access set --anonymous listen
 # The proxy never adds credentials to requests.
 
 services:
@@ -23,6 +27,9 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      # The Caddyfile's site address ({$DASHBOARD_HOST})
+      DASHBOARD_HOST: ${DASHBOARD_HOST:-dashboard.example.com}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

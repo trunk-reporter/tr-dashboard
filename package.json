@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
+    "test": "node scripts/smoke-auth-audio.mjs && node scripts/test-auth-state.mjs && node scripts/test-dev-proxy.mjs",
     "api:generate": "openapi-typescript ../tr-engine/openapi.yaml -o src/api/generated.ts"
   },
   "dependencies": {

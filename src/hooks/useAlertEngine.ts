@@ -4,6 +4,11 @@ import { useAlertStore, type AlertRule } from '@/stores/useAlertStore'
 
 const cooldowns = new Map<string, number>()
 
+/** Forget every rule's cooldown (the credential changed: start afresh) */
+export function resetAlertCooldowns(): void {
+  cooldowns.clear()
+}
+
 function isOnCooldown(ruleId: string, cooldownMs: number): boolean {
   const until = cooldowns.get(ruleId)
   if (until && Date.now() < until) return true

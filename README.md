@@ -84,9 +84,11 @@ Browser → Reverse Proxy (Caddy/Traefik/nginx)
 The easiest way to get started. Caddy handles TLS automatically.
 
 ```bash
-cp examples/.env.example .env        # edit with your values
+cp examples/.env.example examples/.env   # edit with your values
 docker compose -f examples/docker-compose.caddy.yml up -d
 ```
+
+Compose reads `.env` from the compose file's directory (`examples/`), not from where you run it, so the copy goes to `examples/.env`.
 
 This starts Caddy, tr-engine, PostgreSQL, and tr-dashboard together. See [`examples/docker-compose.caddy.yml`](examples/docker-compose.caddy.yml) and [`examples/Caddyfile`](examples/Caddyfile).
 
@@ -95,7 +97,7 @@ This starts Caddy, tr-engine, PostgreSQL, and tr-dashboard together. See [`examp
 If you already run Traefik:
 
 ```bash
-cp examples/.env.example .env        # edit with your values
+cp examples/.env.example examples/.env   # edit with your values
 docker compose -f examples/docker-compose.traefik.yml up -d
 ```
 
@@ -143,7 +145,7 @@ For contributing or local development.
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 20.19+ or 22.12+ (required by Vite 7)
 - A running [tr-engine](https://github.com/trunk-reporter/tr-engine) backend
 
 ### Install
@@ -161,12 +163,14 @@ Create a `.env` so the Vite dev server can proxy API requests to tr-engine:
 ```bash
 # .env
 TR_ENGINE_URL=http://localhost:8080   # required for /api and /health proxy
-# TR_API_KEY=tre_...                  # optional: dev proxy adds this key to requests without one
+# TR_API_KEY=tre_...                  # optional: a listen key the dev proxy adds for this machine's browser
 ```
 
 Without `TR_ENGINE_URL`, the dev server does **not** proxy API calls (you will get 404s on `/api/*`).
 
-`TR_API_KEY` is a development convenience: the Vite proxy adds it only to requests that carry no `Authorization` header, so a key you paste into the dashboard always wins. Without it, the dashboard asks for a key (or browses anonymously if the engine allows that).
+`TR_API_KEY` is a development convenience: the Vite dev proxy adds it to requests that carry no `Authorization` header, so a key you paste into the dashboard always wins. Without it, the dashboard asks for a key (or browses anonymously if the engine allows that).
+
+Use a `listen` key for it (`tr-engine keys create --name dev-dashboard --scopes listen`), never the bootstrap admin key: whoever gets a request through the proxy acts with that key. The dev server listens on all interfaces (other devices on your network can open it), so the proxy adds the key only to same-origin requests from this machine: other devices, and other sites open in your browser, get no key and see the key screen like any visitor. `npm run preview` never adds the key.
 
 ### Run
 
@@ -174,13 +178,14 @@ Without `TR_ENGINE_URL`, the dev server does **not** proxy API calls (you will g
 npm run dev
 ```
 
-Runs on `http://localhost:5173` with `/api` and `/health` proxied to `TR_ENGINE_URL`.
+Runs on `http://localhost:5173` (and on this machine's network addresses) with `/api` and `/health` proxied to `TR_ENGINE_URL`.
 
 ### Build
 
 ```bash
 npm run build        # Type-check + build
 npm run lint         # Type-check only
+npm test             # Auth smoke checks, auth state and dev proxy tests (no browser)
 npm run api:generate # Regenerate API types from OpenAPI spec
 ```
 
@@ -219,7 +224,7 @@ tr-engine keys create --name "tr-dashboard at home" --scopes edit
 # Docker: docker compose exec -T tr-engine tr-engine keys create --name "tr-dashboard at home" --scopes edit
 ```
 
-The first start of a new tr-engine prints a `bootstrap admin` key to its log. Paste it into the dashboard, create a named admin key for yourself on the **Access** page, switch to it in Settings, and revoke `bootstrap admin`.
+The first start of a new tr-engine prints a `bootstrap admin` key to its log. Paste it into the dashboard, create a named admin key for yourself on the **Access** page, switch to it in Settings, and revoke `bootstrap admin`. Give your own admin key no expiry: tr-engine refuses (409) to revoke an admin key, or shorten its expiry, unless another active admin key lasts at least as long.
 
 ### Access page (admin keys)
 
@@ -235,7 +240,7 @@ To let anyone browse your dashboard, set tr-engine's anonymous access policy to 
 - A write token saved in Settings by an older dashboard is tried once as an API key: tr-engine imports `WRITE_TOKEN` (and a token-mode `AUTH_TOKEN`) as legacy keys on its first start. If the engine doesn't accept it, it is dropped quietly. Replace legacy keys with named keys.
 - The login page and the Users page are gone; give each person or client its own API key instead.
 
-See tr-engine's `docs/auth.md` and `docs/migrating-auth.md` for the engine side.
+See tr-engine's [auth guide](https://github.com/trunk-reporter/tr-engine/blob/main/docs/auth.md) and [auth migration guide](https://github.com/trunk-reporter/tr-engine/blob/main/docs/migrating-auth.md) for the engine side.
 
 ## Keyboard Shortcuts
 

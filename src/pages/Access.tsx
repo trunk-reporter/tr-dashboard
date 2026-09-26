@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -38,6 +38,14 @@ import type {
   System,
 } from '@/api/types'
 import { formatDateTime, formatRelativeTime, cn } from '@/lib/utils'
+import { copyText } from '@/lib/clipboard'
+import {
+  EXPIRY_DATE_HINT,
+  expiryFromDate,
+  dateFromExpiry,
+  expiryDateProblem,
+  minExpiryDate,
+} from '@/lib/apiKeyInput'
 
 // The engine names the key it mints on first start this way (§10.1)
 const BOOTSTRAP_KEY_NAME = 'bootstrap admin'
@@ -57,15 +65,6 @@ function scopesFor(level: Level, upload: boolean): Scope[] {
   const scopes: Scope[] = level === 'none' ? [] : [level]
   if (upload) scopes.push('upload')
   return scopes
-}
-
-/** `<input type="date">` value → RFC3339 (end of that day, UTC) */
-function expiryFromDate(date: string): string | null {
-  return date ? new Date(`${date}T23:59:59Z`).toISOString() : null
-}
-
-function dateFromExpiry(expires: string | null): string {
-  return expires ? expires.slice(0, 10) : ''
 }
 
 export default function Access() {
@@ -244,12 +243,14 @@ function CreateKeyCard({ systems, onCreated }: { systems: System[]; onCreated: (
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [created, setCreated] = useState<APIKeyCreated | null>(null)
-  const [copied, setCopied] = useState(false)
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'selected' | 'failed'>('idle')
+  const keyTextRef = useRef<HTMLElement>(null)
 
   const restrictable = level === 'listen' && !upload
   const allowsNothing = restrictable && restrictionAllowsNothing(restriction)
   const rate = rateLimit.trim() ? Number(rateLimit) : null
   const rateInvalid = rate !== null && !(rate > 0)
+  const expiryProblem = expiryDateProblem(expires)
 
   const reset = () => {
     setName('')
@@ -274,7 +275,7 @@ function CreateKeyCard({ systems, onCreated }: { systems: System[]; onCreated: (
         rate_limit_rps: rate,
       })
       setCreated(res)
-      setCopied(false)
+      setCopyState('idle')
       reset()
       setOpen(false)
       onCreated()
@@ -285,14 +286,11 @@ function CreateKeyCard({ systems, onCreated }: { systems: System[]; onCreated: (
     }
   }
 
+  // Over plain HTTP (e.g. a LAN dashboard) there is no Clipboard API: fall
+  // back to the legacy copy command, else select the key for a manual copy
   const copy = async () => {
     if (!created) return
-    try {
-      await navigator.clipboard.writeText(created.key)
-      setCopied(true)
-    } catch {
-      setCopied(false)
-    }
+    setCopyState(await copyText(created.key, keyTextRef.current))
   }
 
   return (
@@ -315,11 +313,18 @@ function CreateKeyCard({ systems, onCreated }: { systems: System[]; onCreated: (
               Key <span className="font-mono">{created.name}</span> created. Copy it now: it will not be shown again.
             </p>
             <div className="flex flex-wrap items-center gap-2">
-              <code className="rounded bg-muted px-2 py-1 font-mono text-sm break-all select-all" data-testid="created-key-plaintext">
+              <code ref={keyTextRef} className="rounded bg-muted px-2 py-1 font-mono text-sm break-all select-all" data-testid="created-key-plaintext">
                 {created.key}
               </code>
-              <Button size="sm" variant="outline" onClick={copy}>{copied ? 'Copied' : 'Copy'}</Button>
+              <Button size="sm" variant="outline" onClick={copy}>{copyState === 'copied' ? 'Copied' : 'Copy'}</Button>
             </div>
+            {(copyState === 'selected' || copyState === 'failed') && (
+              <p role="status" className="text-sm text-warning" data-testid="copy-manually">
+                {copyState === 'selected'
+                  ? "Couldn't copy automatically: the key is selected, press Ctrl+C (Cmd+C on a Mac) to copy it."
+                  : "Couldn't copy automatically: select the key above and copy it."}
+              </p>
+            )}
             <div className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning">
               Keys used in web pages that other people load are public: anyone who loads the page gets the key's
               access. Put a key only into clients you control, or into a server that keeps it from its visitors.
@@ -358,8 +363,20 @@ function CreateKeyCard({ systems, onCreated }: { systems: System[]; onCreated: (
             )}
             <div className="flex flex-wrap gap-4">
               <div className="space-y-1">
-                <label htmlFor="key-expires" className="text-sm font-medium">Expires (optional)</label>
-                <Input id="key-expires" type="date" value={expires} onChange={(e) => setExpires(e.target.value)} className="w-44" />
+                <label htmlFor="key-expires" className="text-sm font-medium">Expiry date (optional)</label>
+                <Input
+                  id="key-expires"
+                  type="date"
+                  value={expires}
+                  min={minExpiryDate()}
+                  onChange={(e) => setExpires(e.target.value)}
+                  aria-describedby="key-expires-hint"
+                  aria-invalid={!!expiryProblem}
+                  className="w-44"
+                />
+                <p id="key-expires-hint" className={cn('text-xs max-w-56', expiryProblem ? 'text-destructive' : 'text-muted-foreground')}>
+                  {expiryProblem ?? EXPIRY_DATE_HINT}
+                </p>
               </div>
               <div className="space-y-1">
                 <label htmlFor="key-rate" className="text-sm font-medium">Rate limit, requests/s (optional)</label>
@@ -367,7 +384,7 @@ function CreateKeyCard({ systems, onCreated }: { systems: System[]; onCreated: (
               </div>
             </div>
             <div className="flex gap-2">
-              <Button type="submit" disabled={busy || !name.trim() || allowsNothing || rateInvalid}>
+              <Button type="submit" disabled={busy || !name.trim() || allowsNothing || rateInvalid || !!expiryProblem}>
                 {busy ? 'Creating...' : 'Create key'}
               </Button>
               <Button type="button" variant="ghost" onClick={() => { reset(); setOpen(false) }} disabled={busy}>
@@ -468,6 +485,9 @@ function EditKeyForm({ apiKey: k, systems, onDone }: { apiKey: APIKey; systems: 
   const allowsNothing = restrictable && restrictionAllowsNothing(restriction)
   const rate = rateLimit.trim() ? Number(rateLimit) : null
   const rateInvalid = rate !== null && !(rate > 0)
+  // Only a changed expiry is sent (and checked): an expired key keeps its date
+  const expiryChanged = expires !== dateFromExpiry(k.expires_at)
+  const expiryProblem = expiryChanged ? expiryDateProblem(expires) : null
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -482,7 +502,7 @@ function EditKeyForm({ apiKey: k, systems, onDone }: { apiKey: APIKey; systems: 
       rate_limit_rps: rate,
     }
     // Only touch expiry when it changed: re-sending a past date would be rejected
-    if (expires !== dateFromExpiry(k.expires_at)) patch.expires_at = expiryFromDate(expires)
+    if (expiryChanged) patch.expires_at = expiryFromDate(expires)
     try {
       await updateKey(k.id, patch)
       onDone(true)
@@ -512,8 +532,20 @@ function EditKeyForm({ apiKey: k, systems, onDone }: { apiKey: APIKey; systems: 
       )}
       <div className="flex flex-wrap gap-4">
         <div className="space-y-1">
-          <label className="text-sm font-medium" htmlFor={`key-expires-${k.id}`}>Expires</label>
-          <Input id={`key-expires-${k.id}`} type="date" value={expires} onChange={(e) => setExpires(e.target.value)} className="w-44" />
+          <label className="text-sm font-medium" htmlFor={`key-expires-${k.id}`}>Expiry date</label>
+          <Input
+            id={`key-expires-${k.id}`}
+            type="date"
+            value={expires}
+            min={expiryChanged ? minExpiryDate() : undefined}
+            onChange={(e) => setExpires(e.target.value)}
+            aria-describedby={`key-expires-hint-${k.id}`}
+            aria-invalid={!!expiryProblem}
+            className="w-44"
+          />
+          <p id={`key-expires-hint-${k.id}`} className={cn('text-xs max-w-56', expiryProblem ? 'text-destructive' : 'text-muted-foreground')}>
+            {expiryProblem ?? `${EXPIRY_DATE_HINT} Empty: never expires.`}
+          </p>
         </div>
         <div className="space-y-1">
           <label className="text-sm font-medium" htmlFor={`key-rate-${k.id}`}>Rate limit, requests/s</label>
@@ -521,7 +553,7 @@ function EditKeyForm({ apiKey: k, systems, onDone }: { apiKey: APIKey; systems: 
         </div>
       </div>
       <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={busy || !name.trim() || allowsNothing || rateInvalid || (level === 'none' && !upload)}>
+        <Button type="submit" size="sm" disabled={busy || !name.trim() || allowsNothing || rateInvalid || !!expiryProblem || (level === 'none' && !upload)}>
           {busy ? 'Saving...' : 'Save'}
         </Button>
         <Button type="button" size="sm" variant="ghost" onClick={() => onDone(false)} disabled={busy}>Cancel</Button>

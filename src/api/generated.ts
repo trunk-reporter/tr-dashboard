@@ -98,7 +98,11 @@ export interface paths {
          *
          *     `restriction` is only allowed when `scopes` is exactly `["listen"]`,
          *     and a key restriction that allows nothing is rejected
-         *     ("restriction allows nothing").
+         *     ("restriction allows nothing"). A restriction that names a system
+         *     involved in an earlier merge is rewritten on store, as the merge
+         *     would have rewritten it (see `POST /admin/systems/merge`); the
+         *     response shows the stored form. Each array holds at most 1000
+         *     entries.
          *
          *     **A key that reaches other people's browsers is public.** Only put
          *     a key into a web page that other people load if you would give
@@ -136,9 +140,14 @@ export interface paths {
          *     tickets stop verifying, and its open streams close with the
          *     `invalid_key` signal.
          *
-         *     **Last-admin guard:** revoking the last active admin key is refused
-         *     with 409 `conflict`. (The `tr-engine keys revoke` CLI is not
-         *     subject to the guard.)
+         *     **Last-admin guard:** revoking an active admin key is refused with
+         *     409 `conflict` unless another active admin key, not rate-limited
+         *     below 1 request/second, lasts at least as long (it has no expiry,
+         *     or one no earlier than this key's). The message says which case
+         *     applies: "this is the last active admin key: ..." or "every other
+         *     active admin key expires before this one, ...".
+         *     (The `tr-engine keys revoke` CLI is not subject to the guard; it
+         *     warns when no lasting admin key is left.)
          */
         delete: operations["revokeKey"];
         options?: never;
@@ -153,10 +162,27 @@ export interface paths {
          *     - Scopes and restriction are validated together, as on create. To
          *       change the scopes of a restricted `["listen"]` key, send
          *       `"restriction": null` in the same request.
+         *     - A new restriction that names a system already merged into
+         *       another is rewritten on store, as the merge would have rewritten
+         *       it; the response shows the stored form.
          *     - `expires_at` must be in the future.
          *     - A revoked key cannot be changed (409).
-         *     - **Last-admin guard:** removing `admin` from the last active admin
-         *       key is refused with 409 `conflict`.
+         *     - **Last-admin guard:** removing `admin` from an active admin key,
+         *       setting an expiry earlier than its current one (or a first
+         *       expiry), or setting or lowering its `rate_limit_rps` below 1
+         *       request/second, is refused with 409 `conflict` unless another
+         *       active admin key lasts at least as long as this one does now: it
+         *       has no expiry, or one no earlier than this key's current expiry.
+         *       Only admin keys not rate-limited below 1 request/second count as
+         *       that other key. So the only admin key can't be given an expiry,
+         *       or a rate limit below 1 request/second, through the API. The
+         *       message says which case applies: "this is the last active admin
+         *       key: create another admin key first", "every other active admin
+         *       key expires before this one, ...", or "a rate limit below 1
+         *       request/second on this admin key would leave no admin key that
+         *       can lift it: ...". The `tr-engine keys update` CLI is not
+         *       guarded (it warns instead); `tr-engine keys update ID
+         *       --no-rate-limit` undoes an over-tight limit.
          *
          *     The change takes effect on the key's next request, and on open
          *     event streams and audio WebSockets at once: they either pick up the
@@ -196,7 +222,12 @@ export interface paths {
          *
          *     A restriction that allows nothing is rejected ("use access: off
          *     instead"). The restriction is stored even with `access: "off"`, so
-         *     it can be prepared in advance.
+         *     it can be prepared in advance. A restriction that names a system
+         *     involved in an earlier merge is rewritten on store, as the merge
+         *     would have rewritten it; the response shows the stored form. Each
+         *     array of a new restriction holds at most 1000 entries; the stored
+         *     restriction sent back unchanged is accepted even when merges have
+         *     grown it past that.
          *
          *     The change applies to new requests at once. Open anonymous event
          *     streams and audio WebSockets pick it up at once too: they close
@@ -243,6 +274,16 @@ export interface paths {
          *       restriction too large — narrow by system or mint several
          *       tickets". A narrowing that allows nothing is accepted: the
          *       ticket then sees nothing.
+         *     - A narrowing that names a system already merged into another, in
+         *       any array including `exclude_talkgroups`, is refused with 400
+         *       `invalid_body` ("restriction: names a system that was merged
+         *       into another; use the system it was merged into"). Stored key
+         *       and anonymous restrictions keep merged-away IDs in their
+         *       exclusions (next to a copy for the surviving system), so a
+         *       narrowing copied from one must drop those entries. A ticket minted before such a merge fails with 401
+         *       `invalid_ticket` on use, and a stream it opened closes with the
+         *       `ticket_expired` signal; mint a new ticket for the merged
+         *       system.
          *     - The ticket stores only the narrowing. Every use applies the
          *       minting key's **current** state: a revoked, expired or re-scoped
          *       key invalidates its tickets, and a changed key restriction
@@ -949,7 +990,9 @@ export interface paths {
         /**
          * Get call frequency list
          * @description Returns the frequency entries (freqList) within a call, ordered by
-         *     position in the audio.
+         *     position in the audio, paged with `limit`/`offset` (`total` counts
+         *     every entry). A `limit` that isn't an integer ≥ 1 or an `offset`
+         *     that isn't an integer ≥ 0 is 400 `invalid_parameter`.
          */
         get: operations["getCallFrequencies"];
         put?: never;
@@ -971,7 +1014,9 @@ export interface paths {
          * Get call transmission list
          * @description Returns the unit transmissions (srcList) within a call, ordered by
          *     position in the audio. Each entry represents a unit keying up.
-         *     Includes unit alpha_tags.
+         *     Includes unit alpha_tags. Paged with `limit`/`offset` (`total`
+         *     counts every entry). A `limit` that isn't an integer ≥ 1 or an
+         *     `offset` that isn't an integer ≥ 0 is 400 `invalid_parameter`.
          */
         get: operations["getCallTransmissions"];
         put?: never;
@@ -1000,6 +1045,12 @@ export interface paths {
          *     source "human" for backward compatibility, but callers can supply
          *     source, provider, language, and pre-built word/segment data for
          *     source-side or programmatic transcriptions.
+         *
+         *     `source` must be `auto`, `human` or `llm` (case-sensitive); any
+         *     other value is 400 `invalid_body` ("source must be one of auto,
+         *     human, llm"). The new primary transcription sets the call's and
+         *     its call group's `transcription_status`: `verified` for `human`,
+         *     `auto` for `auto` and `llm`.
          */
         put: operations["submitTranscriptionCorrection"];
         post?: never;
@@ -1206,10 +1257,27 @@ export interface paths {
          *     3. the multipart form field `api_key` (OpenMHz plugin).
          *
          *     Form fields are read from the multipart body only (never from the
-         *     URL), after the 50 MB upload size limit. A field that is present
-         *     but holds an unknown, revoked or expired key is 401 `invalid_key`;
-         *     the other field is not tried. Rejected uploads are logged with the
-         *     client IP, the form's system name and the reason.
+         *     URL), after the 50 MB upload size limit (a larger body is 413,
+         *     whether the key is in the header or the form). A field that is
+         *     present but holds an unknown, revoked or expired key is 401
+         *     `invalid_key`; the other field is not tried. Without a Bearer
+         *     header, a body that isn't `multipart/form-data` has no key fields
+         *     and is 401 `key_required`, and so is a form field holding the
+         *     pre-upgrade public `AUTH_TOKEN` (it counts as no key). Rejected
+         *     uploads are logged with the client IP, the form's system name and
+         *     the reason.
+         *
+         *     **Rate limits:** an upload that carries its key in a form field
+         *     has no header credential, so it is limited per client IP
+         *     (`RATE_LIMIT_RPS`/`RATE_LIMIT_BURST`) like a request without a
+         *     key. It costs two per-IP tokens when the key isn't in the
+         *     30-second key cache, and always for a legacy (imported) key such
+         *     as an imported `WRITE_TOKEN`, so those uploads get half the
+         *     per-IP rate. A host that uploads many calls per second (for
+         *     example while clearing a backlog) should send the key as
+         *     `Authorization: Bearer` (a legacy key stays limited per IP there
+         *     too, at one token per request; replace it with a new `upload`
+         *     key), or the operator should raise the per-IP limits.
          *
          *     **Format detection:** The endpoint inspects form field names to
          *     determine the upload format:
@@ -1599,11 +1667,12 @@ export interface paths {
          *       off and reconnect yourself.
          *
          *     **Access re-checks and the `auth` signal:** the server re-checks
-         *     the stream's credential every 60 seconds and at once when a key,
-         *     the anonymous policy or a system merge changes. If the credential
-         *     changed but still has `listen`, the stream continues under the new
-         *     scopes and restriction. Otherwise, and when a ticket expires, the
-         *     server sends one final message and closes the stream:
+         *     the stream's credential every 60 seconds, at once when a key, the
+         *     anonymous policy or a system merge changes, and when the stream's
+         *     key reaches its `expires_at`. If the credential changed but still
+         *     has `listen`, the stream continues under the new scopes and
+         *     restriction. Otherwise, and when a ticket expires, the server
+         *     sends one final message and closes the stream:
          *
          *     ```
          *     event: auth
@@ -1617,6 +1686,18 @@ export interface paths {
          *     a key or explain what changed. The `auth` message is always sent,
          *     whatever the `types` filter says.
          *
+         *     - A header-authenticated stream has no ticket timer, but it closes
+         *       with `invalid_key` when its key reaches `expires_at` or is
+         *       revoked, and with `insufficient_scope` when the key loses
+         *       `listen`.
+         *     - A ticket stream whose narrowing names a system that has since
+         *       been merged into another closes with `ticket_expired`: mint a
+         *       new ticket naming the merged system.
+         *     - If a re-check can't reach the database, the stream stays open
+         *       with its current access and is checked again at the next
+         *       re-check (60 s, or the next change). A ticket stream still
+         *       closes when its ticket expires.
+         *
          *     **Per-type access:** each event type needs a minimum scope, and
          *     restricted credentials only receive events for talkgroups their
          *     restriction allows (see `SSEEventType`). This is applied before the
@@ -1625,10 +1706,15 @@ export interface paths {
          *
          *     **Event format:**
          *     ```
-         *     id: 1707912345000-42
+         *     id: 1707912345000-9f86d081884c7d659a2feaa0c55ad015
          *     event: call_start
          *     data: {"call_id": 48531, "system_id": 1, "tgid": 9178, ...}
          *     ```
+         *
+         *     Event IDs are opaque strings (currently `<unix_ms>-<32 hex
+         *     characters>`), unique within one engine process but not
+         *     sequential. Don't parse or compare them; only send the last one
+         *     back to resume.
          *
          *     **Filtering:**
          *     All filter parameters are optional. With no filters, all events for
@@ -1696,13 +1782,21 @@ export interface paths {
          *     | 12+ | variable | bytes | audio data (PCM int16 LE or Opus) |
          *
          *     **JSON text frames (server → client):**
-         *     - Keepalive (every 15s): `{"type": "keepalive", "active_streams": 2}`
+         *     - Keepalive (every 15s): `{"type": "keepalive", "active_streams": 2}`.
+         *       `active_streams` counts the live talkgroup streams; for a
+         *       restricted credential, only those on talkgroups it may hear.
          *     - Call start: `{"type": "call_start", "system_id": 1, "tgid": 9178, ...}`
          *     - Call end: `{"type": "call_end", "system_id": 1, "tgid": 9178, ...}`
          *
          *     **JSON text frames (client → server):**
          *     - Subscribe: `{"type": "subscribe", "tgids": [1001, 1002], "systems": [1]}`
          *     - Unsubscribe: `{"type": "unsubscribe"}`
+         *
+         *     **Liveness and limits:** the server sends a WebSocket ping with
+         *     every keepalive (every 15 s). It closes a connection from which it
+         *     has received nothing, pongs included, for 60 seconds (browsers
+         *     answer pings automatically), and closes with 1009 (message too
+         *     big) when a client message is over 64 KiB.
          *
          *     **Authentication:** `Authorization: Bearer <key>` for clients that
          *     can set headers on the upgrade request, `?ticket=<ticket>` from
@@ -1714,9 +1808,14 @@ export interface paths {
          *     their restriction allows, whatever the subscribe message asks for.
          *
          *     **Close codes:** the server re-checks the connection's credential
-         *     every 60 seconds and at once when keys or the anonymous policy
-         *     change, and closes the socket when it no longer allows listening
-         *     or when its ticket expires:
+         *     every 60 seconds, at once when a key, the anonymous policy or a
+         *     system merge changes, and when the connection's key reaches its
+         *     `expires_at`. It closes the socket when the credential no longer
+         *     allows listening or when its ticket expires. A ticket whose
+         *     narrowing names a system that has since been merged into another
+         *     closes with `ticket_expired` (mint a new ticket for the merged
+         *     system). If a re-check can't reach the database, the connection
+         *     stays open with its current access until the next re-check.
          *
          *     | Close code | Reason (the code string) | What to do |
          *     |---|---|---|
@@ -1873,16 +1972,43 @@ export interface paths {
          *       combined. Source-only talkgroups are moved to target.
          *     - Units: same merge logic as talkgroups
          *     - Unit events: repointed to target system_id
+         *     - Talkgroup directory entries (imported CSV data): merged into
+         *       the target; the target keeps its non-empty values
          *     - Call groups may be consolidated (recordings that now share
          *       system_id + tgid + start_time get grouped)
          *     - Source system is deleted
          *
-         *     - Restrictions on API keys and the anonymous access policy that
-         *       name the source system (in `systems`, `talkgroups` or
-         *       `exclude_talkgroups`) are rewritten to the target in the same
-         *       transaction, so a merge never widens access. Tickets whose
-         *       narrowing names the source system stop verifying
-         *       (`invalid_ticket`); clients mint new ones.
+         *     **Restrictions** on API keys and the anonymous access policy are
+         *     rewritten in the same transaction:
+         *     - Allow entries that name the source (`systems`, and `source:tgid`
+         *       in `talkgroups`) are rewritten to the target.
+         *     - `exclude_talkgroups` are made **symmetric**: an entry naming
+         *       the source or the target is kept, and a copy naming the other
+         *       one is added (along a chain of merges, every system of the
+         *       chain), so data that still carries the old ID, or is written
+         *       under it around the merge, stays excluded. Expect merged-away
+         *       IDs to remain in stored exclusions. Exclusion lists can grow
+         *       past the 1000-entry input limit this way; such a stored
+         *       restriction stays valid (see `Restriction`).
+         *     - A restriction stored later that names either system (keys, the
+         *       anonymous policy) is rewritten the same way on store.
+         *       A ticket narrowing that names the merged-away system anywhere,
+         *       `exclude_talkgroups` included, is refused at mint time (400
+         *       `invalid_body`); a ticket minted before the merge fails with
+         *       401 `invalid_ticket`, and a stream it opened closes with the
+         *       `ticket_expired` signal. Clients mint new tickets, and drop
+         *       merged-away IDs when they copy exclusions from a stored
+         *       restriction into a narrowing.
+         *
+         *     A merge never leaves an allow entry (`systems`, `talkgroups`)
+         *     pointing at a merged-away system and never voids an exclusion
+         *     (exclusions keep the old ID next to the surviving one). It
+         *     **can widen access**,
+         *     though: an allow entry that named either system now covers the
+         *     whole merged system, including the data the other system already
+         *     had. That is intended when both are the same radio network. Before
+         *     merging systems that are not, review restricted keys (`GET
+         *     /keys`) and the anonymous policy (`GET /anonymous-access`).
          *
          *     **Implications:**
          *     - Call IDs (database PKs) are stable — bookmarks don't break
@@ -2098,10 +2224,18 @@ export interface paths {
          * List audit log entries
          * @description Returns the audit log, newest first. One entry is recorded for
          *     every request made with an API key to a matched route whose method
-         *     is not GET, HEAD or OPTIONS, including requests the handler itself
-         *     refused (the status is the one the client received). Requests
-         *     without a key, failed authentication, `POST /call-upload` and
-         *     `POST /tickets` are not recorded; they stay in the access log.
+         *     is not GET, HEAD or OPTIONS and that the auth layer let through,
+         *     including requests the handler itself refused (the status is the
+         *     one the client received). Not recorded: requests without a key,
+         *     failed authentication (401), authorization refusals by the auth
+         *     layer (403 `insufficient_scope` or `restricted_credential`),
+         *     `POST /call-upload` and `POST /tickets`; the access log still has
+         *     them.
+         *
+         *     `path` is the request path without the query string, cut at 1024
+         *     bytes with a "…(truncated, N bytes)" marker. (The request line and
+         *     headers together are limited to 64 KiB; a larger request gets
+         *     431.)
          *
          *     `actor` is the optional `X-Actor` request header, which a
          *     multi-user client sends to name the end user it acted for. It is
@@ -2260,8 +2394,8 @@ export interface components {
          *     `null` (or an omitted field) means unrestricted; a restriction
          *     object is never treated as unrestricted.
          *
-         *     A (system, talkgroup) pair is allowed when its talkgroup is set and
-         *     non-zero, **and** (`allow_all`, or the system is in `systems`, or
+         *     A (system, talkgroup) pair is allowed when both IDs are set and
+         *     positive, **and** (`allow_all`, or the system is in `systems`, or
          *     the pair is in `talkgroups`), **and** the pair is not in
          *     `exclude_talkgroups`. Data without a talkgroup is never allowed to
          *     a restricted credential. With `allow_all` false and `systems` and
@@ -2273,10 +2407,24 @@ export interface components {
          *     system is in `systems`, or an entry of `talkgroups` belongs to it.
          *
          *     IDs need not exist yet. Duplicates are removed and arrays are
-         *     returned sorted. Each array holds at most 1000 entries (a ticket
-         *     narrowing at most 100 in total). Unknown fields are rejected. When
-         *     systems are merged, references to the merged-away system are
-         *     rewritten to the surviving one.
+         *     returned sorted. Each array in a new restriction holds at most
+         *     1000 entries (a ticket narrowing at most 100 in total). System
+         *     merges can grow a stored `exclude_talkgroups` past 1000; such a
+         *     stored restriction stays valid, and sending it back unchanged
+         *     (`PATCH /keys/{id}`, `PUT /anonymous-access`) is accepted.
+         *     Unknown fields are rejected.
+         *
+         *     **System merges** (see `POST /admin/systems/merge`): allow entries
+         *     (`systems`, `talkgroups`) naming the merged-away system are
+         *     rewritten to the surviving one. `exclude_talkgroups` are kept
+         *     symmetric: an entry naming either the merged-away or the surviving
+         *     system is kept and a copy naming the other is added, along chains
+         *     of merges. A key or anonymous restriction stored later is
+         *     rewritten the same way on store (the response shows the stored
+         *     form). A ticket narrowing that names a merged-away system
+         *     anywhere, `exclude_talkgroups` included, is refused with 400
+         *     `invalid_body`, so drop merged-away IDs when you build a narrowing
+         *     from a stored restriction.
          *
          *     Operations marked `x-restricted: deny` refuse restricted
          *     credentials with 403 `restricted_credential`; operations marked
@@ -2306,7 +2454,12 @@ export interface components {
             systems?: number[];
             /** @description Individually allowed talkgroups, as `system_id:tgid` */
             talkgroups?: components["schemas"]["CompositeTalkgroupID"][];
-            /** @description Talkgroups that are never allowed, even when their system is */
+            /**
+             * @description Talkgroups that are never allowed, even when their system is.
+             *     At most 1000 entries in a new restriction; a stored list that
+             *     system merges have grown can be longer (no `maxItems`, since
+             *     responses and unchanged round trips may carry it).
+             */
             exclude_talkgroups?: components["schemas"]["CompositeTalkgroupID"][];
         } | null;
         /**
@@ -2472,7 +2625,9 @@ export interface components {
                 restricted: boolean;
             };
             /**
-             * @description Engine version
+             * @description Engine release version: the text before the first space of the
+             *     version `/health` reports, so without its
+             *     ` (commit=…, built=…)` suffix.
              * @example 0.10.0
              */
             version: string;
@@ -2521,6 +2676,18 @@ export interface components {
          *     reconnect with `last_event_id`. On any other code, do **not**
          *     reconnect automatically: call `GET /whoami` and ask for a key or
          *     explain what changed.
+         *
+         *     - `invalid_key`: the key was revoked or reached its `expires_at`
+         *       (header-authenticated streams too), or a ticket's key was.
+         *     - `key_required`: an anonymous stream after anonymous access was
+         *       turned `off`.
+         *     - `insufficient_scope`: the key no longer has `listen`.
+         *     - `ticket_expired`: the ticket expired, or its narrowing names a
+         *       system that has since been merged into another; mint a new
+         *       ticket (for the merged system) and reconnect.
+         *
+         *     A re-check that can't reach the database keeps the stream open
+         *     with its current access and tries again at the next re-check.
          * @example {
          *       "code": "ticket_expired"
          *     }
@@ -2542,7 +2709,8 @@ export interface components {
             /** @example PATCH */
             method: string;
             /**
-             * @description Request path, without the query string
+             * @description Request path, without the query string. A path over 1024
+             *     bytes is cut there and ends with "…(truncated, N bytes)".
              * @example /api/v1/talkgroups/1:9178
              */
             path: string;
@@ -2573,11 +2741,17 @@ export interface components {
              *       failed
              *     - `forbidden` (403): from the auth layer, only for a route with no
              *       auth policy (a server bug)
+             *     - `bad_request` (405): also a wrong method on an existing path
              * @example not_found
              * @enum {string}
              */
             code: "bad_request" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "rate_limited" | "internal_error" | "service_unavailable" | "invalid_body" | "invalid_parameter" | "invalid_time_range" | "query_failed" | "ambiguous_id" | "duplicate" | "request_timeout" | "key_required" | "invalid_key" | "invalid_ticket" | "insufficient_scope" | "restricted_credential";
-            /** @example Resource not found */
+            /**
+             * @description Human-readable message. It is informational and may change;
+             *     branch on `code`. The one exception: `insufficient_scope`
+             *     messages always read "this operation needs the <scope> scope".
+             * @example Resource not found
+             */
             error: string;
             /** @description Additional context when available */
             detail?: string;
@@ -3300,7 +3474,8 @@ export interface components {
             /** @example 45.5 */
             duration?: number;
             /**
-             * @description Number of recordings in this group
+             * @description Number of recordings in this group. For a restricted
+             *     credential, only the recordings it may see are counted.
              * @example 2
              */
             call_count?: number;
@@ -3924,7 +4099,11 @@ export interface components {
         HealthResponse: {
             /** @enum {string} */
             status: "healthy" | "degraded" | "unhealthy";
-            /** @example 0.6.1 */
+            /**
+             * @description Full engine version, with the commit and build time. `GET
+             *     /whoami` reports only the part before the first space.
+             * @example 0.10.0 (commit=abc1234, built=2026-09-26T12:00:00Z)
+             */
             version?: string;
             /** @example 86400 */
             uptime_seconds?: number;
@@ -4147,11 +4326,19 @@ export interface components {
             frequencies: components["schemas"]["CallFrequency"][];
             /** @example 3 */
             total: number;
+            /** @example 50 */
+            limit?: number;
+            /** @example 0 */
+            offset?: number;
         };
         CallTransmissionListResponse: {
             transmissions: components["schemas"]["CallTransmission"][];
             /** @example 4 */
             total: number;
+            /** @example 50 */
+            limit?: number;
+            /** @example 0 */
+            offset?: number;
         };
         StatsResponse: {
             /**
@@ -4506,15 +4693,17 @@ export interface components {
         /**
          * @description Each SSE event is sent as three lines:
          *     ```
-         *     id: 1707912345000-42
+         *     id: 1707912345000-9f86d081884c7d659a2feaa0c55ad015
          *     event: call_start
          *     data: {"call_id": 48531, "system_id": 1, "tgid": 9178, ...}
          *     ```
          *
          *     The SSE fields map to the browser's `EventSource` API:
-         *     - `id` → `event.lastEventId` — unique event ID (`{unix_ms}-{seq}`),
-         *       pass as the `Last-Event-ID` header or the `last_event_id` query
-         *       parameter on reconnect for gapless recovery
+         *     - `id` → `event.lastEventId` — opaque event ID, unique within one
+         *       engine process but not sequential (currently `<unix_ms>-<32 hex
+         *       characters>`; don't parse it). Pass the last one as the
+         *       `Last-Event-ID` header or the `last_event_id` query parameter on
+         *       reconnect for gapless recovery
          *     - `event` → selects the `addEventListener` handler — one of the
          *       SSEEventType values (call_start, call_end, unit_event, etc.)
          *     - `data` → `event.data` — the JSON payload described below
@@ -4735,6 +4924,18 @@ export interface components {
             /** @example false */
             retention_stale_calls_locked?: boolean;
             /**
+             * @description Audit log retention (Go duration, default 8760h = 1 year; `RETENTION_AUDIT_LOG`)
+             * @example 8760h0m0s
+             */
+            retention_audit_log?: string;
+            /**
+             * @example default
+             * @enum {string}
+             */
+            retention_audit_log_source?: "env" | "db" | "default";
+            /** @example false */
+            retention_audit_log_locked?: boolean;
+            /**
              * @description Maintenance run schedule
              * @example every 24h
              */
@@ -4786,6 +4987,7 @@ export interface components {
              *       "console_messages": 42,
              *       "plugin_statuses": 0,
              *       "call_active_checkpoints": 15,
+             *       "audit_log": 3,
              *       "stale_calls": 3,
              *       "orphan_call_groups": 1
              *     }
@@ -4927,7 +5129,7 @@ export interface components {
              * @example retention_console_logs
              * @enum {string}
              */
-            key: "retention_raw_messages" | "retention_console_logs" | "retention_plugin_status" | "retention_trunking_messages" | "retention_checkpoints" | "retention_stale_calls";
+            key: "retention_raw_messages" | "retention_console_logs" | "retention_plugin_status" | "retention_trunking_messages" | "retention_checkpoints" | "retention_stale_calls" | "retention_audit_log";
             /**
              * @description Go duration string (e.g. 48h, 720h, 7d)
              * @example 48h
@@ -5363,7 +5565,11 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description The last-admin guard applies */
+            /**
+             * @description The last-admin guard applies (no other active admin key that
+             *     isn't rate-limited below 1 request/second, or every such key
+             *     expires before this one)
+             */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -5403,7 +5609,11 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description The key is revoked, or the last-admin guard applies */
+            /**
+             * @description The key is revoked, or the last-admin guard applies (no other
+             *     active admin key that isn't rate-limited below 1
+             *     request/second, or every such key expires before this one)
+             */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -6617,7 +6827,12 @@ export interface operations {
     };
     getCallFrequencies: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Results per page */
+                limit?: components["parameters"]["limit"];
+                /** @description Page offset (number of results to skip) */
+                offset?: components["parameters"]["offset"];
+            };
             header?: never;
             path: {
                 /** @description Call record database ID */
@@ -6645,7 +6860,12 @@ export interface operations {
     };
     getCallTransmissions: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Results per page */
+                limit?: components["parameters"]["limit"];
+                /** @description Page offset (number of results to skip) */
+                offset?: components["parameters"]["offset"];
+            };
             header?: never;
             path: {
                 /** @description Call record database ID */
@@ -6713,10 +6933,13 @@ export interface operations {
                     /** @description Transcription text */
                     text: string;
                     /**
-                     * @description Transcription source. Defaults to "human" if omitted.
+                     * @description Transcription source: `auto`, `human` or `llm`.
+                     *     Defaults to `human` if omitted; any other value is 400
+                     *     `invalid_body`.
+                     * @default human
                      * @example human
                      */
-                    source?: string;
+                    source?: components["schemas"]["TranscriptionSource"];
                     /**
                      * @description Provider identifier (e.g., "client-whisper", "elevenlabs")
                      * @example client-whisper
@@ -7101,14 +7324,39 @@ export interface operations {
                          */
                         start_time?: string;
                         /**
-                         * @description Relative path to saved audio file
-                         * @example butco/2024/02/25/1708881234.m4a
+                         * @description Relative path of the saved audio file:
+                         *     `upload/<system_id>/<YYYY-MM-DD>/<call_id>.<ext>`
+                         *     (UTC date of the start time), with `ext` one of
+                         *     `m4a`, `mp3`, `wav`, `ogg` or `bin`, taken from
+                         *     `audioType` or the uploaded file's name (nothing
+                         *     declared means `m4a`). Every part is chosen by the
+                         *     engine, and an upload never overwrites a stored
+                         *     file: if one already exists under that name, a
+                         *     random suffix is added (`<call_id>-<hex>.<ext>`).
+                         *     Empty when no audio was saved.
+                         * @example upload/1/2024-02-25/48531.m4a
                          */
                         audio_file_path?: string;
                     };
                 };
             };
-            /** @description Bad Request — invalid multipart form, missing required fields, or unrecognized format */
+            /**
+             * @description Bad Request — an unrecognized format (`bad_request`), or
+             *     `invalid_body` for missing or malformed required fields, and
+             *     for:
+             *     - a system short name containing `/`, `\`, `..` or control
+             *       characters, or longer than 128 bytes;
+             *     - a talkgroup that is not positive;
+             *     - a missing or non-positive start time (`dateTime` /
+             *       `start_time`);
+             *     - a start time more than 10 minutes in the future;
+             *     - a start time in a month that has no partition yet and lies
+             *       outside the months the engine creates partitions for on
+             *       demand (12 months back to 3 months ahead of now).
+             *
+             *     With a Bearer key, also a body that is not valid
+             *     multipart/form-data (`invalid_body`).
+             */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7128,6 +7376,22 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description Payload Too Large — the body is over the 50 MB upload limit (key in the header or in the form) */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": "bad_request",
+                     *       "error": "request body too large"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -8299,7 +8563,11 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Retention config key (e.g. retention_console_logs) */
+                /**
+                 * @description Retention config key: one of the `key` values of
+                 *     `RetentionConfigUpdate` (e.g. retention_console_logs,
+                 *     retention_audit_log)
+                 */
                 key: string;
             };
             cookie?: never;
@@ -8492,15 +8760,22 @@ export interface operations {
                     };
                 };
             };
-            /** @description Debug reports are disabled */
+            /**
+             * @description Debug reports are disabled (`DEBUG_REPORT_DISABLE=true`, or no
+             *     `DEBUG_REPORT_URL`)
+             */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        error?: string;
-                    };
+                    /**
+                     * @example {
+                     *       "code": "service_unavailable",
+                     *       "error": "debug reports disabled"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useId } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { cn, getTalkgroupDisplayName } from '@/lib/utils'
 import { getTalkgroups } from '@/api/client'
@@ -9,6 +9,9 @@ interface TalkgroupMultiSelectProps {
   onSelectionChange: (keys: string[]) => void
   systemFilter?: string
   talkgroups: Talkgroup[] // for resolving display names of already-selected items
+  /** Visible label, also the search field's accessible name (two pickers on one page need different ones) */
+  label?: string
+  labelClassName?: string
 }
 
 export function TalkgroupMultiSelect({
@@ -16,7 +19,13 @@ export function TalkgroupMultiSelect({
   onSelectionChange,
   systemFilter,
   talkgroups: knownTalkgroups,
+  label = 'Talkgroups',
+  labelClassName,
 }: TalkgroupMultiSelectProps) {
+  const inputId = useId()
+  // Talkgroups picked from search results, so their chips show names even
+  // when the caller doesn't pass them in `talkgroups`
+  const [picked, setPicked] = useState<Map<string, Talkgroup>>(() => new Map())
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [results, setResults] = useState<Talkgroup[]>([])
@@ -78,10 +87,11 @@ export function TalkgroupMultiSelect({
   }, [open])
 
   const toggleTalkgroup = useCallback(
-    (key: string) => {
+    (key: string, tg?: Talkgroup) => {
       if (selected.includes(key)) {
         onSelectionChange(selected.filter((k) => k !== key))
       } else {
+        if (tg) setPicked((prev) => new Map(prev).set(key, tg))
         onSelectionChange([...selected, key])
       }
     },
@@ -100,14 +110,14 @@ export function TalkgroupMultiSelect({
     (compositeKey: string) => {
       const tg = knownTalkgroups.find(
         (t) => `${t.system_id}:${t.tgid}` === compositeKey
-      )
+      ) ?? picked.get(compositeKey)
       if (tg) return getTalkgroupDisplayName(tg.tgid, tg.alpha_tag)
       // Parse tgid from key
       const parts = compositeKey.split(':')
       const tgid = parts.length === 2 ? parts[1] : compositeKey
       return `TG ${tgid}`
     },
-    [knownTalkgroups]
+    [knownTalkgroups, picked]
   )
 
   const handleKeyDown = useCallback(
@@ -126,7 +136,7 @@ export function TalkgroupMultiSelect({
 
   return (
     <div ref={containerRef} className="relative">
-      <label className="mb-1 block text-sm text-muted-foreground">Talkgroups</label>
+      <label htmlFor={inputId} className={labelClassName ?? 'mb-1 block text-sm text-muted-foreground'}>{label}</label>
 
       {/* Input area with chips */}
       <div
@@ -146,12 +156,14 @@ export function TalkgroupMultiSelect({
             <button
               type="button"
               className="ml-0.5 rounded hover:bg-foreground/10 p-0.5"
+              aria-label={`Remove ${getDisplayName(key)} from ${label}`}
+              title={`Remove ${getDisplayName(key)}`}
               onClick={(e) => {
                 e.stopPropagation()
                 removeTalkgroup(key)
               }}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M18 6 6 18" /><path d="m6 6 12 12" />
               </svg>
             </button>
@@ -159,6 +171,7 @@ export function TalkgroupMultiSelect({
         ))}
         <input
           ref={inputRef}
+          id={inputId}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onFocus={() => setOpen(true)}
@@ -190,7 +203,7 @@ export function TalkgroupMultiSelect({
                     'hover:bg-accent hover:text-accent-foreground',
                     isSelected && 'bg-accent/50'
                   )}
-                  onClick={() => toggleTalkgroup(key)}
+                  onClick={() => toggleTalkgroup(key, tg)}
                 >
                   {/* Checkbox indicator */}
                   <div className={cn(

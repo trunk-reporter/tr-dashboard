@@ -143,6 +143,7 @@ function MaintenanceSection({
                 'Plugin Status': maintenance.config.retention_plugin_status,
                 'Checkpoints': maintenance.config.retention_checkpoints,
                 'Stale Calls': maintenance.config.retention_stale_calls,
+                'Audit Log': maintenance.config.retention_audit_log,
               }).map(([label, value]) => (
                 value && (
                   <div key={label} className="rounded border px-2 py-1">

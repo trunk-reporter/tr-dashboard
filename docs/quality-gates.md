@@ -9,9 +9,10 @@ Run these before opening review for dashboard changes:
 ```bash
 npm run lint
 npm run build
+npm test
 ```
 
-`npm run lint` is the type-only gate (`tsc --noEmit`). `npm run build` runs the TypeScript project build and Vite production build.
+`npm test` runs the auth smoke checks, the auth state tests (`scripts/test-auth-state.mjs`; extend it when changing auth, key or credential-bound state) and the dev proxy tests (`scripts/test-dev-proxy.mjs`: `TR_API_KEY` only for this machine's own tab, never for `vite preview`). `npm run lint` is the type-only gate (`tsc --noEmit`). `npm run build` runs the TypeScript project build and Vite production build.
 
 When API shapes are touched or copied from `tr-engine`, also run:
 
@@ -24,7 +25,7 @@ Commit generated type changes when the source OpenAPI contract changed. If `src/
 
 ## Component And Hook Coverage
 
-The current dashboard does not have a committed test runner. For new non-trivial component, store, or hook logic, either add focused tests with an agreed runner and document the command, or keep the logic small enough to verify through `npm run lint`, `npm run build`, and the manual checklist below.
+The dashboard has no general unit-test runner yet; `npm test` runs the Node-based auth scripts in `scripts/` (Node 20.19+ or 22.12+, no browser). For new non-trivial component, store, or hook logic, either add focused tests (extend those scripts, or an agreed runner with its command documented), or keep the logic small enough to verify through `npm run lint`, `npm run build`, `npm test`, and the manual checklist below.
 
 Tests are expected when code introduces parsing, filtering, sorting, state-machine transitions, retry behavior, auth branching, or SSE/audio event handling that is difficult to verify visually.
 

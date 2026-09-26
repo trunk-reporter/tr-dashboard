@@ -6,6 +6,7 @@ import type {
   Recorder,
 } from '@/api/types'
 import { getSSEManager, type ConnectionStatus } from '@/api/eventsource'
+import { getActiveCalls } from '@/api/client'
 import { useMonitorStore } from './useMonitorStore'
 import { useAudioStore } from './useAudioStore'
 
@@ -25,7 +26,14 @@ interface RealtimeState {
   handleRateUpdate: (rate: DecodeRate) => void
   handleRecorderUpdate: (recorder: Recorder) => void
   clearActiveCalls: () => void
+  /** Drop active calls whose call_end never arrived (resyncActiveCalls) */
+  removeActiveCalls: (callIds: number[]) => void
+  /** Drop everything received over the stream (the credential changed) */
+  clearStreamData: () => void
 }
+
+/** Bumped whenever the active calls are cleared, so a resync in flight gives up */
+let clearGeneration = 0
 
 export const useRealtimeStore = create<RealtimeState>((set) => ({
   connectionStatus: 'disconnected',
@@ -87,8 +95,52 @@ export const useRealtimeStore = create<RealtimeState>((set) => ({
       return { recorders: [...state.recorders, recorder] }
     }),
 
-  clearActiveCalls: () => set({ activeCalls: new Map() }),
+  clearActiveCalls: () => {
+    clearGeneration++
+    set({ activeCalls: new Map() })
+  },
+
+  removeActiveCalls: (callIds) =>
+    set((state) => {
+      if (!callIds.some((id) => state.activeCalls.has(id))) return state
+      const newCalls = new Map(state.activeCalls)
+      for (const id of callIds) newCalls.delete(id)
+      return { activeCalls: newCalls }
+    }),
+
+  clearStreamData: () => {
+    clearGeneration++
+    set({ activeCalls: new Map(), unitEvents: [], decodeRates: new Map(), recorders: [] })
+  },
 }))
+
+/** How often the live view re-checks its active calls against tr-engine */
+export const ACTIVE_CALLS_RESYNC_MS = 60_000
+
+/**
+ * Drop active calls that tr-engine no longer lists (GET /calls/active, which
+ * applies the caller's restriction). Their call_end may never arrive: after
+ * the credential's access narrows, tr-engine keeps the stream open and
+ * filters out later events for talkgroups it no longer allows, and a
+ * disconnect longer than the stream's replay window loses events. Only calls
+ * already held before the request are candidates, so a call_start that races
+ * the request is kept. No request while nothing is active.
+ */
+export async function resyncActiveCalls(): Promise<void> {
+  const held = [...useRealtimeStore.getState().activeCalls.keys()]
+  if (held.length === 0) return
+  const generation = clearGeneration
+  let listed: Set<number>
+  try {
+    const res = await getActiveCalls()
+    listed = new Set(res.calls.map((c) => c.call_id))
+  } catch {
+    return // try again next time
+  }
+  if (generation !== clearGeneration) return // cleared meanwhile (credential change)
+  const gone = held.filter((id) => !listed.has(id))
+  if (gone.length > 0) useRealtimeStore.getState().removeActiveCalls(gone)
+}
 
 // Initialize SSE connection and bind to store
 export function initializeRealtimeConnection(): () => void {
@@ -99,8 +151,15 @@ export function initializeRealtimeConnection(): () => void {
     store.setConnectionStatus(status)
     if (status === 'disconnected') {
       store.clearActiveCalls()
+    } else if (status === 'connected') {
+      // (Re)connected: calls that ended while the stream was down are gone
+      void resyncActiveCalls()
     }
   })
+  // Calls whose call_end the stream will never deliver (resyncActiveCalls)
+  const resyncTimer = setInterval(() => {
+    if (sse.status === 'connected') void resyncActiveCalls()
+  }, ACTIVE_CALLS_RESYNC_MS)
 
   const unsubCallStart = sse.on('call_start', (call) => {
     store.handleCallStart(call)
@@ -141,6 +200,10 @@ export function initializeRealtimeConnection(): () => void {
 
   return () => {
     unsubStatus()
+    clearInterval(resyncTimer)
+    // unsubStatus() runs first, so the 'disconnected' status below no longer
+    // clears the active calls: do it here
+    store.clearActiveCalls()
     unsubCallStart()
     unsubCallUpdate()
     unsubCallEnd()

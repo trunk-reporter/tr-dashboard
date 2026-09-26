@@ -1,5 +1,6 @@
 import { useAuthStore, type Whoami } from '@/stores/useAuthStore'
 import { API_BASE, onAuthFailure } from '@/api/client'
+import { cleanPastedKey, isSendableKey, unsendableKeyMessage } from '@/lib/apiKeyInput'
 
 /** Outcome of one GET /whoami */
 export type WhoamiResult =
@@ -31,6 +32,10 @@ function isWhoami(data: unknown): data is Whoami {
  * must not trigger the auth-failure handler.
  */
 export async function fetchWhoami(key: string): Promise<WhoamiResult> {
+  // fetch() throws before sending a header value outside ISO-8859-1, which
+  // would otherwise read as "Unable to connect"; such a value can't be a key.
+  if (key && !isSendableKey(key)) return { kind: 'invalid-key', message: unsendableKeyMessage(key) }
+
   let res: Response
   try {
     res = await fetch(`${API_BASE}/whoami`, {
@@ -107,7 +112,9 @@ async function resolveAuth(): Promise<void> {
           store().dropKey()
           break
         }
-        store().setInvalidKey(problem, await anonymousWhoami())
+        const anonymous = await anonymousWhoami()
+        if (store().apiKey !== key) return // a key connected meanwhile wins
+        store().setInvalidKey(problem, anonymous)
         return
       }
       case 'invalid-key': {
@@ -116,7 +123,9 @@ async function resolveAuth(): Promise<void> {
           store().dropKey()
           break
         }
-        store().setInvalidKey(r.message, await anonymousWhoami())
+        const anonymous = await anonymousWhoami()
+        if (store().apiKey !== key) return // a key connected meanwhile wins
+        store().setInvalidKey(r.message, anonymous)
         return
       }
       case 'too-old':
@@ -173,9 +182,11 @@ onAuthFailure(() => {
  * or null once the key is stored and the status is 'ready'.
  */
 export async function connectKey(raw: string): Promise<string | null> {
-  const key = raw.trim()
-  if (!key) return 'Paste an API key.'
-  if (/\s/.test(key)) return 'An API key has no spaces or line breaks.'
+  // Drops invisible characters and quotes picked up when copying; refuses
+  // characters no key can have with a key-specific message
+  const pasted = cleanPastedKey(raw)
+  if (pasted.error !== undefined) return pasted.error
+  const key = pasted.key
 
   const r = await fetchWhoami(key)
   switch (r.kind) {
@@ -199,8 +210,12 @@ export async function connectKey(raw: string): Promise<string | null> {
  * otherwise AuthGate shows the key screen.
  */
 export async function forgetKey(): Promise<void> {
+  const key = useAuthStore.getState().apiKey
   const r = await fetchWhoami('')
   const store = useAuthStore.getState()
+  // A key connected meanwhile (Replace in Settings, another tab) is the newer
+  // choice: keep it rather than forgetting it with this stale answer.
+  if (store.apiKey !== key) return
   switch (r.kind) {
     case 'ok':
       store.setAnonymous(r.whoami)
@@ -213,6 +228,66 @@ export async function forgetKey(): Promise<void> {
       store.dropKey()
       store.setError(r.kind === 'error' ? r.message : 'Unexpected response from /whoami')
   }
+}
+
+// -----------------------------------------------------------------------------
+// Other tabs
+// -----------------------------------------------------------------------------
+
+/**
+ * Adopt the key another tab stored (set, replaced or forgotten). Every auth
+ * store update is persisted, so without this the next one in this tab would
+ * write its stale key back over the other tab's change. Returns true when this
+ * tab's key changed.
+ */
+function adoptStoredKey(): boolean {
+  const before = useAuthStore.getState().apiKey
+  let stored: string | null
+  try {
+    stored = localStorage.getItem(useAuthStore.persist.getOptions().name ?? 'tr-dashboard-auth')
+  } catch {
+    return false
+  }
+  if (stored === null) {
+    // Removed by another tab (localStorage cleared): the key is gone there too
+    if (before) useAuthStore.getState().dropKey()
+  } else {
+    // Synchronous for localStorage; applies the persist migration too
+    void useAuthStore.persist.rehydrate()
+  }
+  return useAuthStore.getState().apiKey !== before
+}
+
+/** Another tab changed the stored key: adopt it and decide from scratch, as a reload would */
+async function followOtherTab(): Promise<void> {
+  if (!adoptStoredKey()) return
+  useAuthStore.getState().setLoading()
+  // A re-check still running for the previous key returns without deciding
+  if (inflight) await inflight
+  await recheckAuth()
+}
+
+let crossTabInstalled = false
+
+/**
+ * Follow key changes made in other tabs of this dashboard (like the engine's
+ * web/auth.js does): a key forgotten or replaced in Settings, or connected on
+ * the key screen, applies to every open tab.
+ */
+export function installCrossTabKeySync(): void {
+  if (crossTabInstalled || typeof window === 'undefined') return
+  crossTabInstalled = true
+  const name = useAuthStore.persist.getOptions().name
+  window.addEventListener('storage', (e: StorageEvent) => {
+    if (e.storageArea && e.storageArea !== window.localStorage) return
+    // key null: another tab cleared this origin's localStorage
+    if (e.key !== null && e.key !== name) return
+    void followOtherTab()
+  })
+  // A page restored from the back/forward cache missed the storage events
+  window.addEventListener('pageshow', (e: PageTransitionEvent) => {
+    if (e.persisted) void followOtherTab()
+  })
 }
 
 /** "Continue without a key" on the invalid-key screen */

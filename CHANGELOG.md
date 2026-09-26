@@ -21,6 +21,17 @@
 - **Event stream reconnects** — The stream reconnects itself with a fresh ticket, `last_event_id` (gapless) and backoff, instead of letting the browser retry an expired URL; it reconnects when the key is set, replaced or forgotten, and stops (re-checking `/whoami`) when tr-engine closes it for an auth reason.
 - **Home, system detail, talkgroup analytics, search** — Calls that tr-engine may deny no longer share a `Promise.all` with the page's main data, so a denied stats/recorders/units request can't blank the page.
 - **`/login` spinner, `canWrite()` over-reporting in token mode** — Gone with the login page and the token modes.
+- **Key changes in other tabs** — Forgetting or replacing the key in one tab applies to every open tab (they follow the `storage` event and re-check `/whoami`), so no other tab writes its old key back.
+- **Player and live data after a key change** — Setting, replacing or forgetting the key clears the player (current call, queue, history), the live-stream state (active calls, unit events, decode rates, recorders) and cached transcriptions, so nothing seen with the previous key stays on screen or keeps retrying.
+- **Key expiry dates** — On the Access page a key's expiry date means 00:00 UTC at the start of that date, as with `tr-engine keys create --expires` and the engine's admin page; dates that are not in the future are refused.
+- **Pasted keys** — Curly quotes and invisible characters picked up when copying a key from a document or email are removed; characters no key can have get a key-specific message instead of "Unable to connect to the API".
+- **Copying a new key over plain HTTP** — Without the Clipboard API (a LAN dashboard over `http://`), Copy falls back to the legacy copy command, or selects the key and says to press Ctrl+C.
+- **Access page talkgroup pickers** — The allow and exclude pickers have distinct accessible names, their chips' remove buttons are named, and picked talkgroups show their names.
+- **Alert history after a key change** — Setting, replacing or forgetting the key also clears the alert history (kept in the browser, and naming talkgroups and units the previous key could see); alert rules stay.
+- **Narrower access without a key change** — When `/whoami` shows that the key in use (or the anonymous policy) lost a scope or gained or changed a restriction, the dashboard clears the player, live data and alert history and reloads its pages, as for a key change. Active calls that tr-engine no longer lists are dropped (checked on every stream reconnect and every minute), so a call whose end tr-engine no longer sends can't stay "live" forever.
+- **Key connected during a background check** — A key connected (or replaced) while the dashboard was still re-checking a revoked key, or forgetting the old one, is kept instead of being reported as rejected.
+- **Dev proxy key** — `TR_API_KEY` is added only to same-origin requests from the developer's own machine: the dev server listens on every interface, and other devices on the network, or other sites open in the browser, could otherwise use the key. `npm run preview` never adds it. Use a `listen` key for it.
+- **Full-stack quick start** — The example `.env` is copied to `examples/.env`, where Compose reads it (`POSTGRES_PASSWORD` was reported missing), and the Caddy example passes `DASHBOARD_HOST` to Caddy.
 
 ### Removed
 

@@ -101,6 +101,11 @@ interface AudioState {
 
   // For transmissions loading
   loadTransmissions: (callId: number) => Promise<void>
+
+  // Drop the current call, queue, history and any pending retry (keeps volume
+  // and autoplay preferences): the API key was set, replaced or forgotten, and
+  // the new credential may not be allowed to see these calls
+  reset: () => void
 }
 
 export function toQueuedCall(call: Call | QueuedCall): QueuedCall {
@@ -365,10 +370,29 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   loadTransmissions: async (callId) => {
     try {
       const response = await getCallTransmissions(callId)
+      // The player may have moved on (or been reset) while this was in flight
+      if (get().currentCall?.callId !== callId) return
       set({ transmissions: response.transmissions })
     } catch (err) {
       console.error('Failed to load transmissions:', err)
     }
+  },
+
+  reset: () => {
+    const { retryTimeoutId } = get()
+    if (retryTimeoutId) clearTimeout(retryTimeoutId)
+    set({
+      playbackState: 'idle',
+      currentCall: null,
+      transmissions: [],
+      unitTags: new Map(),
+      currentTime: 0,
+      duration: 0,
+      queue: [],
+      history: [],
+      retryCount: 0,
+      retryTimeoutId: null,
+    })
   },
 }))
 

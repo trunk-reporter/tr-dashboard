@@ -62,6 +62,8 @@ export function describeRestriction(r: Restriction | null | undefined, systems: 
   return parts.join(' + ').replace(' + except', ' except')
 }
 
+const HEADING = 'mb-1 block text-xs font-medium text-muted-foreground'
+
 interface RestrictionEditorProps {
   value: RestrictionDraft
   onChange: (value: RestrictionDraft) => void
@@ -124,8 +126,9 @@ export function RestrictionEditor({ value, onChange, systems, noneLabel = 'Every
             )}
           </div>
           <div>
-            <p className="text-xs font-medium text-muted-foreground mb-1">Individual talkgroups</p>
             <TalkgroupMultiSelect
+              label="Individually allowed talkgroups"
+              labelClassName={HEADING}
               selected={value.talkgroups}
               onSelectionChange={(keys) => set({ talkgroups: keys })}
               talkgroups={[]}
@@ -136,8 +139,9 @@ export function RestrictionEditor({ value, onChange, systems, noneLabel = 'Every
 
       {value.mode !== 'none' && (
         <div>
-          <p className="text-xs font-medium text-muted-foreground mb-1">Never allow these talkgroups</p>
           <TalkgroupMultiSelect
+            label="Excluded talkgroups (never allowed)"
+            labelClassName={HEADING}
             selected={value.exclude}
             onSelectionChange={(keys) => set({ exclude: keys })}
             talkgroups={[]}
