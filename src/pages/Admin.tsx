@@ -22,6 +22,7 @@ import {
 } from '@/api/client'
 import { useIsAdmin } from '@/stores/useAuthStore'
 import { EmptyState } from '@/components/ui/empty-state'
+import { describeRetentionSource, retentionRows, summarizeRun } from '@/lib/maintenance'
 import type {
   System,
   Talkgroup,
@@ -125,7 +126,7 @@ function MaintenanceSection({
             <CardTitle>Maintenance</CardTitle>
             <CardDescription>Database maintenance and data retention</CardDescription>
           </div>
-          {maintenance?.running && (
+          {running && (
             <Badge variant="default" className="animate-pulse">Running</Badge>
           )}
         </div>
@@ -136,23 +137,20 @@ function MaintenanceSection({
           <div>
             <p className="text-sm font-medium mb-2">Retention Settings</p>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
-              {Object.entries({
-                'Calls': maintenance.config.retention_calls,
-                'Raw Messages': maintenance.config.retention_raw_messages,
-                'Console Logs': maintenance.config.retention_console_logs,
-                'Plugin Status': maintenance.config.retention_plugin_status,
-                'Checkpoints': maintenance.config.retention_checkpoints,
-                'Stale Calls': maintenance.config.retention_stale_calls,
-                'Audit Log': maintenance.config.retention_audit_log,
-              }).map(([label, value]) => (
-                value && (
-                  <div key={label} className="rounded border px-2 py-1">
-                    <div className="text-xs text-muted-foreground">{label}</div>
-                    <div className="font-mono text-xs">{value}</div>
+              {retentionRows(maintenance.config).map((row) => {
+                const source = describeRetentionSource(row)
+                return (
+                  <div key={row.key} className="rounded border px-2 py-1">
+                    <div className="text-xs text-muted-foreground">{row.label}</div>
+                    <div className="font-mono text-xs">{row.value}</div>
+                    {source && <div className="text-[10px] text-muted-foreground">{source}</div>}
                   </div>
                 )
-              ))}
+              })}
             </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Calls, transcriptions, talkgroups and units are kept forever.
+            </p>
             {maintenance.config.schedule && (
               <p className="text-xs text-muted-foreground mt-2">
                 Schedule: <span className="font-mono">{maintenance.config.schedule}</span>
@@ -162,33 +160,41 @@ function MaintenanceSection({
         )}
 
         {maintenance?.last_run && (
-          <div>
-            <p className="text-sm font-medium mb-2">Last Maintenance Run</p>
-            <div className="text-xs text-muted-foreground space-y-0.5">
-              <p>Started: {new Date(maintenance.last_run.started_at).toLocaleString()}</p>
-              {maintenance.last_run.completed_at && (
-                <p>Completed: {new Date(maintenance.last_run.completed_at).toLocaleString()}</p>
-              )}
-              <p>Partitions created: {maintenance.last_run.partitions_created ?? 0}</p>
-              <p>Calls deleted: {maintenance.last_run.calls_deleted ?? 0}</p>
-              {maintenance.last_run.errors && maintenance.last_run.errors.length > 0 && (
-                <div className="text-destructive mt-1">
-                  {maintenance.last_run.errors.map((e, i) => (
-                    <p key={i}>{e}</p>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          <LastRun run={maintenance.last_run} />
         )}
 
         <div className="flex gap-2">
-          <Button onClick={onRun} disabled={running || maintenance?.running}>
-            {running || maintenance?.running ? 'Running...' : 'Run Maintenance Now'}
+          <Button onClick={onRun} disabled={running}>
+            {running ? 'Running...' : 'Run Maintenance Now'}
           </Button>
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+function LastRun({ run }: { run: NonNullable<MaintenanceStatusResponse['last_run']> }) {
+  const summary = summarizeRun(run)
+  const perTable = (rows: Array<[string, number]>) =>
+    rows.length > 0 ? ` (${rows.map(([table, n]) => `${table} ${n.toLocaleString()}`).join(', ')})` : ''
+  return (
+    <div>
+      <p className="text-sm font-medium mb-2">Last Maintenance Run</p>
+      <div className="text-xs text-muted-foreground space-y-0.5">
+        {run.started_at && <p>Started: {new Date(run.started_at).toLocaleString()}</p>}
+        {summary.durationMs !== undefined && (
+          <p>Duration: {summary.durationMs < 1000 ? `${summary.durationMs} ms` : `${(summary.durationMs / 1000).toFixed(1)} s`}</p>
+        )}
+        <p>Partitions created: {summary.partitionsCreated}</p>
+        {summary.partitionsDropped.length > 0 && (
+          <p>Partitions dropped: {summary.partitionsDropped.join(', ')}</p>
+        )}
+        <p>Rows purged: {summary.purgedTotal.toLocaleString()}{perTable(summary.purged)}</p>
+        {summary.decimatedTotal > 0 && (
+          <p>Rows decimated: {summary.decimatedTotal.toLocaleString()}{perTable(summary.decimated)}</p>
+        )}
+      </div>
+    </div>
   )
 }
 

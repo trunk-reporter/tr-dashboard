@@ -178,22 +178,11 @@ export interface SystemMergeRequest extends Omit<Schema['SystemMergeRequest'], '
 export type SystemMergeResponse = Schema['SystemMergeResponse']
 export type UnitTagsImportResponse =
   operations['importUnitTags']['responses'][200]['content']['application/json']
-export type MaintenanceConfig = Schema['MaintenanceConfig'] & {
-  retention_calls?: string
-}
-export type MaintenanceRun = Schema['MaintenanceRun'] & {
-  started_at: string
-  completed_at?: string
-  calls_deleted?: number
-  raw_messages_deleted?: number
-  console_logs_deleted?: number
-  errors?: string[]
-}
-export interface MaintenanceStatusResponse extends Omit<Schema['MaintenanceStatus'], 'config' | 'last_run'> {
-  config?: MaintenanceConfig
-  last_run?: MaintenanceRun | null
-  running?: boolean
-}
+// As GET/POST /admin/maintenance report them (the engine has no calls
+// retention: calls are kept forever)
+export type MaintenanceConfig = Schema['MaintenanceConfig']
+export type MaintenanceRun = Schema['MaintenanceRun']
+export type MaintenanceStatusResponse = Schema['MaintenanceStatus']
 export type MaintenanceRunResponse = MaintenanceRun
 
 // =============================================================================

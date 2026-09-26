@@ -11,7 +11,10 @@
 # Quick start, from the repository root (Compose reads .env from this
 # file's directory, examples/, not from the current directory):
 #   docker network create proxy   (if it doesn't exist)
-#   cp examples/.env.example examples/.env   (edit with your values)
+#   cp examples/.env.example examples/.env   (edit with your values, including
+#     tr-engine's ingest source: MQTT_BROKER_URL, or TR_DIR / WATCH_DIR with
+#     the matching volume below; without one tr-engine exits at startup and
+#     never prints the bootstrap key)
 #   docker compose -f examples/docker-compose.traefik.yml up -d
 #
 # Access: tr-engine uses API keys. On its first start it prints a
@@ -49,12 +52,23 @@ services:
     # build: /path/to/tr-engine
     container_name: tr-engine
     restart: unless-stopped
+    # tr-engine settings from examples/.env, above all its ingest source:
+    # MQTT_BROKER_URL (plus MQTT_USERNAME / MQTT_PASSWORD / MQTT_TOPICS), or
+    # TR_DIR / WATCH_DIR with the matching volume below. tr-engine refuses to
+    # start without one of the three. See .env.example.
+    env_file:
+      - path: .env
+        required: false
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-trengine}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-trengine}?sslmode=disable
       AUDIO_DIR: /data/audio
       TZ: ${TZ:-UTC}
     volumes:
       - audio:/data/audio
+      # For TR_DIR=/tr-config (auto-discovery from trunk-recorder's config.json):
+      # - /path/to/trunk-recorder:/tr-config:ro
+      # For WATCH_DIR=/tr-audio (watch trunk-recorder's audio directory):
+      # - /path/to/trunk-recorder/audio:/tr-audio:ro
     depends_on:
       postgres:
         condition: service_healthy

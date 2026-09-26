@@ -46,3 +46,7 @@ docs/ROADMAP.md
 
 # OpenAPI spec (regenerated, not committed)
 openapi.yaml
+
+# Process ID files left by manual server runs
+/pid
+*.pid

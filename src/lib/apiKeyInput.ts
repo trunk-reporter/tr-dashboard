@@ -15,26 +15,37 @@ const TYPOGRAPHIC_QUOTES_AROUND = new RegExp(`^[${TYPOGRAPHIC_QUOTES}]+|[${TYPOG
 /** A key minted by tr-engine: `tre_` + 64 hex characters */
 const MINTED_KEY = /^tre_[0-9a-f]{64}$/
 
+/** A character an API key can have: printable ASCII, including the space */
+const KEY_CHAR = /^[\x20-\x7e]$/
+
+/** Tabs and line breaks: never part of a key, and a line break can't be sent in a header */
+const TAB_OR_LINE_BREAK = /[\t\n\v\f\r\u0085\u2028\u2029]/
+
 /**
- * What an Authorization header can carry for a key: printable ASCII without
- * spaces. Browsers refuse to send anything outside ISO-8859-1 (fetch throws
- * before any request, which looks like a network failure), and the engine
- * hashes the bytes it receives, so a non-ASCII value could never match.
+ * What an Authorization header can carry for a key: printable ASCII
+ * (U+0020-U+007E), with no space at either end. Browsers refuse to send
+ * anything outside ISO-8859-1 (fetch throws before any request, which looks
+ * like a network failure), and the engine hashes the bytes it receives, so a
+ * non-ASCII value could never match. Inner spaces can be sent: an imported
+ * legacy key (WRITE_TOKEN / AUTH_TOKEN) may contain them, and the engine
+ * accepts it. Only a value failing this check is refused without asking the
+ * engine; the engine decides about everything else.
  */
 export function isSendableKey(key: string): boolean {
-  return /^[\x21-\x7e]+$/.test(key)
+  return /^[\x21-\x7e](?:[\x20-\x7e]*[\x21-\x7e])?$/.test(key)
 }
 
 function describeChar(ch: string): string {
   const code = `U+${ch.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')}`
   if (/[\p{Cc}\p{Cf}]/u.test(ch)) return `an invisible character (${code})`
+  if (/\s/.test(ch)) return `a special space (${code})`
   return `"${ch}" (${code})`
 }
 
 /** Message for a value that is not sendable as a key, naming the first offending character */
 export function unsendableKeyMessage(key: string): string {
-  const bad = Array.from(key).find((ch) => !isSendableKey(ch))
-  const what = bad ? describeChar(bad) : 'a character'
+  const bad = Array.from(key).find((ch) => !KEY_CHAR.test(ch))
+  const what = bad ? describeChar(bad) : 'a space at the start or end'
   return (
     `This doesn't look like an API key: it contains ${what}, which an API key can't have. ` +
     'Copy the key again from where it was first shown (curly quotes and invisible characters often come from documents, email or chat).'
@@ -47,7 +58,11 @@ export type PastedKey = { key: string; error?: undefined } | { key?: undefined; 
  * Clean a pasted key before it is sent: drop invisible characters, surrounding
  * whitespace and typographic quotes, and straight quotes around a well-formed
  * `tre_` key (e.g. copied from `KEY="tre_..."`). Other straight quotes are
- * kept, since an imported legacy key may contain them. Returns the key, or a
+ * kept, since an imported legacy key may contain them. Then refuse only what
+ * can't be a key: tabs and line breaks, characters that can't be sent in a
+ * header (isSendableKey), and a space in a key minted by tr-engine (`tre_...`).
+ * Anything else, e.g. an imported legacy key with inner spaces, is left to
+ * /whoami. Same rules as tr-engine's web/auth.js. Returns the key, or a
  * message saying why it can't be one.
  */
 export function cleanPastedKey(raw: string): PastedKey {
@@ -58,8 +73,11 @@ export function cleanPastedKey(raw: string): PastedKey {
   if (unquoted !== null && MINTED_KEY.test(unquoted)) key = unquoted
 
   if (!key) return { error: 'Paste an API key.' }
-  if (/\s/.test(key)) return { error: 'An API key has no spaces or line breaks.' }
+  if (TAB_OR_LINE_BREAK.test(key)) return { error: 'An API key has no line breaks or tabs.' }
   if (!isSendableKey(key)) return { error: unsendableKeyMessage(key) }
+  if (key.startsWith('tre_') && key.includes(' ')) {
+    return { error: 'A tr-engine API key (tre_…) has no spaces. Copy the key again from where it was first shown.' }
+  }
   return { key }
 }
 

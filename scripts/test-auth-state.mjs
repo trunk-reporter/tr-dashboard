@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// Behaviour tests for auth-related client state: key input cleaning, key
-// expiry dates, following key changes made in other tabs, key changes during
-// a background re-check, and clearing the player/stream/alert state when the
-// credential changes or its access narrows. The dashboard's own
+// Behaviour tests for auth-related client state: key input cleaning, a
+// carried-over v2 write token, key expiry dates, following key changes made
+// in other tabs, key changes during a background re-check, and clearing the
+// player/stream/alert state when the credential changes or its access
+// narrows; plus the Admin page's maintenance summary. The dashboard's own
 // modules are loaded through Vite's SSR loader (for the `@/` alias and
 // import.meta.env) with a fake window, localStorage and fetch.
 // Run: node scripts/test-auth-state.mjs (or npm test)
@@ -191,8 +192,94 @@ try {
     assert.match(inner.error, /U\+201C/)
     assert.match(input.cleanPastedKey('tre_ab\u0007cd').error, /invisible character \(U\+0007\)/)
     assert.match(input.cleanPastedKey('p\u00E4sswort-legacy').error, /U\+00E4/)
-    assert.match(input.cleanPastedKey('tre_ab cd').error, /no spaces/)
+    assert.match(input.cleanPastedKey('tre_ab cd').error, /tre_.*no spaces/)
+    assert.match(input.cleanPastedKey(`tre_${'a'.repeat(32)} ${'a'.repeat(32)}`).error, /no spaces/)
+    assert.match(input.cleanPastedKey('legacy\tsecret').error, /no line breaks or tabs/)
+    assert.match(input.cleanPastedKey('tre_ab\ncd').error, /no line breaks or tabs/)
+    assert.match(input.cleanPastedKey('legacy\u00A0secret').error, /special space \(U\+00A0\)/)
     assert.match(input.cleanPastedKey(' \u200B ').error, /Paste an API key/)
+  })
+
+  // ---------------------------------------------------------------------------
+  // Legacy keys with inner spaces (r3-05): tr-engine imports WRITE_TOKEN /
+  // AUTH_TOKEN values with spaces and accepts them as Bearer keys, so only a
+  // value fetch can't send correctly is refused without asking the engine.
+  // ---------------------------------------------------------------------------
+  const SPACED = 'purple monkey dishwasher 42'
+  engineKeys.set(SPACED, whoami({ scopes: ['admin', 'edit', 'listen', 'upload'], key: { id: 9, name: 'legacy WRITE_TOKEN', prefix: 'purple m' } }))
+
+  await test('a legacy key with inner spaces is sendable and survives cleaning (ends trimmed)', () => {
+    assert.equal(input.isSendableKey(SPACED), true)
+    assert.equal(input.isSendableKey(' x'), false)
+    assert.equal(input.isSendableKey('x '), false)
+    assert.equal(input.isSendableKey('a\tb'), false)
+    assert.equal(input.isSendableKey('p\u00E4ss'), false)
+    assert.deepEqual(input.cleanPastedKey(SPACED), { key: SPACED })
+    assert.deepEqual(input.cleanPastedKey(`  ${SPACED}\u200B `), { key: SPACED })
+    assert.deepEqual(input.cleanPastedKey('two  spaces'), { key: 'two  spaces' })
+    assert.match(input.unsendableKeyMessage(' x'), /space at the start or end/)
+  })
+
+  await test('fetchWhoami sends a legacy key with inner spaces and lets the engine decide', async () => {
+    await reset()
+    const ok = await auth.fetchWhoami(SPACED)
+    assert.equal(ok.kind, 'ok')
+    assert.deepEqual(requests.map((r) => r.auth), [`Bearer ${SPACED}`])
+    requests = []
+    const rejected = await auth.fetchWhoami('not a key we know')
+    assert.equal(rejected.kind, 'invalid-key')
+    assert.match(rejected.message, /rejected/)
+    assert.deepEqual(requests.map((r) => r.auth), ['Bearer not a key we know'])
+  })
+
+  await test('connectKey stores a legacy key with inner spaces the engine accepts', async () => {
+    await reset()
+    assert.equal(await auth.connectKey(` ${SPACED} `), null)
+    const s = useAuthStore.getState()
+    assert.equal(s.apiKey, SPACED)
+    assert.equal(s.status, 'ready')
+    assert.deepEqual(s.whoami.scopes, ['admin', 'edit', 'listen', 'upload'])
+    assert.equal(stored(), SPACED)
+  })
+
+  /** Load the dashboard with what an older (v2) dashboard persisted */
+  const loadV2 = async (writeToken) => {
+    await reset()
+    useAuthStore.setState({ apiKey: '', candidateKey: false, whoami: null, status: 'loading' })
+    storage.setItem(STORE, JSON.stringify({ state: { writeToken }, version: 2 }))
+    await useAuthStore.persist.rehydrate()
+    requests = []
+    await auth.initAuth()
+    await settle()
+    return useAuthStore.getState()
+  }
+
+  await test('a carried-over v2 write token with inner spaces is sent and kept when the engine accepts it', async () => {
+    const s = await loadV2(` ${SPACED} `)
+    assert.deepEqual(requests.map((r) => r.auth), [`Bearer ${SPACED}`])
+    assert.equal(s.apiKey, SPACED)
+    assert.equal(s.candidateKey, false)
+    assert.equal(s.status, 'ready')
+    assert.equal(s.whoami.credential, 'key')
+    assert.equal(stored(), SPACED)
+  })
+
+  await test('a carried-over v2 write token with spaces the engine rejects is dropped quietly after asking it', async () => {
+    const s = await loadV2('an old token nobody imported')
+    assert.deepEqual(requests.map((r) => r.auth), ['Bearer an old token nobody imported', ''])
+    assert.equal(s.apiKey, '')
+    assert.equal(s.candidateKey, false)
+    assert.equal(s.status, 'ready')
+    assert.equal(s.whoami.credential, 'anonymous')
+    assert.equal(stored(), '')
+  })
+
+  await test('a carried-over v2 write token no browser can send is dropped quietly without a failed request', async () => {
+    const s = await loadV2('p\u00E4sswort')
+    assert.deepEqual(requests.map((r) => r.auth), [''])
+    assert.equal(s.apiKey, '')
+    assert.equal(s.status, 'ready')
+    assert.equal(s.whoami.credential, 'anonymous')
   })
 
   await test('connectKey sends the cleaned key and stores it', async () => {
@@ -724,6 +811,59 @@ try {
     setClipboard(true, { writeText: async () => { throw new Error('NotAllowedError') } })
     assert.equal(await copyText(KEY_A, keyEl), 'selected')
     assert.equal(dom.selected, keyEl)
+  })
+
+  // ---------------------------------------------------------------------------
+  // Admin maintenance summary (k-02): every retention setting the engine
+  // reports (audit log included, with its source), no calls retention
+  // ---------------------------------------------------------------------------
+  const maint = await server.ssrLoadModule('/src/lib/maintenance.ts')
+
+  await test('the retention summary lists what GET /admin/maintenance reports, with sources', () => {
+    // Shape of tr-engine's MaintenanceConfigData
+    const config = {
+      retention_raw_messages: '168h0m0s', retention_raw_messages_source: 'default', retention_raw_messages_locked: false,
+      retention_console_logs: '720h0m0s', retention_console_logs_source: 'db', retention_console_logs_locked: false,
+      retention_plugin_status: '720h0m0s', retention_plugin_status_source: 'default', retention_plugin_status_locked: false,
+      retention_trunking_messages: '720h0m0s', retention_trunking_messages_source: 'default', retention_trunking_messages_locked: false,
+      retention_checkpoints: '168h0m0s', retention_checkpoints_source: 'default', retention_checkpoints_locked: false,
+      retention_stale_calls: '1h0m0s', retention_stale_calls_source: 'default', retention_stale_calls_locked: false,
+      retention_audit_log: '2160h0m0s', retention_audit_log_source: 'env', retention_audit_log_locked: true,
+      schedule: 'every 24h',
+    }
+    const rows = maint.retentionRows(config)
+    assert.deepEqual(rows.map((r) => r.label), ['Raw Messages', 'Console Logs', 'Plugin Status', 'Trunking Messages', 'Checkpoints', 'Stale Calls', 'Audit Log'])
+    assert.ok(!rows.some((r) => /^calls$/i.test(r.label)), 'no calls retention row')
+    const audit = rows.find((r) => r.key === 'retention_audit_log')
+    assert.deepEqual(audit, { key: 'retention_audit_log', label: 'Audit Log', value: '2160h0m0s', source: 'env', locked: true })
+    assert.equal(maint.describeRetentionSource(audit), 'environment (locked)')
+    assert.equal(maint.describeRetentionSource(rows[1]), 'set through the API')
+    assert.equal(maint.describeRetentionSource(rows[0]), 'default')
+    // A setting an older engine doesn't report is left out
+    const { retention_audit_log: _a, ...older } = config
+    assert.ok(!maint.retentionRows(older).some((r) => r.key === 'retention_audit_log'))
+  })
+
+  await test('the last-run summary uses the fields the engine reports', () => {
+    const s = maint.summarizeRun({
+      started_at: '2026-09-26T03:00:00Z',
+      duration_ms: 1234,
+      partitions_created: 2,
+      partitions_dropped: ['mqtt_raw_messages_w2026_30'],
+      purged: { console_messages: 42, audit_log: 3, plugin_statuses: 0 },
+      decimation: { recorder_snapshots: { phase1_deleted: 500, phase2_deleted: 120 }, decode_rates: { phase1_deleted: 0, phase2_deleted: 0 } },
+    })
+    assert.equal(s.durationMs, 1234)
+    assert.equal(s.partitionsCreated, 2)
+    assert.deepEqual(s.partitionsDropped, ['mqtt_raw_messages_w2026_30'])
+    assert.deepEqual(s.purged, [['console_messages', 42], ['audit_log', 3]])
+    assert.equal(s.purgedTotal, 45)
+    assert.deepEqual(s.decimated, [['recorder_snapshots', 620]])
+    assert.equal(s.decimatedTotal, 620)
+    const empty = maint.summarizeRun({})
+    assert.equal(empty.partitionsCreated, 0)
+    assert.equal(empty.purgedTotal, 0)
+    assert.deepEqual(empty.partitionsDropped, [])
   })
 } finally {
   await server.close()

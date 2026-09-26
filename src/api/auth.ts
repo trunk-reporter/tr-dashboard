@@ -32,8 +32,13 @@ function isWhoami(data: unknown): data is Whoami {
  * must not trigger the auth-failure handler.
  */
 export async function fetchWhoami(key: string): Promise<WhoamiResult> {
-  // fetch() throws before sending a header value outside ISO-8859-1, which
-  // would otherwise read as "Unable to connect"; such a value can't be a key.
+  // Only values outside printable ASCII are refused without asking the
+  // engine: fetch() throws before sending a line break or a character above
+  // U+00FF (which would otherwise read as "Unable to connect"), Latin-1
+  // characters go out as single bytes that never match the UTF-8 the engine
+  // hashed at import, and a legacy token with a tab should be replaced with a
+  // real key. Anything else, e.g. a legacy key with inner spaces, goes to the
+  // engine, which decides.
   if (key && !isSendableKey(key)) return { kind: 'invalid-key', message: unsendableKeyMessage(key) }
 
   let res: Response
@@ -119,7 +124,9 @@ async function resolveAuth(): Promise<void> {
       }
       case 'invalid-key': {
         if (store().candidateKey) {
-          // A carried-over write token the engine didn't import: forget it quietly.
+          // A carried-over write token the engine rejected (401 invalid_key),
+          // or one no browser can send correctly (see fetchWhoami), so the
+          // engine could never accept it either: forget it quietly.
           store().dropKey()
           break
         }

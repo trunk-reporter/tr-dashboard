@@ -90,7 +90,9 @@ docker compose -f examples/docker-compose.caddy.yml up -d
 
 Compose reads `.env` from the compose file's directory (`examples/`), not from where you run it, so the copy goes to `examples/.env`.
 
-This starts Caddy, tr-engine, PostgreSQL, and tr-dashboard together. See [`examples/docker-compose.caddy.yml`](examples/docker-compose.caddy.yml) and [`examples/Caddyfile`](examples/Caddyfile).
+Set tr-engine's ingest source in `examples/.env` before starting: `MQTT_BROKER_URL` (plus `MQTT_USERNAME`/`MQTT_PASSWORD`) for the broker trunk-recorder's MQTT plugin publishes to, or `TR_DIR`/`WATCH_DIR` with the matching volume uncommented in the compose file. Without one, tr-engine exits at startup ("at least one of MQTT_BROKER_URL, WATCH_DIR, or TR_DIR must be set") and never prints its bootstrap admin key. The compose files pass `examples/.env` to tr-engine, so other tr-engine settings can go there too.
+
+This starts Caddy, tr-engine, PostgreSQL, and tr-dashboard together. On its first start tr-engine prints a bootstrap admin key to its log (`docker compose -f examples/docker-compose.caddy.yml logs tr-engine | grep -A3 "no admin API key existed"`); see [Authentication](#authentication). See [`examples/docker-compose.caddy.yml`](examples/docker-compose.caddy.yml) and [`examples/Caddyfile`](examples/Caddyfile).
 
 ### Option B: Full Stack with Traefik
 
@@ -101,7 +103,7 @@ cp examples/.env.example examples/.env   # edit with your values
 docker compose -f examples/docker-compose.traefik.yml up -d
 ```
 
-See [`examples/docker-compose.traefik.yml`](examples/docker-compose.traefik.yml).
+As with Caddy, set tr-engine's ingest source (`MQTT_BROKER_URL`, or `TR_DIR`/`WATCH_DIR`) in `examples/.env` first. See [`examples/docker-compose.traefik.yml`](examples/docker-compose.traefik.yml).
 
 ### Option C: Dashboard Only
 
@@ -237,7 +239,7 @@ To let anyone browse your dashboard, set tr-engine's anonymous access policy to 
 ### Upgrading from AUTH_TOKEN / WRITE_TOKEN / logins
 
 - Remove any `Authorization` header injection from your Caddy/nginx config (older versions of this README suggested it).
-- A write token saved in Settings by an older dashboard is tried once as an API key: tr-engine imports `WRITE_TOKEN` (and a token-mode `AUTH_TOKEN`) as legacy keys on its first start. If the engine doesn't accept it, it is dropped quietly. Replace legacy keys with named keys.
+- A write token saved in Settings by an older dashboard is tried once as an API key: tr-engine imports `WRITE_TOKEN` (and a token-mode `AUTH_TOKEN`) as legacy keys on its first start. If the engine doesn't accept it, it is dropped quietly (as is a value the dashboard refuses as a key: one with tabs, line breaks or non-ASCII characters; inner spaces are fine). Replace legacy keys with named keys.
 - The login page and the Users page are gone; give each person or client its own API key instead.
 
 See tr-engine's [auth guide](https://github.com/trunk-reporter/tr-engine/blob/main/docs/auth.md) and [auth migration guide](https://github.com/trunk-reporter/tr-engine/blob/main/docs/migrating-auth.md) for the engine side.
