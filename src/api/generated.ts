@@ -1935,11 +1935,21 @@ export interface paths {
          *     Use `$1`, `$2`, etc. as parameter placeholders with the `params`
          *     array for safe value interpolation.
          *
-         *     Needs the `admin` scope: raw SQL can read every table and cannot
-         *     honour a restriction. The query runs as the engine's own database
-         *     role; if that role is a superuser (or can read server files), a
-         *     query can too. Run the engine with a dedicated, non-superuser
-         *     database role.
+         *     Needs the `admin` scope: raw SQL can read every data table and
+         *     cannot honour a restriction.
+         *
+         *     **Its own database login.** Queries never run as the engine's
+         *     database role. They run on the login in `QUERY_DATABASE_URL`, which
+         *     the engine grants `SELECT` on its tables and views at startup, except
+         *     `api_keys`, `auth_settings` and views reading them. Partitions are not
+         *     granted: query the parent tables. Without `QUERY_DATABASE_URL` the
+         *     operation answers `503 query_disabled`. It also answers
+         *     `503 query_disabled`, with the reasons in `detail`, when that role is
+         *     a superuser, can `SET ROLE` to one, is a member of
+         *     `pg_read_server_files`, `pg_write_server_files` or
+         *     `pg_execute_server_program`, or can read `api_keys` or
+         *     `auth_settings`. Every new connection is checked, so fixing the role
+         *     takes effect without a restart. See docs/auth.md, "Ad-hoc SQL".
          */
         post: operations["executeQuery"];
         delete?: never;
@@ -2745,7 +2755,7 @@ export interface components {
              * @example not_found
              * @enum {string}
              */
-            code: "bad_request" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "rate_limited" | "internal_error" | "service_unavailable" | "invalid_body" | "invalid_parameter" | "invalid_time_range" | "query_failed" | "ambiguous_id" | "duplicate" | "request_timeout" | "key_required" | "invalid_key" | "invalid_ticket" | "insufficient_scope" | "restricted_credential";
+            code: "bad_request" | "unauthorized" | "forbidden" | "not_found" | "conflict" | "rate_limited" | "internal_error" | "service_unavailable" | "invalid_body" | "invalid_parameter" | "invalid_time_range" | "query_failed" | "query_disabled" | "ambiguous_id" | "duplicate" | "request_timeout" | "key_required" | "invalid_key" | "invalid_ticket" | "insufficient_scope" | "restricted_credential";
             /**
              * @description Human-readable message. It is informational and may change;
              *     branch on `code`. The one exception: `insufficient_scope`
@@ -8202,7 +8212,11 @@ export interface operations {
                     "application/json": components["schemas"]["QueryResponse"];
                 };
             };
-            /** @description Invalid query (parse error, write attempt, timeout, etc.) */
+            /**
+             * @description Invalid query (`query_failed`): parse error, write attempt,
+             *     timeout, or a table or function the query role may not use
+             *     ("permission denied", e.g. `api_keys`)
+             */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -8214,6 +8228,25 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             500: components["responses"]["InternalError"];
+            /**
+             * @description `query_disabled`: no `QUERY_DATABASE_URL`, or its role is refused
+             *     (reasons in `detail`). `service_unavailable`: the query database
+             *     can't be reached; retry later.
+             */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "code": "query_disabled",
+                     *       "error": "POST /query is disabled: set QUERY_DATABASE_URL to a read-only database role (docs/auth.md)"
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     mergeSystems: {
